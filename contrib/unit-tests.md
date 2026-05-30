@@ -135,11 +135,17 @@ resolve_plugin_precedence_explicit_then_config_then_auto
 Tests live in-source, next to the code they cover, in a `#[cfg(test)] mod tests` block:
 
 ```text
-crates/code-split-cli/src/config.rs        # parsing, rule evaluation
-crates/code-split-cli/src/main.rs          # plugin resolution, name templating
-crates/code-split-core/src/builder.rs      # graph builder invariants
-crates/code-split-core/src/graph.rs        # graph / cycle / serde
-crates/code-split-syn/src/module_graph.rs  # module / file extraction
+crates/code-split-cli/src/config.rs             # parsing, rule evaluation
+crates/code-split-cli/src/main.rs               # plugin resolution, name templating
+crates/code-split-cli/src/plugin/python.rs      # Python extraction + import/call graph
+crates/code-split-cli/src/plugin/javascript.rs  # JS/TS extraction + import/call graph
+crates/code-split-core/src/builder.rs           # graph builder invariants
+crates/code-split-core/src/cycles.rs            # SCC detection / cycle classification
+crates/code-split-core/src/diff.rs              # snapshot comparison
+crates/code-split-core/src/graph.rs             # graph / projection / serde
+crates/code-split-core/src/snapshot.rs          # snapshot serde, path / id rewriting
+crates/code-split-core/src/stats.rs             # metric averaging
+crates/code-split-syn/src/module_graph.rs       # module / file extraction
 ```
 
 ## Priority

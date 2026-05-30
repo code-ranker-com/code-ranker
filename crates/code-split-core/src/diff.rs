@@ -355,10 +355,7 @@ mod tests {
     #[test]
     fn compare_identical_snapshots_sets_identical_true() {
         let g = graph(vec![node("a")], vec![]);
-        let s = compare_snapshots(
-            &snap(g.clone(), None, "/x/proj"),
-            &snap(g, None, "/x/proj"),
-        );
+        let s = compare_snapshots(&snap(g.clone(), None, "/x/proj"), &snap(g, None, "/x/proj"));
         assert!(s.identical, "no node/edge changes at any level");
         assert_eq!(s.schema_version, "1");
     }
@@ -379,11 +376,19 @@ mod tests {
             commit: "0123456789abcdef".into(),
             dirty_files: 0,
         });
-        let before = snap(graph(vec![node("a")], vec![]), git.clone(), "/home/u/my-project");
+        let before = snap(
+            graph(vec![node("a")], vec![]),
+            git.clone(),
+            "/home/u/my-project",
+        );
         let after = snap(graph(vec![node("a")], vec![]), git, "/home/u/my-project");
         let s = compare_snapshots(&before, &after);
         assert_eq!(s.before.target, "my-project", "basename only");
-        assert_eq!(s.before.commit.as_deref(), Some("01234567"), "first 8 chars");
+        assert_eq!(
+            s.before.commit.as_deref(),
+            Some("01234567"),
+            "first 8 chars"
+        );
         assert_eq!(s.before.branch.as_deref(), Some("main"));
     }
 }

@@ -1010,7 +1010,10 @@ mod tests {
         let ws = Path::new("/proj");
         let cases: Vec<(&str, Option<&str>)> = vec![
             ("/proj/src/lib/utils.ts", Some("src/lib/utils")),
-            ("/proj/src/components/Button.tsx", Some("src/components/Button")),
+            (
+                "/proj/src/components/Button.tsx",
+                Some("src/components/Button"),
+            ),
             ("/proj/src/index.ts", Some("src")), // index → collapse into dir
             ("/proj/index.ts", None),            // root index → empty → None
         ];
@@ -1049,7 +1052,10 @@ mod tests {
 
     #[test]
     fn normalize_path_resolves_parent_and_current() {
-        assert_eq!(normalize_path(Path::new("/a/b/../c")), PathBuf::from("/a/c"));
+        assert_eq!(
+            normalize_path(Path::new("/a/b/../c")),
+            PathBuf::from("/a/c")
+        );
         assert_eq!(normalize_path(Path::new("/a/./b")), PathBuf::from("/a/b"));
         assert_eq!(
             normalize_path(Path::new("/a/b/c/../../d")),

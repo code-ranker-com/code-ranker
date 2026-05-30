@@ -347,7 +347,10 @@ mod tests {
 
     fn sample_snapshot() -> Snapshot {
         let mut graphs = PluginGraphs::default();
-        graphs.modules.nodes.push(node("crate:foo", NodeKind::Crate));
+        graphs
+            .modules
+            .nodes
+            .push(node("crate:foo", NodeKind::Crate));
         Snapshot::new(
             "report".into(),
             "/work".into(),
@@ -381,7 +384,10 @@ mod tests {
     #[test]
     fn snapshot_omits_absent_optional_fields() {
         let json = serde_json::to_string(&sample_snapshot()).unwrap();
-        assert!(!json.contains("\"git\""), "None git is not serialized: {json}");
+        assert!(
+            !json.contains("\"git\""),
+            "None git is not serialized: {json}"
+        );
         assert!(!json.contains("config_file"), "None config_file is skipped");
         assert!(!json.contains("timings"), "empty timings is skipped");
         // local_only == false is skipped via `std::ops::Not::not`.
@@ -535,7 +541,10 @@ mod tests {
             .modules
             .nodes
             .push(node("crate:path+file:///x/anyhow#1.0.102", NodeKind::Crate));
-        graphs.modules.nodes.push(node("file:/x/src/lib.rs", NodeKind::File));
+        graphs
+            .modules
+            .nodes
+            .push(node("file:/x/src/lib.rs", NodeKind::File));
         graphs.modules.edges.push(Edge {
             from: "crate:path+file:///x/anyhow#1.0.102".into(),
             to: "file:/x/src/lib.rs".into(),

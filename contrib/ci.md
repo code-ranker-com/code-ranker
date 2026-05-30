@@ -5,12 +5,13 @@ How continuous integration runs for `code-split`.
 ## Workflow
 
 `.github/workflows/ci.yml` runs on every push to `main` and on every pull
-request. Two jobs run in parallel:
+request. Three jobs run in parallel:
 
 | Job | Steps | Gate |
 |---|---|---|
 | **Test & lint** | `cargo fmt --all --check` → `cargo clippy --workspace --all-targets -- -D warnings` → `cargo test --workspace` | Fails the build on any formatting drift, clippy warning, or failing test. |
 | **Coverage** | `cargo llvm-cov --workspace --lcov` → upload to Codecov | Measures line/region coverage and reports it to Codecov; does not fail the build. |
+| **Security audit** | `cargo audit` against the [RustSec](https://rustsec.org) advisory DB | Fails the build on a known vulnerability in any locked dependency. Informational advisories (unmaintained / unsound) are reported but do **not** fail — only actual vulnerabilities gate. |
 
 Toolchain is `stable` (`dtolnay/rust-toolchain`); builds are cached with
 `Swatinem/rust-cache`. Coverage uses `cargo-llvm-cov` (installed via
@@ -33,6 +34,12 @@ Coverage, the same way CI generates it:
 ```sh
 cargo llvm-cov --workspace --lcov --output-path lcov.info   # for Codecov
 cargo llvm-cov --workspace --summary-only                   # quick % in the terminal
+```
+
+Security audit (`cargo install cargo-audit` first):
+
+```sh
+cargo audit
 ```
 
 ## Codecov

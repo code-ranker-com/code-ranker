@@ -916,6 +916,7 @@ fn load_snapshot(path: &Path) -> Result<Snapshot> {
 // ── Assets embedded at compile time ──────────────────────────────────────────
 const ASSET_CSS: &str = include_str!("assets/index.css");
 const ASSET_GV: &str = include_str!("assets/graphviz.umd.js");
+const ASSET_SNARKDOWN: &str = include_str!("assets/snarkdown.umd.js");
 const ASSET_DIFF: &str = include_str!("assets/diff.js");
 const ASSET_LAYOUT: &str = include_str!("assets/layout.js");
 const ASSET_UTILS: &str = include_str!("assets/utils.js");
@@ -961,6 +962,10 @@ fn render_html_viewer(before: Option<&Snapshot>, after: Option<&Snapshot>) -> St
         .replace(
             r#"<script src="./graphviz.umd.js"></script>"#,
             &format!("<script>{}</script>", ASSET_GV),
+        )
+        .replace(
+            r#"<script src="./snarkdown.umd.js"></script>"#,
+            &format!("<script>{}</script>", ASSET_SNARKDOWN),
         )
         .replace(r#"<script src="./data.js"></script>"#, &data_script)
         .replace(

@@ -281,13 +281,14 @@ g.sn-hint:hover rect { fill: #d4c39a; }
 .nt-copy-sel-btn { margin-left: 4px; padding: 2px 10px; font-size: 12px; font-family: inherit;
                    border: 1px solid #8ba6c0; border-radius: 4px; background: #f0f4f8;
                    color: #2c3e50; cursor: pointer; white-space: nowrap; }
-.nt-copy-sel-btn:hover { background: #dbe9f4; border-color: #4d6f9c; }
+.nt-copy-sel-btn:hover:not(:disabled) { background: #dbe9f4; border-color: #4d6f9c; }
+.nt-copy-sel-btn:disabled { opacity: .45; cursor: not-allowed; }
 
 /* ── Export popup ───────────────────────────────────────────────────────────── */
 #export-popup-overlay { position: fixed; inset: 0; z-index: 10001; background: rgba(0,0,0,.45);
                         display: flex; align-items: center; justify-content: center; }
-#export-popup { background: #fff; border-radius: 10px; box-shadow: 0 8px 40px rgba(0,0,0,.25);
-                display: flex; flex-direction: column; width: min(1100px, 96vw); height: min(820px, 94vh); }
+#export-popup { background: #e9edf2; box-shadow: 0 8px 40px rgba(0,0,0,.25);
+                display: flex; flex-direction: column; width: 100vw; height: 100vh; border-radius: 0; }
 #export-popup-hdr { display: flex; align-items: center; gap: 10px; padding: 14px 18px 10px;
                     border-bottom: 1px solid #e8edf2; }
 #export-popup-hdr h3 { margin: 0; font-size: 15px; font-weight: 700; color: #1a2f45; flex: 1; }
@@ -295,32 +296,77 @@ g.sn-hint:hover rect { fill: #d4c39a; }
                       color: #888; line-height: 1; padding: 2px 6px; border-radius: 4px; }
 #export-popup-close:hover { background: #f0f0f0; }
 .exp-modes { display: flex; gap: 0; padding: 10px 18px 6px; align-items: center; flex-wrap: nowrap; }
-.exp-cb-group { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; flex: 1; }
+.exp-cb-group { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; flex: 1; }
+.exp-conn-label { font-size: 13px; color: #2c3e50; font-weight: 600; }
 .exp-mode-cb { display: flex; align-items: center; gap: 5px; font-size: 13px; color: #2c3e50;
                cursor: pointer; user-select: none; white-space: nowrap; }
 .exp-mode-cb input { accent-color: #4d6f9c; width: 14px; height: 14px; cursor: pointer; margin: 0; }
+/* A checkbox with nothing under it is disabled (it can't affect the output). */
+.exp-mode-cb--off { opacity: .4; cursor: not-allowed; }
+.exp-mode-cb--off input { cursor: not-allowed; }
+.exp-sel-count, .exp-rec-count { font-weight: 700; color: #4d6f9c; }
+/* Recommendation criterion (e.g. `hk > 25,000`) shown next to the count. */
+.exp-sort-select { font-size: 13px; font-family: inherit; color: #2c3e50; cursor: pointer;
+                   border: 1px solid #c8d4e0; border-radius: 4px; padding: 3px 6px; background: #fff; }
+/* Count colour by zone: red within the strict count, yellow up to the neutral count. */
+.exp-rec-red { color: #c0392b !important; font-weight: 700; }
+.exp-rec-yellow { color: #c08a00 !important; font-weight: 700; }
 .exp-source-or { font-size: 11px; font-weight: 700; color: #aaa; letter-spacing: .06em;
-                 padding: 0 14px; white-space: nowrap; }
+                 white-space: nowrap; }
 .exp-source-group { display: flex; gap: 12px; align-items: center; flex-wrap: nowrap; }
 .exp-src-radio { display: flex; align-items: center; gap: 5px; font-size: 13px; color: #2c3e50;
                  cursor: pointer; user-select: none; white-space: nowrap; }
 .exp-src-radio input { accent-color: #4d6f9c; cursor: pointer; margin: 0; }
-.exp-rec-count { width: 52px; padding: 3px 6px; font-size: 13px; border: 1px solid #c8d4e0;
-                 border-radius: 4px; text-align: center; color: #2c3e50; outline: none; }
-.exp-textarea-wrap { position: relative; flex: 1; margin: 0 18px; display: flex; }
-#export-textarea { flex: 1; padding: 10px 12px; font-size: 12px; resize: none;
-                   font-family: ui-monospace,'SF Mono',monospace; border: 1px solid #dde4ec;
-                   border-radius: 6px; color: #1a2f45; background: #f8fafc; outline: none;
-                   min-height: 0; overflow-y: auto; }
+.exp-rec-count { width: 52px; padding: 3px 6px; font-size: 13px; border: none;
+                 background: transparent; text-align: center; color: #2c3e50; outline: none; }
+.exp-textarea-wrap { position: relative; flex: 1; margin: 0 18px; display: flex;
+                     min-height: 0; overflow: hidden; }
+/* The raw markdown lives in a hidden textarea (still the Copy source); the user
+   sees the snarkdown-rendered preview instead. It is a document, not an input —
+   no field border/background, just a scrollable region. */
+#export-textarea { display: none; }
+/* A lighter (white) document card on the popup's soft-grey background, so the
+   rendered markdown reads as a clean page rather than a form field. */
+.exp-md-preview { flex: 1; padding: 14px 22px 22px; font-size: 13px; line-height: 1.5;
+                  color: #1a2f45; background: #fff; border-radius: 8px;
+                  box-shadow: 0 1px 4px rgba(0,0,0,.06); outline: none;
+                  min-height: 0; overflow-y: auto; }
+.exp-md-preview h1 { font-size: 18px; margin: 12px 0 8px; color: #15324f; }
+.exp-md-preview h2 { font-size: 15px; margin: 14px 0 6px; color: #15324f;
+                     border-bottom: 1px solid #e4ebf2; padding-bottom: 3px; }
+.exp-md-preview p { margin: 6px 0; }
+.exp-md-preview ul { margin: 6px 0; padding-left: 20px; }
+.exp-md-preview li { margin: 2px 0; }
+.exp-md-preview a { color: #2c6fad; text-decoration: none; }
+.exp-md-preview a:hover { text-decoration: underline; }
+.exp-md-preview code { font-family: ui-monospace,'SF Mono',monospace; font-size: 12px;
+                       background: #eef2f7; border: 1px solid #e0e6ee; border-radius: 3px;
+                       padding: 1px 4px; color: #b3801f; }
+.exp-md-preview strong { color: #15324f; }
 .exp-presets { padding: 8px 18px; border-top: 1px solid #edf1f5; }
 .exp-presets-label { font-size: 11px; color: #888; text-transform: uppercase;
                      letter-spacing: .05em; margin-bottom: 6px; }
-.exp-preset-btns { display: flex; gap: 8px; flex-wrap: wrap; }
-.exp-preset-btn { padding: 4px 14px; font-size: 12px; font-family: inherit; border-radius: 4px;
-                  border: 1px solid #c8d4e0; background: #f8fafc; color: #2c3e50; cursor: pointer; }
+/* Equal-width preset buttons in a grid; cells stretch to equal height so a
+   button with a count badge is the same size as one without. */
+.exp-preset-btns { display: grid; grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)); gap: 5px; }
+.exp-preset-btn { padding: 3px 6px; font-size: 11px; font-family: inherit; border-radius: 4px;
+                  border: 1px solid #c8d4e0; background: #f8fafc; color: #2c3e50; cursor: pointer;
+                  display: flex; flex-direction: row; align-items: center; gap: 4px; text-align: left; }
 .exp-preset-btn:hover { background: #dbe9f4; border-color: #4d6f9c; }
+/* A preset with strongly-recommended (red) / worth-a-look (yellow) nodes gets a
+   matching label + border colour, unless it is the active (selected) button. */
+.exp-preset-btn--danger:not(.exp-preset-btn--active) { color: #c0392b; border-color: #c0392b; }
+.exp-preset-btn--warn:not(.exp-preset-btn--active)   { color: #b07e00; border-color: #d9b441; }
 .exp-preset-btn--active { background: #2c6fad; border-color: #2c6fad; color: #fff; }
 .exp-preset-btn--active:hover { background: #2259a0; border-color: #2259a0; }
+/* Recommendation count badge: a filled circle/pill (red or yellow) with a light
+   digit; collapses to nothing when there is no count. */
+.exp-preset-count { font-size: 10px; font-weight: 700; line-height: 16px; color: #fff;
+                    display: inline-block; min-width: 16px; height: 16px; padding: 0 4px;
+                    border-radius: 999px; text-align: center; margin-left: auto; }
+.exp-preset-count:empty { display: none; }
+.exp-preset-count--red    { background: #c0392b; }
+.exp-preset-count--yellow { background: #c79100; }
 .exp-copy-btn { position: absolute; bottom: 10px; right: 10px;
                 width: 104px; height: 36px; padding: 0;
                 font-size: 13px; font-family: inherit; border-radius: 6px;
@@ -330,6 +376,9 @@ g.sn-hint:hover rect { fill: #d4c39a; }
 .exp-copy-btn:hover { background: #3a5a8a; opacity: 1; }
 .exp-copy-icon { font-size: 22px; line-height: 1; }
 .node-table-wrap.collapsed .node-table-body { display: none; }
+/* Collapsed: show only the title + count, hide the search box and copy button. */
+.node-table-wrap.collapsed .nt-search-input,
+.node-table-wrap.collapsed .nt-copy-sel-btn { display: none; }
 
 .node-table-container {
   overflow-x: auto; max-height: 760px; overflow-y: auto;
@@ -355,12 +404,29 @@ g.sn-hint:hover rect { fill: #d4c39a; }
 .node-table:not(.summary-table) .nt-sel-td { width: 28px; min-width: 28px; max-width: 28px; padding: 0; text-align: center; }
 .nt-cb { cursor: pointer; margin: 0; accent-color: #4d6f9c; }
 .node-table:not(.summary-table) th[data-col="name"] { width: 420px; }
-.node-table:not(.summary-table) th[data-col]:not([data-col="name"]) { width: 76px; }
+.node-table:not(.summary-table) th[data-col]:not([data-col="name"]) { width: 54px; }
+/* Tighter horizontal padding on the narrow metric columns (the Name column keeps
+   the default padding). */
+.node-table td[data-col]:not([data-col="name"]),
+.node-table th[data-col]:not([data-col="name"]) { padding-left: 5px; padding-right: 5px; }
 .node-table td[data-col="name"],
 .node-table th[data-col="name"] { position: sticky; left: 0; z-index: 2; overflow: hidden; text-overflow: ellipsis; }
 .node-table td[data-col="name"] { background: #fff; }
 .node-table th[data-col="name"] { background: #f4f6f8; z-index: 3; }
+/* "Too many nodes" guard shown instead of a slow large-graph render. */
+.too-many { display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 12px; height: 100%; min-height: 240px; text-align: center; color: #5c7a96; }
+.too-many-title { font-size: 22px; font-weight: 700; color: #c0392b; font-family: ui-monospace,'SF Mono',monospace; }
+.too-many-sub { font-size: 13px; color: #7a92a8; max-width: 360px; }
+.too-many-btn { padding: 8px 18px; font-size: 13px; font-weight: 600; cursor: pointer;
+                background: #4d6f9c; color: #fff; border: none; border-radius: 6px; }
+.too-many-btn:hover { background: #3d5a82; }
+
 .node-table tr:last-child td { border-bottom: none; }
+/* Summary footer row: averages (numeric) / counts (text), pinned visual weight. */
+.node-table tr.nt-foot td { border-top: 2px solid #ddd; font-weight: 600; background: #eef1f4; color: #2c3e50; }
+.node-table tr.nt-foot td[data-col="name"] { background: #eef1f4; }
+.node-table tr.nt-foot:hover td { background: #eef1f4; }
 .node-table tr:hover td { background: transparent; }
 .node-table .num { text-align: right; }
 .node-table thead th.num { text-align: right; }

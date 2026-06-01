@@ -5,6 +5,7 @@
 <title>code-split diff</title>
 <link rel="stylesheet" href="./index.css">
 <script src="./graphviz.umd.js"></script>
+<script src="./snarkdown.umd.js"></script>
 <script src="./data.js"></script>
 </head>
 <body>
@@ -51,7 +52,7 @@
     <div class="loading-indicator" id="loading-files">Loading…</div>
     <div class="size-controls">
       <button class="size-mode-btn active" data-size="default" title="Default node size">■</button>
-      <button class="size-mode-btn"        data-size="loc"     title="Size ∝ lines of code">LOC</button>
+      <button class="size-mode-btn"        data-size="loc"     title="Size ∝ source lines of code">SLOC</button>
       <button class="size-mode-btn"        data-size="hk"      title="Size ∝ Henry–Kafura">HK</button>
     </div>
     <div class="zoom-controls">
@@ -64,7 +65,7 @@
 </section>
 
 <!-- ── Summary ───────────────────────────────────────────────────────────── -->
-<section class="summary">
+<section class="summary collapsed">
   <div class="node-table-header" id="summary-header">
     <span id="summary-title">Diff summary</span>
   </div>

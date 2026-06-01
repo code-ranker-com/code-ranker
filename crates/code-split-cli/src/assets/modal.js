@@ -85,12 +85,14 @@ function getModal() {
 }
 
 function closeModal() {
+  window.hideMetricTooltip?.();
   const overlay = document.getElementById('node-modal-overlay');
   if (overlay) overlay.style.display = 'none';
   document.body.style.overflow = '';
   window.navPush?.(document.querySelector('.view.active')?.dataset.view ?? null, null);
 }
 function closeModalSilent() {
+  window.hideMetricTooltip?.();
   const overlay = document.getElementById('node-modal-overlay');
   if (overlay) overlay.style.display = 'none';
   document.body.style.overflow = '';

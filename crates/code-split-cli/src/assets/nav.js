@@ -22,6 +22,8 @@ function openModalForNode(nodeId, level) {
   const nodeData = activeGraph(level).nodes.find(n => n.id === nodeId)
     ?? window.DIFF?.[level]?.nodes?.find(n => n.id === nodeId);
   if (!nodeData) return false;
+  // Clear any tooltip anchored to the element we're about to replace.
+  window.hideMetricTooltip?.();
   const section = document.querySelector(`.view[data-view="${level}"]`);
   const overlay = getModal();
   const mc = buildModalContent(nodeData, level);

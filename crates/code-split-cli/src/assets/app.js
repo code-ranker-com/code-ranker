@@ -312,6 +312,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.META   = computeMeta(window.BEFORE, window.AFTER);
 
   window.viewSide = window.AFTER ? 'after' : 'before';
+  // If the Prompt Generator was open (state in the URL), restore its selected
+  // nodes before the tables render so those rows come up already selected.
+  const epState = (typeof epReadUrl === 'function') ? epReadUrl() : null;
+  if (epState?.sel?.length) {
+    if (!window._ntSelected) window._ntSelected = {};
+    window._ntSelected[epState.level] = new Set(epState.sel);
+  }
   document.querySelectorAll('.view').forEach(sec => setupNodeTable(sec, sec.dataset.view));
   setupGlobalControls();
   setupSnapPopup();
@@ -343,6 +350,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (urlNode) openModalForNode(urlNode, urlLevel ?? currentLevel());
   // Replace initial history state so popstate can restore it
   history.replaceState({ level: currentLevel(), node: urlNode ?? null }, '', location.href);
+
+  // Re-open the Prompt Generator if the URL says it was open.
+  if (epState) {
+    if (epState.level && epState.level !== currentLevel()) switchToLevel(epState.level);
+    openExportPopup(epState.level, epState);
+  }
 
   window.addEventListener('popstate', e => {
     const st = e.state || getNavParams();

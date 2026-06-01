@@ -10,7 +10,7 @@ const NM_HINTS = {
   methods:     'Rust only. Number of methods defined in the impl block(s) of this type.',
   fan_in:      'Incoming dependency edges — how many other nodes use this node. High fan_in = risky to change.',
   fan_out:     'Outgoing dependency edges — how many nodes this node depends on. High fan_out = broad responsibilities.',
-  hk:          'Henry-Kafura complexity: loc × (fan_in × fan_out)². Combines size with coupling.',
+  hk:          'Henry-Kafura complexity: sloc × (fan_in × fan_out)². Combines size with coupling.',
   mi:          'Maintainability Index (Oman 1992). Higher is better. >85 easy; 65–85 moderate; <65 difficult.',
   mi_sei:      'MI (SEI variant) — adds a bonus for comment density. Equals MI when there are no comments.',
   source:      'Source lines — lines with at least one non-whitespace, non-comment character.',
@@ -48,8 +48,6 @@ function buildDiagramSVG(node, level) {
   const esc      = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const trunc    = (s, n) => s.length > n ? s.slice(0, n - 1) + '…' : s;
   const nameOf   = n => trunc(n.name || n.id.split('::').pop() || n.id, 18);
-  // Private nodes get a " [pr]" suffix after the name.
-  const visTag   = n => (typeof n.visibility === 'string' && n.visibility === 'private') ? ' [pr]' : '';
   const fmtNum   = v => v != null ? String(Math.round(v)).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '—';
 
   // Column visual config
@@ -120,6 +118,7 @@ function buildDiagramSVG(node, level) {
   const SIDE_PAD    = 20;
   const MAX_ITEMS   = 24;
   const MAX_COL_CARDS = 4;             // max cards per row in one column
+  const MAX_COL_ROWS  = 6;             // wrap into more columns past this many rows
   const MARG        = 20;
   const MNW_MIN     = 3 * CELL - 12 + 2 * COL_PAD_X;  // ≈ 492 minimum main-node width
 
@@ -137,9 +136,11 @@ function buildDiagramSVG(node, level) {
 
     if (raw.length === 0) return raw;
 
-    const total = raw.reduce((s, c) => s + c.count, 0);
     for (const c of raw) {
-      c.cardW = Math.max(1, Math.min(c.count, Math.floor(c.count / total * MAX_COL_CARDS)));
+      // Wrap a tall column into more sub-columns once it would exceed
+      // `MAX_COL_ROWS` rows (e.g. 10 items → 2 columns of 5), capped at
+      // `MAX_COL_CARDS` wide.
+      c.cardW = Math.min(MAX_COL_CARDS, Math.max(1, Math.ceil(c.count / MAX_COL_ROWS)));
       c.px_w  = c.cardW * CELL - 12 + 2 * COL_PAD_X;
       const rows = [];
       for (let i = 0; i < c.items.length; i += c.cardW)
@@ -290,8 +291,8 @@ function buildDiagramSVG(node, level) {
       `<text class="sn-simple" x="${x+8}" y="${ty}" font-size="10" fill="#5c7a96">${esc(hkSimple)}</text>` +
       `<text class="sn-simple" x="${x+SNW-8}" y="${ty}" text-anchor="end" font-size="10" fill="#5c7a96">${esc(loc)}</text>` +
       // Whole `value:key` string is one tooltip target (key + value both hover).
-      `<text class="sn-detail sn-hint" data-tip="${escA(COL_TIPS.hk)}" data-tip-formula="${escA(COL_FORMULAS.hk)}" data-tip-calc="${escA(hkCalc(n.complexity))}" x="${x+8}" y="${ty}" font-size="10" fill="#5c7a96">${esc(hkDetail)}:hk</text>` +
-      `<text class="sn-detail sn-hint" data-tip="${escA(COL_TIPS.loc)}" x="${x+SNW-8}" y="${ty}" text-anchor="end" font-size="10" fill="#5c7a96">loc:${esc(loc)}</text>` +
+      `<text class="sn-detail sn-hint" data-tip-title="${escA(COL_NAMES.hk)}" data-tip="${escA(COL_TIPS.hk)}" data-tip-formula="${escA(COL_FORMULAS.hk)}" data-tip-calc="${escA(hkCalc(n.complexity))}" x="${x+8}" y="${ty}" font-size="10" fill="#5c7a96">${esc(hkDetail)}:hk</text>` +
+      `<text class="sn-detail sn-hint" data-tip-title="${escA(COL_NAMES.loc)}" data-tip="${escA(COL_TIPS.loc)}" x="${x+SNW-8}" y="${ty}" text-anchor="end" font-size="10" fill="#5c7a96">sloc:${esc(loc)}</text>` +
       kindRow +
       `</g>` + prBadge + `</g>`;
   };
@@ -329,13 +330,14 @@ function buildDiagramSVG(node, level) {
       const marker = c.ext ? 'ah-ext' : 'ah';
       s += `<line x1="${cx}" y1="${c.y + c.h}" x2="${cx}" y2="${MNY}" stroke="${stroke}" stroke-width="1.5" marker-end="url(#${marker})"/>`;
       if (!c.ext && c.kind !== 'contains' && c.all.length > 0)
-        s += `<text x="${cx+5}" y="${my+4}" font-family="system-ui,sans-serif" font-size="10" fill="#5c7a96">fan_in: ${c.all.length}</text>`;
+        s += `<text x="${cx+5}" y="${my+4}" font-family="system-ui,sans-serif" font-size="10" fill="#5c7a96">Fan-in: ${c.all.length}</text>`;
     });
   }
 
   // Main node
   const comp = node.complexity;
-  const hk   = fmtNum(comp?.coupling?.hk);
+  // hk is 0 (not `—`) when absent — coupling is omitted from the JSON when zero.
+  const hk   = fmtNum(comp?.coupling?.hk ?? 0);
   const loc  = comp?.loc?.source != null ? String(comp.loc.source) : '—';
   const mnValTrunc = (label, v) => trunc(v, Math.max(4, Math.floor((MNW - 20 - label.length * 7.2) / 7.2)));
   const mono = `font-family="ui-monospace,'SF Mono','Fira Code',monospace"`;
@@ -362,20 +364,32 @@ function buildDiagramSVG(node, level) {
     const extName = node.name || node.id.replace(/^ext:/, '');
     let ey = MNY + 58;
     s += `<text ${mono} x="${MNX+MNW/2}" y="${MNY+28}" text-anchor="middle" font-size="16" font-weight="700" fill="#1a2f45">${esc(trunc(extName, 36))}</text>`;
-    s += `<text class="sn-hint" data-tip="${escA('External 3rd-party library, recorded at depth 1 (its internals are not analyzed).')}" ${mono} x="${MNX+14}" y="${ey}" font-size="11" fill="#2c3e50"><tspan font-weight="700">kind: </tspan>${esc(node.kind || 'external')}</text>`;
+    s += `<text class="sn-hint" data-tip-title="Kind" data-tip="${escA('External 3rd-party library, recorded at depth 1 (its internals are not analyzed).')}" ${mono} x="${MNX+14}" y="${ey}" font-size="11" fill="#2c3e50"><tspan font-weight="700">kind: </tspan>${esc(node.kind || 'external')}</text>`;
     if (node.version) {
       ey += 22;
       s += `<text ${mono} x="${MNX+14}" y="${ey}" font-size="11" fill="#2c3e50"><tspan font-weight="700">version: </tspan>${esc(node.version)}</text>`;
     }
     if (node.path) {
       ey += 22;
-      s += `<text class="sn-hint" data-tip="${escA('Crate location in the cargo cache; the directory name encodes the resolved version.')}" ${mono} x="${MNX+14}" y="${ey}" font-size="11" fill="#2c3e50"><tspan font-weight="700">path: </tspan>${esc(mnValTrunc('path: ', node.path))}</text>`;
+      s += `<text class="sn-hint" data-tip-title="Path" data-tip="${escA('Crate location in the cargo cache; the directory name encodes the resolved version.')}" ${mono} x="${MNX+14}" y="${ey}" font-size="11" fill="#2c3e50"><tspan font-weight="700">path: </tspan>${esc(mnValTrunc('path: ', node.path))}</text>`;
     }
   } else {
-    s += `<text ${mono} x="${MNX+MNW/2}" y="${MNY+28}" text-anchor="middle" font-size="16" font-weight="700" fill="#1a2f45">${esc(trunc(node.name||node.id, 36))}${visTag(node)}</text>`;
-    s += `<text class="sn-hint" data-tip="${escA('Path of this file, relative to the analyzed project root.')}" ${mono} x="${MNX+14}" y="${MNY+58}" font-size="11" fill="#2c3e50"><tspan font-weight="700">path: </tspan>${esc(mnValTrunc('path: ', nodePath))}</text>`;
-    s += `<text class="sn-hint" data-tip="${escA(COL_TIPS.hk)}" data-tip-formula="${escA(COL_FORMULAS.hk)}" data-tip-calc="${escA(hkCalc(node.complexity))}" ${mono} x="${MNX+14}" y="${MNY+80}" font-size="11" fill="#2c3e50"><tspan font-weight="700">hk: </tspan>${esc(hk)}</text>`;
-    s += `<text class="sn-hint" data-tip="${escA(COL_TIPS.loc)}" ${mono} x="${MNX+14}" y="${MNY+102}" font-size="11" fill="#2c3e50"><tspan font-weight="700">loc: </tspan>${esc(loc)}</text>`;
+    s += `<text ${mono} x="${MNX+MNW/2}" y="${MNY+28}" text-anchor="middle" font-size="16" font-weight="700" fill="#1a2f45">${esc(trunc(node.name||node.id, 36))}</text>`;
+    // Visibility shown in the card only when NOT public (e.g. `private`); public
+    // is the default and lives in the left key/value list.
+    const visStr = typeof node.visibility === 'string'
+      ? (node.visibility !== 'public' ? node.visibility : null)
+      : node.visibility?.restricted ? `restricted(${node.visibility.restricted})` : null;
+    let my = MNY + 58;
+    if (visStr) {
+      s += `<text ${mono} x="${MNX+14}" y="${my}" font-size="11" fill="#2c3e50"><tspan font-weight="700">visibility: </tspan>${esc(visStr)}</text>`;
+      my += 22;
+    }
+    s += `<text class="sn-hint" data-tip-title="Path" data-tip="${escA('Path of this file, relative to the analyzed project root.')}" ${mono} x="${MNX+14}" y="${my}" font-size="11" fill="#2c3e50"><tspan font-weight="700">path: </tspan>${esc(mnValTrunc('path: ', nodePath))}</text>`;
+    my += 22;
+    s += `<text class="sn-hint" data-tip-title="${escA(COL_NAMES.hk)}" data-tip="${escA(COL_TIPS.hk)}" data-tip-formula="${escA(COL_FORMULAS.hk)}" data-tip-calc="${escA(hkCalc(node.complexity))}" ${mono} x="${MNX+14}" y="${my}" font-size="11" fill="#2c3e50"><tspan font-weight="700">hk: </tspan>${esc(hk)}</text>`;
+    my += 22;
+    s += `<text class="sn-hint" data-tip-title="${escA(COL_NAMES.loc)}" data-tip="${escA(COL_TIPS.loc)}" ${mono} x="${MNX+14}" y="${my}" font-size="11" fill="#2c3e50"><tspan font-weight="700">sloc: </tspan>${esc(loc)}</text>`;
   }
   s += `</g>`;
   // Shown for ~1s after a copy (the body is hidden meanwhile, see index.css):
@@ -395,7 +409,7 @@ function buildDiagramSVG(node, level) {
       const marker = c.ext ? 'ah-ext' : 'ah';
       s += `<line x1="${cx}" y1="${MNY+MNH2}" x2="${cx}" y2="${c.y}" stroke="${stroke}" stroke-width="1.5" marker-end="url(#${marker})"/>`;
       if (!c.ext && c.kind !== 'contains' && c.all.length > 0)
-        s += `<text x="${cx+5}" y="${my+4}" font-family="system-ui,sans-serif" font-size="10" fill="#5c7a96">fan_out: ${c.all.length}</text>`;
+        s += `<text x="${cx+5}" y="${my+4}" font-family="system-ui,sans-serif" font-size="10" fill="#5c7a96">Fan-out: ${c.all.length}</text>`;
       s += renderCol(c);
     });
   }
@@ -438,12 +452,14 @@ function buildModalContent(node, level) {
     const colId = TIP_COL[k];
     const desc    = colId ? COL_TIPS[colId] : NM_HINTS[k];
     const formula = colId ? COL_FORMULAS[colId] : null;
-    const attr = desc
-      ? ` data-tip="${tipAttr(desc)}"${formula ? ` data-tip-formula="${tipAttr(formula)}"` : ''}${calc ? ` data-tip-calc="${tipAttr(calc)}"` : ''}`
-      : '';
     // Consistent capitalization: full label if known, else capitalize the key.
     const label = NM_LABELS[k] || (k.charAt(0).toUpperCase() + k.slice(1));
-    cur.rows.push(`<tr><td class="nm-key"${attr}>${label}</td><td class="nm-val">${v}</td></tr>`);
+    const title = (colId && COL_NAMES[colId]) || label;
+    // Tooltip on the whole <tr> so it fires on both the key and the value cell.
+    const attr = desc
+      ? ` data-tip="${tipAttr(desc)}" data-tip-title="${tipAttr(title)}"${formula ? ` data-tip-formula="${tipAttr(formula)}"` : ''}${calc ? ` data-tip-calc="${tipAttr(calc)}"` : ''}`
+      : '';
+    cur.rows.push(`<tr${attr}><td class="nm-key">${label}</td><td class="nm-val">${v}</td></tr>`);
   };
   const sect = label => { sections.push(cur); cur = { label, rows: [] }; };
 
@@ -524,7 +540,7 @@ function buildModalContent(node, level) {
       row('volume',     fmt(hs.volume,  1), metricCalc('h_vol', cx));
       row('effort',     fmt(hs.effort,  0));
       row('time (s)',   fmt(hs.time,    1), metricCalc('h_time', cx));
-      row('bugs',       fmt(hs.bugs,    4));
+      row('bugs',       fmt(hs.bugs,    4), metricCalc('h_bugs', cx));
     }
   }
   sections.push(cur);
@@ -588,7 +604,28 @@ function setupTooltips(svgFrame, level) {
   if (section) section._gNodeMap = gNodeMap;
 }
 
+// Above this many nodes, laying out the graph with graphviz is slow, so we ask
+// for explicit confirmation before rendering (once per frame).
+const SVG_NODE_LIMIT = 500;
+
 function drawSVG(svgFrame, nodes, edges, level) {
+  if (nodes.length > SVG_NODE_LIMIT && svgFrame.dataset.bigConfirmed !== '1') {
+    svgFrame.innerHTML =
+      `<div class="too-many">` +
+        `<div class="too-many-title">too many nodes: ${nodes.length}</div>` +
+        `<div class="too-many-sub">Rendering the full diagram may be slow. Render it anyway?</div>` +
+        `<button class="too-many-btn" type="button">Render diagram</button>` +
+      `</div>`;
+    svgFrame.querySelector('.too-many-btn').addEventListener('click', () => {
+      svgFrame.dataset.bigConfirmed = '1';
+      renderSVGNow(svgFrame, nodes, edges, level);
+    });
+    return;
+  }
+  renderSVGNow(svgFrame, nodes, edges, level);
+}
+
+function renderSVGNow(svgFrame, nodes, edges, level) {
   const dot = buildDOT(nodes, edges, level);
   const svgStr = window.gv.dot(dot);
   svgFrame.innerHTML = svgStr;

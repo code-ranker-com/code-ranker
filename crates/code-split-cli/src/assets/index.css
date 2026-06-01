@@ -171,6 +171,18 @@ main { padding: 16px 24px 40px; }
 .mn-copied-msg { display: none; }
 .mn-card.copied .mn-card-body { display: none; }
 .mn-card.copied .mn-copied-msg { display: block; }
+/* Popup side cards: simplified by default (bare hk / loc), full detail (labelled
+   values + connection-kind row) revealed on hover. */
+g[data-diag-node] .sn-detail { display: none; }
+g[data-diag-node]:hover .sn-simple { display: none; }
+g[data-diag-node]:hover .sn-detail { display: inline; }
+/* Hoverable metric / connection-kind labels inside popup cards: a help cursor,
+   and a slight colour + weight bump on the exact label the tooltip describes. */
+/* Keep the card's own cursor — don't switch to a help cursor over a tooltip
+   label (overrides the global `[data-tip] { cursor: help }`). */
+text.sn-hint, tspan.sn-hint, g.sn-hint { cursor: inherit; }
+text.sn-hint:hover, tspan.sn-hint:hover { fill: #2f6fb3; font-weight: 700; }
+g.sn-hint:hover rect { fill: #d4c39a; }
 #nm-tooltip { display: none; position: fixed; z-index: 30000;
               background: #2c3e50; color: #ecf0f1;
               font-size: 12px; line-height: 1.45;
@@ -216,7 +228,7 @@ main { padding: 16px 24px 40px; }
                color: #c00; font-weight: 600; font-size: 13px; }
 
 /* ── Tooltip ────────────────────────────────────────────────────────────────── */
-#tt { position: fixed; z-index: 9999; pointer-events: none;
+#tt { position: fixed; z-index: 30001; pointer-events: none;
       background: #1e2a3a; color: #e8eef5; border-radius: 8px;
       padding: 10px 14px; font-size: 12px;
       box-shadow: 0 4px 20px rgba(0,0,0,.4); max-width: 240px;
@@ -239,6 +251,9 @@ main { padding: 16px 24px 40px; }
 .tt-formula { font-weight: 700; color: #e8eef5; white-space: nowrap;
               margin: 4px 0 6px; font-size: 11px;
               font-family: ui-monospace, 'SF Mono', monospace; }
+/* The formula filled with the node's real values — lighter, sits under the
+   generic formula. */
+.tt-calc { font-weight: 400; color: #9fd0e8; margin-top: -3px; }
 #tt { max-width: 330px; }
 
 /* ── Node table ─────────────────────────────────────────────────────────────── */

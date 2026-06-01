@@ -413,9 +413,10 @@ workspaces. The plugin MUST:
   fan_in / HK / cycles (information flow)
 - Classify each crate as local vs. external; external crates collapse to
   `External` library nodes (`ext:<name>`) recorded at depth 1, never
-  expanded; edges into them are flagged `external: true`. A dependency on
-  another **local workspace crate** becomes a file→file edge to that
-  crate's root file (`lib.rs` / `main.rs`)
+  expanded; edges into them are flagged `external: true`. Each `External`
+  node carries the resolved `version` and its cargo-cache `path` (from
+  `cargo metadata`). A dependency on another **local workspace crate**
+  becomes a file→file edge to that crate's root file (`lib.rs` / `main.rs`)
 - Capture **bare qualified paths** in expressions/types (`commands::run()`,
   `other_crate::item`, `crate::a::Alpha` with no `use`), resolved the same
   way as `use`, so both intra-crate and cross-crate dependencies referenced
@@ -1003,6 +1004,7 @@ node data. All numeric values use 3-significant-digit truncation.
   "name":        "foo.rs",
   "path":        "{target}/src/foo.rs",
   "external":    false,
+  "version":     "1.0.228",
   "visibility":  "public",
   "complexity": {
     "cyclomatic": 3, "cognitive": 2, "exits": 2, "args": 3,
@@ -1017,10 +1019,11 @@ node data. All numeric values use 3-significant-digit truncation.
 }
 ```
 
-All optional fields (`path`, `external`, `visibility`, `complexity`) are
-omitted when null or empty. `kind` is `file` (a project source file,
-id `file:<path>`) or `external` (a 3rd-party library, id `ext:<name>`,
-no `path` and no `complexity`). `visibility` is a plain string
+All optional fields (`path`, `external`, `version`, `visibility`,
+`complexity`) are omitted when null or empty. `kind` is `file` (a project
+source file, id `file:<path>`) or `external` (a 3rd-party library, id
+`ext:<name>`, no `complexity`; for Rust it carries `path` = the crate's
+cargo-cache directory and `version` = the resolved semver). `visibility` is a plain string
 (`"public"`, `"private"`, `"crate"`, `"super"`) or an object
 `{"restricted": "<path>"}` for path-restricted visibility. `path` values
 use named-root prefixes resolved via `roots` (e.g. `{target}/src/main.rs`).

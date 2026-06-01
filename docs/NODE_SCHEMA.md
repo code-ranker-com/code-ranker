@@ -74,7 +74,7 @@ The structural category of this node. One of:
 | value | description | plugins |
 |-------|-------------|---------|
 | `file` | A source file in the analyzed project — carries all per-file metrics | rust, python, js |
-| `external` | A third-party library the project depends on, recorded at depth 1 (one node per library, never expanded into its internals; carries no metrics) | rust, python, js |
+| `external` | A third-party library the project depends on, recorded at depth 1 (one node per library, never expanded into its internals; carries no metrics). For Rust, `path` holds the crate's cargo-cache location | rust, python, js |
 
 ### `name` — string, required
 
@@ -84,18 +84,31 @@ Short human-readable name. For `file` nodes, the file basename
 
 ### `path` — string, optional
 
-Physical location of the source file. Present on `file` nodes; omitted on
-`external` nodes (a library is not a single file). Uses named-root
-prefixes so paths are portable across machines:
+Physical location of the node. On `file` nodes, the source file. On Rust
+`external` nodes, the crate's cargo-cache directory — the directory of its
+`Cargo.toml`, e.g. `{registry}/tokio-1.49.0` for a registry crate (the
+directory name encodes the resolved version) or a `{cargo}/git/checkouts/…`
+path for a git dependency. Omitted on Python/JS external nodes (no
+on-disk crate path is resolved). Uses named-root prefixes so paths are
+portable across machines:
 
 | prefix | resolves to |
 |--------|-------------|
 | `{target}` | the analyzed project root |
 | `{workspace}` | the code-split workspace root |
 | `{registry}` | Cargo registry cache |
+| `{cargo}` | Cargo home (`$CARGO_HOME`, holds `git/checkouts/…`) |
 | `{rustup}` | rustup toolchain root |
 
-Examples: `{target}/src/api/auth.ts`, `{target}/src/lib.rs`.
+Examples: `{target}/src/api/auth.ts`, `{target}/src/lib.rs`,
+`{registry}/serde-1.0.228`.
+
+### `version` — string, optional
+
+Resolved package version (semver), from `cargo metadata`. Present on Rust
+`external` library nodes (e.g. `"1.0.228"`); also available for the
+analyzed crates internally. Omitted on file nodes and on Python/JS external
+nodes (no version is resolved).
 
 ### `visibility` — string or object, optional
 

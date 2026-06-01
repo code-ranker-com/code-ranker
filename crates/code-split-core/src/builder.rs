@@ -74,6 +74,7 @@ mod tests {
             path: String::new(),
             parent: None,
             external: None,
+            version: None,
             visibility: None,
             loc: None,
             line: None,

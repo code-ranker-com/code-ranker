@@ -302,6 +302,8 @@ function setupNodeTable(section, level) {
         if (numSet.has(id)) td.classList.add('num');
         td.textContent = fmtVal(v, id);
         if (id === 'status') td.className += ` cell-s-${n.status}`;
+        // Tooltip (description + formula + this node's computation) is derived
+        // lazily on hover in `setupTooltip` — never precomputed for every cell.
         tr.appendChild(td);
       });
       tbody.appendChild(tr);
@@ -329,9 +331,45 @@ function renderTooltip(label, data) {
 </tbody></table>`;
 }
 
-function renderDescTooltip(label, desc, formula) {
+// The actual HK computation for one node — `loc × (fan_in × fan_out)² = hk`
+// with this node's real numbers, so the tooltip shows how the value was reached.
+function hkCalc(cx) {
+  const c = cx?.coupling;
+  const lo = cx?.loc?.source;
+  if (!c || lo == null) return '';
+  const g = v => Math.round(v).toLocaleString('en-US');
+  return `${g(lo)} × (${c.fan_in || 0} × ${c.fan_out || 0})² = ${g(c.hk || 0)}`;
+}
+
+// The `formula` filled with one node's real values, for the metrics whose
+// inputs are all stored. Returns '' when a faithful computation isn't possible
+// (e.g. MI is displayed normalized 0–100, so the classic formula wouldn't match;
+// cyclomatic/Halstead length/vocabulary have no stored sub-terms).
+function metricCalc(colId, cx) {
+  if (!cx) return '';
+  if (colId === 'hk') return hkCalc(cx);
+  const h = cx.halstead;
+  const g  = v => v == null ? null : Math.round(v).toLocaleString('en-US');
+  const f1 = v => v == null ? null : (Math.round(v * 10) / 10).toLocaleString('en-US');
+  switch (colId) {
+    case 'h_vol':
+      if (!h || h.length == null || h.vocabulary == null || h.volume == null) return '';
+      return `${g(h.length)} × log₂(${g(h.vocabulary)}) = ${f1(h.volume)}`;
+    // `h_bugs` is intentionally omitted: the displayed value is effort-based
+    // (≈ effort^⅔ ÷ 3000), so the `volume ÷ 3000` formula would not match it.
+    case 'h_time':
+      if (!h || h.effort == null || h.time == null) return '';
+      return `${g(h.effort)} ÷ 18 = ${f1(h.time)}`;
+    default:
+      return '';
+  }
+}
+
+function renderDescTooltip(label, desc, formula, calc) {
   const f = formula ? `<div class="tt-formula">${escHtml(formula)}</div>` : '';
-  return `<div class="tt-title">${escHtml(label)}</div>${f}<div class="tt-desc">${escHtml(desc)}</div>`;
+  // `calc` is the same formula filled with this node's real values.
+  const c = calc ? `<div class="tt-formula tt-calc">${escHtml(calc)}</div>` : '';
+  return `<div class="tt-title">${escHtml(label)}</div>${f}${c}<div class="tt-desc">${escHtml(desc)}</div>`;
 }
 
 function setupTooltip() {
@@ -341,6 +379,7 @@ function setupTooltip() {
   document.addEventListener('mouseover', e => {
     const cellTt  = e.target.closest('[data-tt]');
     const cellTip = e.target.closest('[data-tip]');
+    const cellNum = e.target.closest('td[data-col]');
     if (cellTt && cellTt.dataset.tt) {
       const row   = cellTt.closest('tr');
       const label = row?.querySelector('td:first-child')?.textContent ?? '';
@@ -348,14 +387,26 @@ function setupTooltip() {
       tt.removeAttribute('hidden');
       current = cellTt;
     } else if (cellTip && cellTip.dataset.tip) {
-      tt.innerHTML = renderDescTooltip(cellTip.textContent.trim(), cellTip.dataset.tip, cellTip.dataset.tipFormula);
+      tt.innerHTML = renderDescTooltip(cellTip.textContent.trim(), cellTip.dataset.tip, cellTip.dataset.tipFormula, cellTip.dataset.tipCalc);
       tt.removeAttribute('hidden');
       current = cellTip;
+    } else if (cellNum) {
+      // Value cells carry no precomputed tooltip — derive it on hover only, so we
+      // never build a tooltip string for a cell the user never points at.
+      const id  = cellNum.dataset.col;
+      const nid = cellNum.closest('tr[data-node-id]')?.dataset.nodeId;
+      const node = nid && activeGraph('files').nodes.find(n => n.id === nid);
+      const calc = node && metricCalc(id, node.complexity);
+      if (calc) {
+        tt.innerHTML = renderDescTooltip(cellNum.textContent.trim(), COL_TIPS[id], COL_FORMULAS[id], calc);
+        tt.removeAttribute('hidden');
+        current = cellNum;
+      }
     }
   });
 
   document.addEventListener('mouseout', e => {
-    const cell = e.target.closest('[data-tt]') || e.target.closest('[data-tip]');
+    const cell = e.target.closest('[data-tt]') || e.target.closest('[data-tip]') || e.target.closest('td[data-col]');
     if (cell && cell === current) {
       tt.setAttribute('hidden', '');
       current = null;

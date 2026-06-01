@@ -52,61 +52,63 @@ function buildDiagramSVG(node, level) {
   const visTag   = n => (typeof n.visibility === 'string' && n.visibility === 'private') ? ' [pr]' : '';
   const fmtNum   = v => v != null ? String(Math.round(v)).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '—';
 
-  // Per-kind visual config — KIND_ORDER controls left-to-right column order
-  const KIND_ORDER = ['uses', 'calls', 'reexports', 'contains'];
+  // Column visual config
   const COL_STROKE = '#8ba6c0';
   const COL_DASH   = '6,4';
-  // External (3rd-party) columns are amber, matching the library node styling.
+  // The external (3rd-party) column is amber, matching the library node styling.
   const kindColor  = k => k === 'external' ? '#b3801f' : COL_STROKE;
   const kindDash   = _k => COL_DASH;
-
-  // Dedup edges by node id within a single kind
-  const uniqEdges = (edgeArr, idKey) => {
-    const seen = new Set();
-    const result = [];
-    for (const e of edgeArr) {
-      const id = e[idKey];
-      if (!seen.has(id)) {
-        seen.add(id);
-        result.push({ node: nodeMap.get(id) || { id, name: id.split('::').pop() }, edge: e });
-      }
-    }
-    return result;
+  // Abbreviated number for the card (e.g. 189,000 → 189K, 1,500,000 → 1.5M).
+  const fmtK = v => {
+    if (v == null) return '—';
+    v = Math.round(v);
+    if (v >= 1e6) return (v / 1e6).toFixed(v >= 1e7 ? 0 : 1).replace(/\.0$/, '') + 'M';
+    if (v >= 1e3) return (v / 1e3).toFixed(v >= 1e4 ? 0 : 1).replace(/\.0$/, '') + 'K';
+    return String(v);
   };
 
-  // Is the far endpoint of this edge (the side that is NOT the selected node) an
-  // external 3rd-party library? Such edges are pulled into a separate column
-  // drawn farther from the main node than the internal dependency columns.
+  // Is the far endpoint of this edge (the node at `idKey`, i.e. the side that is
+  // NOT the selected node) an external 3rd-party library? This must look at the
+  // far NODE, not the edge's `external` flag: that flag marks the edge's `to`
+  // endpoint as a library, so on an external node's fan-in (idKey = 'from') it
+  // would wrongly tag the internal source file as external.
   const isExtEndpoint = (e, idKey) => {
-    if (e.external === true) return true;
     const far = nodeMap.get(e[idKey]);
     return far ? (far.external === true || far.kind === 'external') : false;
   };
 
-  // Group internal edges by kind; collect external-library edges separately so
-  // they can be rendered as a farther tier.
-  const groupByKind = (edgeArr, idKey) => {
-    const groups = {};
-    const extEdges = [];
+  // Collect connections for one direction, deduped by the far node. Each record
+  // carries the SET of edge kinds (uses/reexports/contains) linking it to the
+  // main node, so a single card can show its connection type(s). A node is shown
+  // only when it has an information-flow edge (uses/reexports); a `contains`-only
+  // structural link (a `mod foo;` never imported) stays hidden, as on the main map.
+  const collectConns = (edgeArr, idKey) => {
+    const byNode = new Map();
     for (const e of edgeArr) {
-      if (isExtEndpoint(e, idKey)) { extEdges.push(e); continue; }
-      const k = e.kind || 'unknown';
-      (groups[k] = groups[k] || []).push(e);
+      const id = e[idKey];
+      let rec = byNode.get(id);
+      if (!rec) {
+        rec = { node: nodeMap.get(id) || { id, name: id.split('::').pop() },
+                kinds: new Set(), ext: false };
+        byNode.set(id, rec);
+      }
+      rec.kinds.add(e.kind || 'uses');
+      if (isExtEndpoint(e, idKey)) rec.ext = true;
     }
-    const result = {};
-    for (const [k, edges] of Object.entries(groups))
-      result[k] = uniqEdges(edges, idKey);
-    return { groups: result, ext: uniqEdges(extEdges, idKey) };
+    const internal = [], external = [];
+    for (const rec of byNode.values()) {
+      const hasFlow = rec.kinds.has('uses') || rec.kinds.has('reexports');
+      if (!hasFlow) continue;                  // contains-only → not shown
+      (rec.ext ? external : internal).push(rec);
+    }
+    return { internal, external };
   };
 
-  // `Contains` (mod-declaration) edges are structural — kept in the snapshot
-  // but not shown as dependency columns here.
-  const flow      = e => e.kind !== 'contains';
-  const inSplit   = groupByKind(allEdges.filter(e => e.to   === node.id && flow(e)), 'from');
-  const outSplit  = groupByKind(allEdges.filter(e => e.from === node.id && flow(e)), 'to');
+  const inConns  = collectConns(allEdges.filter(e => e.to   === node.id), 'from');
+  const outConns = collectConns(allEdges.filter(e => e.from === node.id), 'to');
 
   // Layout constants
-  const SNW         = 148, SNH = 58;
+  const SNW         = 148, SNH = 62;
   const MNH         = 110, MNH2 = MNH + 54;
   const CELL        = SNW + 12;          // one card-slot width
   const COL_PAD_X   = 12;               // horizontal padding inside column box
@@ -121,16 +123,12 @@ function buildDiagramSVG(node, level) {
   const MARG        = 20;
   const MNW_MIN     = 3 * CELL - 12 + 2 * COL_PAD_X;  // ≈ 492 minimum main-node width
 
-  // Build column descriptors for one direction (returns array of col objects).
-  // The external-library edges become one trailing `external` column tagged
-  // `ext: true` so the Y layout can push it to a farther tier.
-  const buildCols = ({ groups, ext }) => {
-    const keys = [
-      ...KIND_ORDER.filter(k => groups[k]),
-      ...Object.keys(groups).filter(k => !KIND_ORDER.includes(k)),
-    ];
-    const specs = keys.map(kind => ({ kind, all: groups[kind], ext: false }));
-    if (ext && ext.length) specs.push({ kind: 'external', all: ext, ext: true });
+  // Build column descriptors for one direction: one internal-connections column
+  // plus (when present) a separate amber `external` column on the same tier.
+  const buildCols = ({ internal, external }) => {
+    const specs = [];
+    if (internal.length) specs.push({ kind: 'connections', all: internal, ext: false });
+    if (external.length) specs.push({ kind: 'external',    all: external, ext: true  });
     const raw = specs.map(({ kind, all, ext }) => {
       const items = all.slice(0, MAX_ITEMS);
       const extra = all.length - items.length;
@@ -152,8 +150,8 @@ function buildDiagramSVG(node, level) {
     return raw;
   };
 
-  const inCols  = buildCols(inSplit);
-  const outCols = buildCols(outSplit);
+  const inCols  = buildCols(inConns);
+  const outCols = buildCols(outConns);
 
   // Total pixel width of a column set
   const colsW = cols => cols.length === 0 ? 0
@@ -217,45 +215,99 @@ function buildDiagramSVG(node, level) {
     `<clipPath id="mn-clip"><rect x="${MNX+10}" y="${MNY}" width="${MNW-20}" height="${MNH2}"/></clipPath>` +
     `</defs>`;
 
-  // Side node card
+  // Side node card. `item` = { node, kinds:Set, ext }.
+  // External libraries: amber card with the full `ext:` id only (no metrics).
+  // Internal files: title (centred) + a `pr` badge for private modules, an
+  // hk (left, abbreviated) / loc (right) row, and a bottom row of three
+  // connection-kind slots (uses · reexport · contains) split exactly into
+  // thirds — present kinds are labelled, absent ones leave their third empty.
   let _snIdx = 0;
-  const sideNode = ({node: n}, x, y) => {
+  // [edge kind, display label, hover hint].
+  const KIND_SLOTS = [
+    ['uses',      'uses',     'Import / use dependency — this file uses items from the other.'],
+    ['reexports', 'reexport', 'Re-export (pub use) — this file re-exposes the other file\'s items as part of its own API.'],
+    ['contains',  'contains', 'Module declaration (mod foo;) — structural ownership, kept in the JSON but excluded from fan-in / HK / cycles.'],
+  ];
+  // Escape a string for use inside a double-quoted SVG/HTML attribute.
+  const escA = s => esc(s).replace(/"/g, '&quot;');
+  const sideNode = (item, x, y) => {
+    const n       = item.node;
     const inMap   = nodeMap.has(n.id);
     const cycle   = isCycleNode(n.id);
-    const ext     = n.external === true || n.kind === 'external';
-    const hk      = fmtNum(n.complexity?.coupling?.hk);
-    const loc     = n.complexity?.loc?.source != null ? String(n.complexity.loc.source) : '—';
+    const ext     = item.ext || n.external === true || n.kind === 'external';
     const cursor  = inMap ? 'pointer' : 'default';
     const clipId  = `sn-clip-${_snIdx++}`;
-    // External (3rd-party library) nodes are amber, matching the main map legend.
     const fill    = ext ? '#f6e2c0' : '#f0f4f8';
     const stroke  = cycle ? '#c00' : ext ? '#b3801f' : (inMap ? '#8ba6c0' : '#bbb');
     const strokeW = cycle ? '2' : '1';
-    // External library cards show their full id (`ext:serde_json`) centred, with
-    // no loc/hk (libraries carry no metrics). Internal files show name + loc/hk.
-    const inner = ext
-      ? `<tspan x="${x+SNW/2}" y="${y+SNH/2+4}" text-anchor="middle" font-size="11" font-weight="600">${esc(n.id)}</tspan>`
-      : `<tspan x="${x+SNW/2}" y="${y+17}" text-anchor="middle" font-size="11" font-weight="600">${esc(nameOf(n))}${visTag(n)}</tspan>` +
-        `<tspan x="${x+8}" dy="16" font-size="10" fill="#5c7a96">loc: ${esc(loc)}</tspan>` +
-        `<tspan x="${x+8}" dy="14" font-size="10" fill="#5c7a96">hk: ${esc(hk)}</tspan>`;
-    // Hover tooltip: the full path (or the id for external libraries).
-    const sideTip = ext ? n.id : ((n.path || '').replace(/^\{[^}]+\}\//, '') || n.id);
-    return `<defs><clipPath id="${clipId}"><rect x="${x+4}" y="${y}" width="${SNW-8}" height="${SNH}"/></clipPath></defs>` +
-      `<g data-diag-node="${esc(n.id)}" style="cursor:${cursor}"><title>${esc(sideTip)}</title>` +
-      `<rect x="${x}" y="${y}" width="${SNW}" height="${SNH}" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="${strokeW}"/>` +
-      `<g clip-path="url(#${clipId})"><text font-family="ui-monospace,'SF Mono',monospace" fill="#2c3e50">` +
-      inner +
-      `</text></g></g>`;
+    const mono    = `font-family="ui-monospace,'SF Mono',monospace"`;
+    const clipDef = `<defs><clipPath id="${clipId}"><rect x="${x+4}" y="${y}" width="${SNW-8}" height="${SNH}"/></clipPath></defs>`;
+    // No native `<title>` here: it would pop a second (browser) tooltip that
+    // conflicts with the styled `#tt` tooltip shown on the labels.
+    const open    = `<g data-diag-node="${esc(n.id)}" style="cursor:${cursor}">` +
+      `<rect x="${x}" y="${y}" width="${SNW}" height="${SNH}" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="${strokeW}"/>`;
+    // Path shown as a styled tooltip when hovering the name.
+    const pathTip = ext ? (n.path || n.id)
+                        : ((n.path || '').replace(/^\{[^}]+\}\//, '') || n.id);
+
+    if (ext) {
+      // Library name without the `ext:` id prefix; hover it for the path tooltip.
+      const extName = n.name || n.id.replace(/^ext:/, '');
+      return clipDef + open +
+        `<g clip-path="url(#${clipId})"><text ${mono} fill="#2c3e50">` +
+        `<tspan class="sn-hint" data-tip="${escA(pathTip)}" x="${x+SNW/2}" y="${y+SNH/2+4}" text-anchor="middle" font-size="11" font-weight="600">${esc(extName)}</tspan>` +
+        `</text></g></g>`;
+    }
+
+    // hk: when absent, show nothing in the simple view (no `—`); the detail view
+    // still spells it out as `0:hk`.
+    const hkRaw = n.complexity?.coupling?.hk;
+    const hkSimple = hkRaw != null ? fmtK(hkRaw) : '';
+    const hkDetail = hkRaw != null ? fmtK(hkRaw) : '0';
+    const loc   = n.complexity?.loc?.source != null ? String(n.complexity.loc.source) : '—';
+    const priv  = (typeof n.visibility === 'string' && n.visibility === 'private');
+    const thirdW = SNW / 3;
+    // Each present connection-kind is its own hoverable label (tooltip + highlight).
+    let kindRow = '';
+    KIND_SLOTS.forEach(([k, disp, hint], i) => {
+      if (!item.kinds?.has(k)) return;
+      kindRow += `<text class="sn-detail sn-hint" data-tip="${escA(hint)}" x="${x + thirdW * (i + 0.5)}" y="${y+SNH-7}" text-anchor="middle" font-size="8" fill="#5c7a96">${disp}</text>`;
+    });
+    // `pr` chip (private module): hover-only (like the detail row), with the same
+    // styled `#tt` tooltip. `sn-detail` hides it until the card is hovered.
+    const prBadge = priv
+      ? `<g class="sn-detail sn-hint" data-tip="${escA('Private module — its declared visibility is private.')}">` +
+        `<rect x="${x+SNW-26}" y="${y+4}" width="22" height="13" rx="3" fill="#e0d2b8" stroke="#b3801f" stroke-width="0.5"/>` +
+        `<text ${mono} x="${x+SNW-15}" y="${y+14}" text-anchor="middle" font-size="9" fill="#7a5b18">pr</text></g>`
+      : '';
+    const ty = y + 36;  // hk / loc row baseline
+    // Two states toggled by CSS on `g[data-diag-node]:hover` (see index.css):
+    // `.sn-simple` shows bare hk / loc, `.sn-detail` shows labelled values plus
+    // the connection-kind row. Title and `pr` badge are always visible.
+    return clipDef + open +
+      `<g clip-path="url(#${clipId})" ${mono} fill="#2c3e50">` +
+      `<text class="sn-hint" data-tip="${escA(pathTip)}" x="${x+SNW/2}" y="${y+16}" text-anchor="middle" font-size="11" font-weight="600">${esc(nameOf(n))}</text>` +
+      `<text class="sn-simple" x="${x+8}" y="${ty}" font-size="10" fill="#5c7a96">${esc(hkSimple)}</text>` +
+      `<text class="sn-simple" x="${x+SNW-8}" y="${ty}" text-anchor="end" font-size="10" fill="#5c7a96">${esc(loc)}</text>` +
+      // Whole `value:key` string is one tooltip target (key + value both hover).
+      `<text class="sn-detail sn-hint" data-tip="${escA(COL_TIPS.hk)}" data-tip-formula="${escA(COL_FORMULAS.hk)}" data-tip-calc="${escA(hkCalc(n.complexity))}" x="${x+8}" y="${ty}" font-size="10" fill="#5c7a96">${esc(hkDetail)}:hk</text>` +
+      `<text class="sn-detail sn-hint" data-tip="${escA(COL_TIPS.loc)}" x="${x+SNW-8}" y="${ty}" text-anchor="end" font-size="10" fill="#5c7a96">loc:${esc(loc)}</text>` +
+      kindRow +
+      `</g>` + prBadge + `</g>`;
   };
 
-  // Render one column (dashed box + kind label + node cards)
+  // Render one column (dashed box + optional header + node cards). The internal
+  // `connections` column has no header — its kinds are shown per-card and its
+  // count is on the arrow; only the `external` column is labelled.
   const renderCol = col => {
     const color = kindColor(col.kind);
     const dash  = kindDash(col.kind);
-    const label = `${col.kind}  ${col.all.length}${col.extra > 0 ? ` (+${col.extra})` : ''}`;
     let r = '';
     r += `<rect x="${col.x}" y="${col.y}" width="${col.px_w}" height="${col.h}" rx="8" fill="none" stroke="${color}" stroke-width="1.5" stroke-dasharray="${dash}"/>`;
-    r += `<text x="${col.x+10}" y="${col.y+13}" font-family="system-ui,sans-serif" font-size="10" fill="${color}" font-weight="600">${label}</text>`;
+    if (col.ext) {
+      const label = `external  ${col.all.length}${col.extra > 0 ? ` (+${col.extra})` : ''}`;
+      r += `<text x="${col.x+10}" y="${col.y+13}" font-family="system-ui,sans-serif" font-size="10" fill="${color}" font-weight="600">${label}</text>`;
+    }
     col.rows.forEach((row, ri) =>
       row.forEach((item, pi) =>
         r += sideNode(item, nodeXInCol(col, pi, row.length), col.y + PAD_TOP + ri * ROW_H)
@@ -289,7 +341,8 @@ function buildDiagramSVG(node, level) {
   const mono = `font-family="ui-monospace,'SF Mono','Fira Code',monospace"`;
   const mnCycle = isCycleNode(node.id);
   // An external (3rd-party library) main node is amber, like its side cards,
-  // and carries no path/hk/loc — just its id.
+  // and carries no hk/loc — just its id and (when known) its cargo-cache path
+  // (e.g. `{registry}/tokio-1.49.0`, which encodes the resolved version).
   const mnExt    = node.external === true || node.kind === 'external';
   const mnFill   = mnExt ? '#f6e2c0' : '#dbe9f4';
   const mnStroke = mnCycle ? '#c00' : mnExt ? '#b3801f' : '#4d6f9c';
@@ -298,20 +351,37 @@ function buildDiagramSVG(node, level) {
   // for an external library). A `copy` cursor signals this; handled by the
   // `.mn-card` listener in modal.js.
   const copyVal = mnExt ? node.id : nodePath;
-  s += `<g class="mn-card" data-copy="${esc(copyVal)}"><title>click to copy ${mnExt ? 'id' : 'path'}</title>`;
+  // No native `<title>` (it would conflict with the styled `#tt` tooltips on the
+  // card's labels); the click-to-copy affordance is the pointer cursor + feedback.
+  s += `<g class="mn-card" data-copy="${esc(copyVal)}">`;
   s += `<rect x="${MNX}" y="${MNY}" width="${MNW}" height="${MNH2}" rx="10" fill="${mnFill}" stroke="${mnStroke}" stroke-width="${mnCycle ? '3' : '2'}"/>`;
   s += `<g class="mn-card-body" clip-path="url(#mn-clip)">`;
   if (mnExt) {
-    s += `<text ${mono} x="${MNX+MNW/2}" y="${MNY+MNH2/2+6}" text-anchor="middle" font-size="16" font-weight="700" fill="#1a2f45">${esc(trunc(node.id, 40))}</text>`;
+    // Same layout as an internal file card: a centred title, then left-aligned
+    // `key: value` rows (kind / version / path) instead of centred lines.
+    const extName = node.name || node.id.replace(/^ext:/, '');
+    let ey = MNY + 58;
+    s += `<text ${mono} x="${MNX+MNW/2}" y="${MNY+28}" text-anchor="middle" font-size="16" font-weight="700" fill="#1a2f45">${esc(trunc(extName, 36))}</text>`;
+    s += `<text class="sn-hint" data-tip="${escA('External 3rd-party library, recorded at depth 1 (its internals are not analyzed).')}" ${mono} x="${MNX+14}" y="${ey}" font-size="11" fill="#2c3e50"><tspan font-weight="700">kind: </tspan>${esc(node.kind || 'external')}</text>`;
+    if (node.version) {
+      ey += 22;
+      s += `<text ${mono} x="${MNX+14}" y="${ey}" font-size="11" fill="#2c3e50"><tspan font-weight="700">version: </tspan>${esc(node.version)}</text>`;
+    }
+    if (node.path) {
+      ey += 22;
+      s += `<text class="sn-hint" data-tip="${escA('Crate location in the cargo cache; the directory name encodes the resolved version.')}" ${mono} x="${MNX+14}" y="${ey}" font-size="11" fill="#2c3e50"><tspan font-weight="700">path: </tspan>${esc(mnValTrunc('path: ', node.path))}</text>`;
+    }
   } else {
     s += `<text ${mono} x="${MNX+MNW/2}" y="${MNY+28}" text-anchor="middle" font-size="16" font-weight="700" fill="#1a2f45">${esc(trunc(node.name||node.id, 36))}${visTag(node)}</text>`;
-    s += `<text ${mono} x="${MNX+14}" y="${MNY+58}" font-size="11" fill="#2c3e50"><tspan font-weight="700">path: </tspan>${esc(mnValTrunc('path: ', nodePath))}</text>`;
-    s += `<text ${mono} x="${MNX+14}" y="${MNY+80}" font-size="11" fill="#2c3e50"><tspan font-weight="700">hk: </tspan>${esc(hk)}</text>`;
-    s += `<text ${mono} x="${MNX+14}" y="${MNY+102}" font-size="11" fill="#2c3e50"><tspan font-weight="700">loc: </tspan>${esc(loc)}</text>`;
+    s += `<text class="sn-hint" data-tip="${escA('Path of this file, relative to the analyzed project root.')}" ${mono} x="${MNX+14}" y="${MNY+58}" font-size="11" fill="#2c3e50"><tspan font-weight="700">path: </tspan>${esc(mnValTrunc('path: ', nodePath))}</text>`;
+    s += `<text class="sn-hint" data-tip="${escA(COL_TIPS.hk)}" data-tip-formula="${escA(COL_FORMULAS.hk)}" data-tip-calc="${escA(hkCalc(node.complexity))}" ${mono} x="${MNX+14}" y="${MNY+80}" font-size="11" fill="#2c3e50"><tspan font-weight="700">hk: </tspan>${esc(hk)}</text>`;
+    s += `<text class="sn-hint" data-tip="${escA(COL_TIPS.loc)}" ${mono} x="${MNX+14}" y="${MNY+102}" font-size="11" fill="#2c3e50"><tspan font-weight="700">loc: </tspan>${esc(loc)}</text>`;
   }
   s += `</g>`;
-  // Shown for ~1s after a copy (the body is hidden meanwhile, see index.css).
-  s += `<text class="mn-copied-msg" ${mono} x="${MNX+MNW/2}" y="${MNY+MNH2/2+7}" text-anchor="middle" font-size="22" font-weight="700" fill="#4d6f9c">copied</text>`;
+  // Shown for ~1s after a copy (the body is hidden meanwhile, see index.css):
+  // the exact value that was copied, above a "copied" confirmation.
+  s += `<text class="mn-copied-msg" ${mono} x="${MNX+MNW/2}" y="${MNY+MNH2/2-8}" text-anchor="middle" font-size="11" fill="#5c7a96">${esc(mnValTrunc('', copyVal))}</text>`;
+  s += `<text class="mn-copied-msg" ${mono} x="${MNX+MNW/2}" y="${MNY+MNH2/2+18}" text-anchor="middle" font-size="20" font-weight="700" fill="#4d6f9c">copied</text>`;
   s += `</g>`;
 
   // Fan-out columns (below main node, top-anchored) — one arrow per column
@@ -337,7 +407,10 @@ function buildDiagramSVG(node, level) {
 function buildModalContent(node, level) {
   const cycles  = window.CYCLES?.[level];
   const cs      = cycles?.nodeCycleStatus?.get(node.id);
-  const path    = (node.path || '').replace(/^\{[^}]+\}\//, '');
+  // For external libraries keep the full `{registry}`/`{cargo}` prefix (it shows
+  // the source); for project files drop the leading root token.
+  const path    = node.external ? (node.path || '')
+                                 : (node.path || '').replace(/^\{[^}]+\}\//, '');
   const lineStr = node.line != null ? `:${node.line}` : '';
   const vis     = typeof node.visibility === 'string'
     ? node.visibility
@@ -347,13 +420,30 @@ function buildModalContent(node, level) {
   const sections = [];
   let cur = { label: null, rows: [] };
 
-  const row = (k, v) => {
+  // Map a field-row key to the node-table column id, so a metric's tooltip
+  // (description + formula) is byte-identical to the one shown in the table.
+  const TIP_COL = {
+    fan_in: 'fan_in', fan_out: 'fan_out', hk: 'hk',
+    source: 'loc', logical: 'loc_logical', comments: 'loc_comments', blank: 'loc_blank',
+    cyclomatic: 'cyclomatic', cognitive: 'cognitive', mi: 'mi', mi_sei: 'mi_sei',
+    length: 'h_len', vocabulary: 'h_vocab', volume: 'h_vol', effort: 'h_effort',
+    'time (s)': 'h_time', bugs: 'h_bugs',
+  };
+  const tipAttr = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  const row = (k, v, calc) => {
     if (v == null || v === '') return;
-    const hint = NM_HINTS[k];
-    const attr = hint ? ` data-nm-hint="${hint.replace(/"/g, '&quot;')}"` : '';
+    // Prefer the shared table description + formula (`#tt` tooltip); fall back to
+    // the plain `NM_HINTS` text for fields that are not table columns. `calc`, when
+    // given, adds the formula filled with this node's real values.
+    const colId = TIP_COL[k];
+    const desc    = colId ? COL_TIPS[colId] : NM_HINTS[k];
+    const formula = colId ? COL_FORMULAS[colId] : null;
+    const attr = desc
+      ? ` data-tip="${tipAttr(desc)}"${formula ? ` data-tip-formula="${tipAttr(formula)}"` : ''}${calc ? ` data-tip-calc="${tipAttr(calc)}"` : ''}`
+      : '';
     // Consistent capitalization: full label if known, else capitalize the key.
     const label = NM_LABELS[k] || (k.charAt(0).toUpperCase() + k.slice(1));
-    cur.rows.push(`<tr><td class="nm-key${hint ? ' nm-has-hint' : ''}"${attr}>${label}</td><td class="nm-val">${v}</td></tr>`);
+    cur.rows.push(`<tr><td class="nm-key"${attr}>${label}</td><td class="nm-val">${v}</td></tr>`);
   };
   const sect = label => { sections.push(cur); cur = { label, rows: [] }; };
 
@@ -382,7 +472,11 @@ function buildModalContent(node, level) {
       `</td></tr>`
     );
   }
+  // For external libraries, surface every field we have (id, version, …).
+  if (node.external) row('id', node.id);
   row('kind',       node.kind || null);
+  row('version',    node.version ?? null);
+  if (node.external) row('external', 'true');
   row('visibility', vis);
   if (node.item_count   != null) row('items',   n3(node.item_count));
   if (node.method_count != null) row('methods', n3(node.method_count));
@@ -397,7 +491,7 @@ function buildModalContent(node, level) {
       sect('Coupling');
       row('fan_in',  n3(cpl.fan_in));
       row('fan_out', n3(cpl.fan_out));
-      if (cpl.hk != null) row('hk', fmt(cpl.hk, 0));
+      if (cpl.hk != null) row('hk', fmt(cpl.hk, 0), hkCalc(cx));
     }
 
     const loc = cx.loc;
@@ -427,9 +521,9 @@ function buildModalContent(node, level) {
       sect('Halstead');
       row('length',     n3(hs.length));
       row('vocabulary', n3(hs.vocabulary));
-      row('volume',     fmt(hs.volume,  1));
+      row('volume',     fmt(hs.volume,  1), metricCalc('h_vol', cx));
       row('effort',     fmt(hs.effort,  0));
-      row('time (s)',   fmt(hs.time,    1));
+      row('time (s)',   fmt(hs.time,    1), metricCalc('h_time', cx));
       row('bugs',       fmt(hs.bugs,    4));
     }
   }

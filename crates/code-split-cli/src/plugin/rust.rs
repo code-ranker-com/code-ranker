@@ -128,6 +128,7 @@ fn collapse_to_files(full: Graph) -> Graph {
                             path: node.path.clone(),
                             parent: None,
                             external: None,
+                            version: None,
                             visibility: node.visibility.clone(),
                             loc: node.loc,
                             line: None,
@@ -158,13 +159,24 @@ fn collapse_to_files(full: Graph) -> Graph {
             NodeKind::Crate if node.external.unwrap_or(false) => {
                 let eid = format!("ext:{}", node.name);
                 id_map.insert(node.id.clone(), eid.clone());
+                // Record the crate's on-disk location (the cargo cache): the
+                // directory of its `Cargo.toml`, e.g.
+                // `…/registry/src/index.crates.io-…/tokio-1.49.0` (carries the
+                // version for registry/path crates) or a `…/git/checkouts/…`
+                // path for git deps. Relativized to a `{registry}`/`{cargo}` root
+                // later. Empty when cargo provided no manifest path.
+                let lib_path = Path::new(&node.path)
+                    .parent()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .unwrap_or_default();
                 ext_nodes.entry(eid.clone()).or_insert_with(|| Node {
                     id: eid,
                     kind: NodeKind::External,
                     name: node.name.clone(),
-                    path: String::new(),
+                    path: lib_path,
                     parent: None,
                     external: Some(true),
+                    version: node.version.clone(),
                     visibility: None,
                     loc: None,
                     line: None,

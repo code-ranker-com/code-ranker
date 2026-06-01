@@ -15,6 +15,7 @@ pub(crate) fn contribute(metadata: &Metadata, builder: &mut GraphBuilder) {
             path: pkg.manifest_path.to_string(),
             parent: None,
             external: (!is_local).then_some(true),
+            version: Some(pkg.version.to_string()),
             visibility: None,
             loc: None,
             line: None,

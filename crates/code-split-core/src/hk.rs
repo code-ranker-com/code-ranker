@@ -109,6 +109,7 @@ mod tests {
             path: "p".into(),
             parent: None,
             external: None,
+            version: None,
             visibility: None,
             loc: struct_loc,
             line: None,

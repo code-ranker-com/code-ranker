@@ -342,6 +342,10 @@ pub struct Node {
     pub parent: Option<NodeId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub external: Option<bool>,
+    /// Resolved package version (semver). Set on Rust crate / `External`
+    /// library nodes from `cargo metadata`; absent on file nodes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visibility: Option<Visibility>,
     /// Structural line-count for the file/module (not a complexity metric).
@@ -440,6 +444,7 @@ mod tests {
             path: String::new(),
             parent: None,
             external: None,
+            version: None,
             visibility: None,
             loc: None,
             line: None,

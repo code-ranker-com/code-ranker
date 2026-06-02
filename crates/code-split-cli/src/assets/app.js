@@ -3,6 +3,19 @@
 function activeSnap() {
   return window.viewSide === 'after' && window.AFTER ? window.AFTER : window.BEFORE;
 }
+
+// The three view modes: 'review' (no after snapshot → single "view"), or, in a
+// diff, 'before' / 'after' depending on which side the user is looking at. This
+// is the single source of truth for the labels/headers/URL across the viewer.
+function viewMode() {
+  if (!window.AFTER) return 'review';
+  return window.viewSide === 'after' ? 'after' : 'before';
+}
+// Label suffix for the active side: ' Before' / ' After' in a diff, '' in review.
+function viewModeSuffix() {
+  const m = viewMode();
+  return m === 'after' ? ' After' : m === 'before' ? ' Before' : '';
+}
 function activeGraph(level) {
   return activeSnap()?.graphs?.[level] || { nodes: [], edges: [] };
 }
@@ -18,15 +31,86 @@ function activeLocalGraph(level) {
   return { nodes, edges };
 }
 
-// Toggle Before/After: re-render the active view from the chosen snapshot,
-// preserving the current pan/zoom (don't snap back to fit-all).
+// The graph the main map is *laid out* from: the union of before+after (the diff
+// graph), which is already external-free and carries a per-element `status`
+// (added / removed / unchanged / affected). Laying out the union ONCE — then
+// merely hiding the other side's added/removed elements via CSS — keeps every
+// node that exists on both sides pinned in place: toggling Before/After no longer
+// reflows the graph, only the genuinely added/removed parts appear or disappear.
+// (In review mode the diff is before-vs-before, so everything is `unchanged`.)
+function unionGraph(level) {
+  return window.DIFF?.[level] || { nodes: [], edges: [] };
+}
+
+// Flip which side's exclusive elements are visible on a frame, without relayout.
+// `before` hides after-only (added) elements; `after` hides before-only (removed)
+// ones; review keeps the lot. Drives the `.hide-{nodes,edges}-{added,removed}`
+// CSS rules already defined for the frame.
+function applySideVisibility(frame) {
+  if (!frame) return;
+  frame.classList.remove('hide-nodes-added', 'hide-edges-added',
+                         'hide-nodes-removed', 'hide-edges-removed');
+  const m = viewMode();
+  if (m === 'before')      frame.classList.add('hide-nodes-added', 'hide-edges-added');
+  else if (m === 'after')  frame.classList.add('hide-nodes-removed', 'hide-edges-removed');
+}
+
+// In the metric size modes (loc/hk), resize each circle to the *active side's*
+// value while keeping the union-layout centre — so toggling Before/After changes
+// sizes (a file that grew/shrank) without ever moving a node. Default mode draws
+// fixed boxes, identical on both sides, so it needs no per-side resize.
+function applySideSizing(frame, level) {
+  if (!frame) return;
+  const mode = window.nodeSizeMode || 'default';
+  if (mode === 'default') return;
+  const byId = new Map((activeSnap()?.graphs?.[level]?.nodes || []).map(n => [n.id, n]));
+  frame.querySelectorAll('g.node').forEach(g => {
+    const n   = byId.get(g.dataset.nodeId);
+    const ell = g.querySelector('ellipse');
+    if (!n || !ell) return;   // node absent on this side → leave it (it's hidden)
+    const cx = parseFloat(ell.getAttribute('cx'));
+    const cy = parseFloat(ell.getAttribute('cy'));
+    const d  = metricNodeDiam(n, mode);
+    const r  = (d * 36).toFixed(2);     // graphviz: radius(pt) = diameter(in) × 72 / 2
+    ell.setAttribute('rx', r);
+    ell.setAttribute('ry', r);
+    const txt = g.querySelector('text');
+    if (txt) {
+      const fs = metricFontSize(d);
+      const v  = metricNodeVal(n, mode);
+      txt.setAttribute('font-size', fs.toFixed(2));
+      txt.setAttribute('x', cx);
+      txt.setAttribute('y', (cy + fs * 0.3).toFixed(2));   // baseline ≈ centre + 0.3·fs
+      txt.textContent = v > 0 ? fmtMetricShort(v) : '';
+    }
+  });
+}
+
+// Toggle Before/After. The map is a single shared (union) layout, so switching
+// sides is just a visibility flip — no relayout, no pan/zoom reset, and nodes
+// present on both sides never move. Only the tables (active side) and the
+// warning count are refreshed.
 function setViewSide(side) {
   if (side === window.viewSide || (side === 'after' && !window.AFTER)) return;
   window.viewSide = side;
+  window.navSetSide?.();
   document.querySelectorAll('[data-side]').forEach(b => b.classList.toggle('active', b.dataset.side === side));
-  document.querySelectorAll('.view').forEach(s => { s.dataset.rendered = 'false'; });
-  const active = document.querySelector('.view.active');
-  if (active && window.gv) renderView(active, { preserve: true });
+  document.querySelectorAll('.view').forEach(sec => {
+    const frame = sec.querySelector('.svg-frame');
+    applySideVisibility(frame);
+    applySideSizing(frame, sec.dataset.view);
+    sec._refreshNodeTable?.();
+  });
+  updateWarnCount();
+}
+
+// Refresh the distinct-warning-type count next to the Prompt-Generator button
+// for the active level (it tracks the active side).
+function updateWarnCount() {
+  const warnEl = document.getElementById('nav-warn-count');
+  if (!warnEl) return;
+  const n = window.warningTypeCount?.(currentLevel()) ?? 0;
+  warnEl.textContent = n ? String(n) : '';
 }
 
 function updateHeader() {
@@ -89,13 +173,12 @@ function renderView(section, opts = {}) {
   const loading = section.querySelector('.loading-indicator');
 
   // Plain count of distinct warning types next to the Prompt-Generator (AI) button.
-  const warnEl = document.getElementById('nav-warn-count');
-  if (warnEl) { const n = window.warningTypeCount?.(level) ?? 0; warnEl.textContent = n ? String(n) : ''; }
+  updateWarnCount();
 
-  // Preserve pan/zoom across a re-render. The two layouts (before/after, or the
-  // size modes) have different coordinate extents, so we carry the view as
-  // *relative* zoom + fractional centre (vs each layout's fit-all viewBox) rather
-  // than absolute coords — otherwise the framing drifts when the extent changes.
+  // Preserve pan/zoom across a re-render (a size-mode switch — Before/After no
+  // longer relayouts). Size modes have different coordinate extents, so we carry
+  // the view as *relative* zoom + fractional centre (vs each layout's fit-all
+  // viewBox) rather than absolute coords — otherwise the framing drifts.
   let viewSpec = null, wasZoomed = false;
   if (opts.preserve) {
     const cur = frame.querySelector('svg')?.getAttribute('viewBox');
@@ -116,8 +199,11 @@ function renderView(section, opts = {}) {
 
   if (loading) { loading.textContent = 'Computing layout…'; loading.classList.add('on'); }
   setTimeout(() => {
-    const g = activeLocalGraph(level);
+    // Lay out the union graph once; the active side is shown via CSS visibility.
+    const g = unionGraph(level);
     drawSVG(frame, g.nodes, g.edges, level);
+    applySideVisibility(frame);
+    applySideSizing(frame, level);
     window._ntSelected?.[level]?.forEach(id => section._gNodeMap?.get(id)?.classList.add('node-selected'));
     if (viewSpec) {
       const svg = frame.querySelector('svg');
@@ -315,7 +401,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.CYCLES = computeCycles(window.BEFORE ?? EMPTY, window.AFTER ?? window.BEFORE ?? EMPTY);
   window.META   = computeMeta(window.BEFORE, window.AFTER);
 
-  window.viewSide = window.AFTER ? 'after' : 'before';
+  // Restore the active side from the URL (`side=before|after`); default to the
+  // after snapshot when present. Review mode (no after) is always 'before'.
+  const urlSide = getNavParams().side;
+  window.viewSide = window.AFTER ? (urlSide === 'before' ? 'before' : 'after') : 'before';
   // If the Prompt Generator was open (state in the URL), restore its selected
   // nodes before the tables render so those rows come up already selected.
   const epState = (typeof epReadUrl === 'function') ? epReadUrl() : null;
@@ -365,6 +454,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const st = e.state || getNavParams();
     const lvl  = st.level;
     const nid  = st.node;
+    const side = st.side;
+    if (window.AFTER && (side === 'before' || side === 'after')) setViewSide(side);
     if (lvl && lvl !== currentLevel()) switchToLevel(lvl);
     if (nid) {
       openModalForNode(nid, lvl ?? currentLevel());

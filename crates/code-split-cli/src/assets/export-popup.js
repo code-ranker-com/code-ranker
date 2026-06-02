@@ -73,8 +73,9 @@ function metricThresholds() {
 // over their `warning` threshold, plus `cycle` as one binary type (any file in
 // a dependency cycle). Shown next to the Prompt-Generator (AI) button.
 function warningTypeCount(level) {
-  const nodes = (window.DIFF?.[level]?.nodes || [])
-    .filter(n => !n.external && n.status !== 'removed');
+  // Count over the active side, so the badge tracks Before/After like the rest.
+  const nodes = ((typeof activeGraph === 'function' ? activeGraph(level).nodes : window.DIFF?.[level]?.nodes) || [])
+    .filter(n => !n.external);
   const th = metricThresholds();
   let count = Object.keys(th).filter(m =>
     nodes.some(n => (METRIC_VAL[m]?.(n) ?? 0) > th[m].warning)
@@ -127,8 +128,14 @@ function epClearUrl() {
 
 function openExportPopup(level, restore) {
   const selectedIds = window._ntSelected?.[level];
-  const allNodes    = window.DIFF?.[level]?.nodes || [];
-  const allEdges    = window.DIFF?.[level]?.edges || [];
+  // Operate on the active side (Before/After), so the generated prompt matches
+  // the snapshot the user is looking at — same source the map and table use.
+  // (Review mode → the single snapshot.) Edges are kept to local↔local pairs,
+  // mirroring the diff's edge set: no external links, no cross-side noise.
+  const activeG     = (typeof activeGraph === 'function') ? activeGraph(level) : (window.DIFF?.[level] || {});
+  const allNodes    = activeG.nodes || [];
+  const localIds    = new Set(allNodes.filter(n => !n.external).map(n => n.id));
+  const allEdges    = (activeG.edges || []).filter(e => localIds.has(e.from) && localIds.has(e.to));
   const selNodes    = allNodes.filter(n => selectedIds?.has(n.id));
 
   const cleanPath = p => (p || '').replace(/^\{[^}]+\}\//, '');
@@ -289,7 +296,7 @@ and propose simplification if not.`,
     overlay.innerHTML =
       '<div id="export-popup">' +
         '<div id="export-popup-hdr">' +
-          '<h3>Prompt Generator</h3>' +
+          '<h3 id="export-popup-title">Prompt Generator</h3>' +
           '<button id="export-popup-close">✕</button>' +
         '</div>' +
         '<div class="exp-modes">' +
@@ -421,7 +428,9 @@ and propose simplification if not.`,
   const activeMetric = () => sortSel.value;
 
   // Mirror the current controls into the URL (called from buildContent, so every
-  // state change is persisted). Selection is fixed for the popup's lifetime.
+  // state change is persisted). `sel` is the FULL selection set across both sides
+  // (before-only + after-only + common), not just the active side's — otherwise
+  // opening the popup on one side would drop the other side's selections on reload.
   const epWriteUrl = () => epWriteUrlState({
     level,
     preset: activePresetKey,
@@ -430,7 +439,7 @@ and propose simplification if not.`,
     sort:   sortSel.value,
     conn:   [...overlay.querySelectorAll('.exp-mode-cb input')]
               .filter(c => c.checked && !c.disabled).map(c => c.dataset.mode),
-    sel:    selNodes.map(n => n.id),
+    sel:    [...(window._ntSelected?.[level] || [])],
   });
 
   const getActiveNodes = () => {
@@ -662,6 +671,10 @@ and propose simplification if not.`,
   colorCount();
   updatePresetBadges(); // count badges on each preset button
   buildContent();       // also mirrors state into the URL
+  // Reflect the active side in the title: Prompt Generator / … Before / … After.
+  const titleEl = document.getElementById('export-popup-title');
+  if (titleEl) titleEl.textContent = 'Prompt Generator' +
+    (typeof viewModeSuffix === 'function' ? viewModeSuffix() : '');
   overlay.style.display = 'flex';
   document.body.style.overflow = 'hidden';
 }

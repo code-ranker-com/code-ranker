@@ -228,6 +228,8 @@ function setupNodeTable(section, level) {
 
   // ── Render ────────────────────────────────────────────────────────────────
   function renderRows() {
+    // Reflect the active side in the title: Details / Details Before / Details After.
+    hdrTitle.textContent = 'Details' + (typeof viewModeSuffix === 'function' ? viewModeSuffix() : '');
     const visible = getVisible();
     const filtered = searchQuery
       ? visible.filter(n => nodeVal(n, 'name').toLowerCase().includes(searchQuery))

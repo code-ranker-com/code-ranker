@@ -615,8 +615,10 @@ function buildModalContent(node, level) {
 
   const body = sections.filter(s => s.rows.length > 0).map(renderSect).join('');
 
+  const sideSuffix = (typeof viewModeSuffix === 'function') ? viewModeSuffix().trim() : '';
   return {
-    hdr:      `<span class="nm-title">${node.name}</span><span class="nm-badge">${node.kind}</span>`,
+    hdr:      `<span class="nm-title">${node.name}</span><span class="nm-badge">${node.kind}</span>` +
+              (sideSuffix ? `<span class="nm-side">${sideSuffix}</span>` : ''),
     body,
     diagram:  buildDiagramSVG(node, level),
   };
@@ -702,7 +704,10 @@ window.kbdHintsHtml = kbdHintsHtml;
 function setupTooltips(svgFrame, level) {
   svgFrame.querySelectorAll('g.edge title, g.cluster title').forEach(t => t.remove());
 
-  const nodeMap  = new Map(activeGraph(level).nodes.map(n => [n.id, n]));
+  // The SVG is the union (before+after) layout, so map EVERY union node — not just
+  // the active side's — or before-only (removed) / after-only (added) nodes would
+  // lack click handlers and a `_gNodeMap` entry on the side where they're visible.
+  const nodeMap  = new Map(unionGraph(level).nodes.map(n => [n.id, n]));
   const section  = svgFrame.closest('.view');
   const gNodeMap = new Map();
 

@@ -281,18 +281,8 @@ fn analyze_workspace(
     )
     .context("configuration error")?;
     let cfg = loaded.config;
-    if let Some(f) = &loaded.source_file {
-        logger::info(&format!("config: {f}"));
-    }
 
     let plugin_name = resolve_plugin(args.plugin.as_deref(), cfg.plugin.as_deref(), &target)?;
-
-    logger::info(&format!("target:    {}", target.display()));
-    logger::info(&format!("workspace: {}", cwd.display()));
-    logger::info(&format!(
-        "plugin: {plugin_name}{}",
-        if args.local_only { " (local-only)" } else { "" }
-    ));
 
     let command = format!(
         "code-split {}",
@@ -311,10 +301,7 @@ fn analyze_workspace(
     // otherwise leak machine-specific paths into the snapshot header.
     prune_unused_roots(&plugin_graphs, &mut roots);
 
-    let ignored = config::apply_ignore(&mut plugin_graphs, &cfg.ignore, &target)?;
-    if ignored > 0 {
-        logger::info(&format!("config: {ignored} nodes filtered by ignore.paths"));
-    }
+    config::apply_ignore(&mut plugin_graphs, &cfg.ignore, &target)?;
 
     code_split_core::annotate_all_cycles(&mut plugin_graphs);
     config::apply_cycle_rules(&mut plugin_graphs, &cfg.rules.cycles);
@@ -324,12 +311,6 @@ fn analyze_workspace(
     let violations = config::check_violations(&plugin_graphs, &cfg.rules);
 
     let git = git::collect(&target);
-    if let Some(g) = &git {
-        logger::info(&format!(
-            "git: {} @ {} ({} dirty)",
-            g.branch, g.commit, g.dirty_files
-        ));
-    }
 
     let mut versions = HashMap::new();
     versions.insert(
@@ -709,7 +690,7 @@ fn run_report(
         json.push('\n');
         std::fs::write(&path, json)
             .with_context(|| format!("writing snapshot to {}", path.display()))?;
-        logger::info(&format!("wrote {}", path.display()));
+        logger::info(&format!("json-report={}", path.display()));
     }
 
     if formats.contains(&Format::Html) {
@@ -731,7 +712,7 @@ fn run_report(
         };
         std::fs::write(&path, html)
             .with_context(|| format!("writing report to {}", path.display()))?;
-        logger::info(&format!("wrote {}", path.display()));
+        logger::info(&format!("html-report={}", path.display()));
     }
 
     Ok(())
@@ -901,7 +882,7 @@ fn run_diff(
             render_html_viewer(Some(&snap_before), Some(&snap_after)),
         )
         .with_context(|| format!("writing diff to {}", path.display()))?;
-        logger::info(&format!("wrote {}", path.display()));
+        logger::info(&format!("html-report={}", path.display()));
     }
 
     if formats.contains(&Format::Json) {
@@ -911,7 +892,7 @@ fn run_diff(
         json.push('\n');
         std::fs::write(&path, json)
             .with_context(|| format!("writing diff to {}", path.display()))?;
-        logger::info(&format!("wrote {}", path.display()));
+        logger::info(&format!("json-report={}", path.display()));
     }
 
     Ok(())

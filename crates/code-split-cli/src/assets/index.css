@@ -152,6 +152,9 @@ main { padding: 16px 24px 40px; }
             overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nm-badge { display: inline-block; flex-shrink: 0; padding: 2px 10px; border-radius: 12px;
             font-size: 12px; font-weight: 600; background: #dbe9f4; color: #2980b9; }
+.nm-side { display: inline-block; flex-shrink: 0; padding: 2px 10px; border-radius: 12px;
+           font-size: 12px; font-weight: 600; background: #eef0f3; color: #6b7c8d;
+           text-transform: uppercase; letter-spacing: .04em; }
 .nm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; margin-top: 12px; }
 .nm-col { min-width: 0; }
 .nm-sect-label { font-weight: 700; font-size: 11px; text-transform: uppercase;

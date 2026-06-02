@@ -739,8 +739,18 @@ direction verdict: `improved` (total weight fell), `degraded` (total
 weight rose), or `neutral` (no significant change). The interactive
 diff HTML uses Graphviz WASM (bundled in the binary) for client-side
 DOT→SVG layout with directory cluster grouping; there is a single Files
-view (no level switcher). The `[data-side]` Before/After buttons render
-each snapshot as its own clean diagram in diff mode; when only one
+view (no level switcher). The map is laid out **once** from the **union**
+of both snapshots (Graphviz computes a single set of node positions); the
+`[data-side]` Before/After buttons are then a pure CSS visibility flip —
+after-only (added) elements are hidden on the Before side, before-only
+(removed) elements on the After side — so every file present on both sides
+keeps its exact position and never moves when toggling. **After is shown by
+default.** In the metric node-size modes (SLOC/HK) each circle is resized
+to the active side's value around its fixed centre (a file that grew or
+shrank changes size, not position). The active side is reflected
+throughout: the `side=before|after` URL parameter, the node-table title
+(`Details` / `Details Before` / `Details After`), and a `Before` / `After`
+badge on the node-popup and Prompt-Generator headers. When only one
 snapshot is loaded (review mode) the Before/After buttons are hidden and
 the header is relabelled. Cycle detection (Tarjan SCC) runs in-browser
 and annotates nodes/edges for red-stroke highlighting (solid red, no
@@ -749,7 +759,9 @@ blue; `external` library nodes render amber with dashed edges. The node
 table column order is: checkbox, Name, Kind, Cycle, Status, LOC, HK,
 Fan-in, Fan-out, H.vol, H.bugs, H.effort, H.time, H.len, H.vocab,
 Cyclomatic, Cognitive, MI, MI SEI, Logical, Comments, Blank. A checkbox column
-(leftmost) enables persistent multi-node selection: clicking a checkbox
+(leftmost) enables persistent multi-node selection (shared across
+Before/After by node id — a file present in both snapshots stays selected
+when toggling; the selected-row count reflects the active side): clicking a checkbox
 highlights the row (yellow) and the corresponding SVG node (yellow fill
 - amber stroke); shift-click selects a range; the header checkbox
 selects or deselects all visible rows (indeterminate when partial).

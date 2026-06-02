@@ -27,7 +27,7 @@ pub fn run(workspace: &Path, _local_only: bool) -> Result<(PluginGraphs, Vec<Sta
 
     let n = builder.node_count();
     let detail = format!("{n} nodes from {} files", js_files.len());
-    let ms = t.finish_with(&detail);
+    let ms = t.finish_quiet();
     timings.push(StageTime {
         stage: "js-ts".into(),
         ms,
@@ -44,7 +44,7 @@ pub fn run(workspace: &Path, _local_only: bool) -> Result<(PluginGraphs, Vec<Sta
             }
         };
         let detail = format!("{annotated} nodes annotated");
-        let ms = t.finish_with(&detail);
+        let ms = t.finish_quiet();
         timings.push(StageTime {
             stage: "complexity".into(),
             ms,
@@ -55,7 +55,7 @@ pub fn run(workspace: &Path, _local_only: bool) -> Result<(PluginGraphs, Vec<Sta
     let t = logger::Timer::start("projecting file graph");
     let files = finalize_file_graph(builder.build());
     let detail = format!("files={} edges={}", files.nodes.len(), files.edges.len());
-    let ms = t.finish_with(&detail);
+    let ms = t.finish_quiet();
     timings.push(StageTime {
         stage: "projection".into(),
         ms,

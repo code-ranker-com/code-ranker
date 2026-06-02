@@ -16,7 +16,6 @@ pub struct Timer {
 
 impl Timer {
     pub fn start(label: &str) -> Self {
-        eprintln!("[{}] ▶ {}", ts(), label);
         Self {
             label: label.to_string(),
             start: Instant::now(),
@@ -41,5 +40,11 @@ impl Timer {
 
     pub fn finish(self) -> u64 {
         self.finish_with("")
+    }
+
+    /// Measure the elapsed time without printing — for per-stage timers whose
+    /// numbers are recorded in the snapshot but kept out of the console output.
+    pub fn finish_quiet(self) -> u64 {
+        self.start.elapsed().as_millis() as u64
     }
 }

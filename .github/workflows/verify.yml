@@ -17,6 +17,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   test:
@@ -114,14 +115,15 @@ jobs:
     name: Token preflight
     runs-on: ubuntu-22.04
     steps:
-      - name: crates.io token is valid
+      - name: crates.io token present
         env:
           TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
+          # crates.io API tokens can't be validated read-only: GET /api/v1/me is
+          # cookie-session only and 403s for API tokens. So check presence here;
+          # the crates-dry-run job above proves the crates are publishable.
           [ -n "$TOKEN" ] || { echo "CARGO_REGISTRY_TOKEN is empty"; exit 1; }
-          code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: $TOKEN" https://crates.io/api/v1/me)
-          [ "$code" = "200" ] || { echo "crates.io token rejected (HTTP $code)"; exit 1; }
-          echo "crates.io token OK"
+          echo "crates.io token present"
       - name: npm token is valid
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

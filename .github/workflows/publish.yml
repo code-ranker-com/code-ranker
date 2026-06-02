@@ -1,25 +1,39 @@
-name: Release (publish everywhere)
+name: Release (publish — pick registries)
 
-# The single manual "Release" button. Run it AFTER the Verify workflow is green
-# for the tag. It dispatches every publish workflow for the given version:
-#   - release.yml   → GitHub Release + prebuilt binaries + npm (cargo-dist)
-#   - crates-io.yml → crates.io
-#   - pypi.yml      → PyPI
-#   - docker.yml    → Docker Hub + GHCR (waits for the release binaries first)
+# The single manual "Release" button, with a checkbox per registry. Run it AFTER
+# Verify is green for the tag, tick only the registries you want, and only those
+# are published. Everything defaults to OFF so an experiment never pushes a
+# version somewhere it isn't needed.
 #
-# Flow: bump version → commit → push main → push tag v<version> (this runs
-# Verify) → once Verify is green, run THIS workflow with the same version.
+# Flow: bump version -> commit -> push main -> push tag v<version> (runs Verify)
+# -> once Verify is green, run THIS workflow, ticking the registries to publish.
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release, without the v prefix (e.g. 1.0.0-alpha.3). Tag v<version> must already exist and Verify must be green.'
+        description: 'Version without the v prefix (e.g. 1.0.0-alpha.3). Tag v<version> must exist and Verify must be green.'
         required: true
         type: string
+      crates:
+        description: 'Publish to crates.io'
+        type: boolean
+        default: false
+      pypi:
+        description: 'Publish to PyPI'
+        type: boolean
+        default: false
+      docker:
+        description: 'Publish Docker image (Docker Hub + GHCR)'
+        type: boolean
+        default: false
+      github_release:
+        description: 'GitHub Release + prebuilt binaries + npm (cargo-dist)'
+        type: boolean
+        default: false
 
 permissions:
-  actions: write     # required to dispatch the other workflows
+  actions: write     # required to dispatch the per-registry workflows
   contents: read
 
 jobs:
@@ -39,15 +53,27 @@ jobs:
             echo "tag v$V does not exist — push it first (that runs Verify), then release"; exit 1
           fi
           echo "tag v$V exists"
-      - name: Dispatch all publish workflows
+      - name: Dispatch selected registries
         run: |
           set -e
-          echo "==> GitHub Release + binaries + npm (cargo-dist)"
-          gh workflow run release.yml   --ref main -f tag="v$V"
-          echo "==> crates.io"
-          gh workflow run crates-io.yml --ref main -f version="$V"
-          echo "==> PyPI"
-          gh workflow run pypi.yml      --ref main -f version="$V"
-          echo "==> Docker (waits for the GitHub Release binaries)"
-          gh workflow run docker.yml    --ref main -f version="$V"
-          echo "All publish workflows dispatched. Watch: gh run list --limit 6"
+          picked=0
+          if [ "${{ inputs.github_release }}" = "true" ]; then
+            echo "==> GitHub Release + binaries + npm (cargo-dist)"
+            gh workflow run release.yml   --ref main -f tag="v$V"; picked=1
+          fi
+          if [ "${{ inputs.crates }}" = "true" ]; then
+            echo "==> crates.io"
+            gh workflow run crates-io.yml --ref main -f version="$V"; picked=1
+          fi
+          if [ "${{ inputs.pypi }}" = "true" ]; then
+            echo "==> PyPI"
+            gh workflow run pypi.yml      --ref main -f version="$V"; picked=1
+          fi
+          if [ "${{ inputs.docker }}" = "true" ]; then
+            echo "==> Docker (Docker Hub + GHCR)"
+            gh workflow run docker.yml    --ref main -f version="$V"; picked=1
+          fi
+          if [ "$picked" = "0" ]; then
+            echo "no registry selected — tick at least one checkbox"; exit 1
+          fi
+          echo "dispatched the selected registries for v$V."

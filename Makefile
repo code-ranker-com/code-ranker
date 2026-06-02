@@ -87,6 +87,9 @@ release:
 
 publish:
 	@VERSION=$$(grep -E '^version = "' Cargo.toml | head -1 | sed -E 's/version = "(.*)"/\1/'); \
-	  echo "dispatching Release for v$$VERSION across all registries"; \
-	  gh workflow run publish.yml --repo ffedoroff/code-split -f version="$$VERSION"; \
-	  echo "  ✓ Release dispatched — watch: gh run list --repo ffedoroff/code-split --limit 6"
+	  echo "dispatching Release for v$$VERSION (crates=$${CRATES:-false} pypi=$${PYPI:-false} docker=$${DOCKER:-false} github_release=$${GITHUB_RELEASE:-false})"; \
+	  gh workflow run publish.yml --repo ffedoroff/code-split \
+	    -f version="$$VERSION" \
+	    -f crates="$${CRATES:-false}" -f pypi="$${PYPI:-false}" \
+	    -f docker="$${DOCKER:-false}" -f github_release="$${GITHUB_RELEASE:-false}"; \
+	  echo "  ✓ dispatched — watch: gh run list --repo ffedoroff/code-split --limit 6"

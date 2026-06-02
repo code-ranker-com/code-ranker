@@ -1,14 +1,19 @@
 // Which snapshot the diagrams / tables / modal show: 'before' or 'after'.
 // In review mode (no after snapshot) it is always 'before'.
+// `after` is the primary snapshot (the report's current state, normally always
+// present); `before` is the optional baseline. activeSnap returns whichever the
+// shown side has, falling back to the other so a single-snapshot report works.
 function activeSnap() {
-  return window.viewSide === 'after' && window.AFTER ? window.AFTER : window.BEFORE;
+  return window.viewSide === 'before'
+    ? (window.BEFORE ?? window.AFTER)
+    : (window.AFTER ?? window.BEFORE);
 }
 
 // The three view modes: 'review' (no after snapshot → single "view"), or, in a
 // diff, 'before' / 'after' depending on which side the user is looking at. This
 // is the single source of truth for the labels/headers/URL across the viewer.
 function viewMode() {
-  if (!window.AFTER) return 'review';
+  if (!window.BEFORE || !window.AFTER) return 'review';   // only one snapshot loaded
   return window.viewSide === 'after' ? 'after' : 'before';
 }
 // Label suffix for the active side: ' Before' / ' After' in a diff, '' in review.
@@ -49,10 +54,15 @@ function unionGraph(level) {
 function applySideVisibility(frame) {
   if (!frame) return;
   frame.classList.remove('hide-nodes-added', 'hide-edges-added',
-                         'hide-nodes-removed', 'hide-edges-removed');
+                         'hide-nodes-removed', 'hide-edges-removed',
+                         'side-before', 'side-after');
   const m = viewMode();
-  if (m === 'before')      frame.classList.add('hide-nodes-added', 'hide-edges-added');
-  else if (m === 'after')  frame.classList.add('hide-nodes-removed', 'hide-edges-removed');
+  if (m === 'before')     frame.classList.add('hide-nodes-added', 'hide-edges-added');
+  else if (m === 'after') frame.classList.add('hide-nodes-removed', 'hide-edges-removed');
+  // The `side-*` marker gates cycle highlighting (a `before-only` cycle is red
+  // only on Before, `after-only` only on After, `both` on either) and follows the
+  // side actually shown — in review the single snapshot's cycles are all `both`.
+  frame.classList.add(window.viewSide === 'after' ? 'side-after' : 'side-before');
 }
 
 // In the metric size modes (loc/hk), resize each circle to the *active side's*
@@ -91,7 +101,9 @@ function applySideSizing(frame, level) {
 // present on both sides never move. Only the tables (active side) and the
 // warning count are refreshed.
 function setViewSide(side) {
-  if (side === window.viewSide || (side === 'after' && !window.AFTER)) return;
+  if (side === window.viewSide
+      || (side === 'after'  && !window.AFTER)
+      || (side === 'before' && !window.BEFORE)) return;
   window.viewSide = side;
   window.navSetSide?.();
   document.querySelectorAll('[data-side]').forEach(b => b.classList.toggle('active', b.dataset.side === side));
@@ -102,6 +114,7 @@ function setViewSide(side) {
     sec._refreshNodeTable?.();
   });
   updateWarnCount();
+  updateActiveSnapGroup();
 }
 
 // Refresh the distinct-warning-type count next to the Prompt-Generator button
@@ -114,31 +127,37 @@ function updateWarnCount() {
 }
 
 function updateHeader() {
-  const meta     = window.META;
-  const hasAfter = meta.after !== null;
-  const isReview = !hasAfter;
-  const wasReview = document.body.classList.contains('mode-review');
+  const meta      = window.META;
+  const hasBefore = meta.before !== null;   // an optional baseline is loaded
+  const hasAfter  = meta.after  !== null;   // the primary snapshot (normally always present)
+  const isReview  = !hasBefore;             // no baseline → single-snapshot "review"
 
   document.body.classList.toggle('mode-review', isReview);
   document.getElementById('title').textContent = `${meta.target} — ${isReview ? 'review' : 'diff'}`;
-  document.getElementById('meta-before-date').textContent   = meta.before.date ? fmtDate(meta.before.date) + ' ' : '';
-  document.getElementById('meta-before-name').textContent   = meta.before.name;
-  document.getElementById('meta-before-commit').textContent = meta.before.commit ? ` ${meta.before.commit}` : '';
-  document.getElementById('meta-before-info').style.display = meta.before.name || meta.before.commit ? '' : 'none';
-  document.getElementById('meta-arrow').style.display       = isReview ? 'none' : '';
+
+  // BEFORE = optional baseline: left, editable, removable; empty in review.
+  document.getElementById('meta-before-date').textContent   = hasBefore && meta.before.date ? fmtDate(meta.before.date) + ' ' : '';
+  document.getElementById('meta-before-name').textContent   = hasBefore ? meta.before.name : '';
+  document.getElementById('meta-before-commit').textContent = hasBefore && meta.before.commit ? ` ${meta.before.commit}` : '';
+  document.getElementById('meta-before-info').style.display = hasBefore && (meta.before.name || meta.before.commit) ? '' : 'none';
+  document.getElementById('btn-upload-before').textContent   = hasBefore ? '↑ change' : '↑ compare…';
+  document.getElementById('btn-remove-before').style.display = hasBefore ? '' : 'none';
+
+  // AFTER = the primary snapshot the report is about: always shown, not removable.
   document.getElementById('meta-after-date').textContent    = hasAfter && meta.after.date ? fmtDate(meta.after.date) + ' ' : '';
-  document.getElementById('meta-after-name').textContent    = hasAfter ? meta.after.name   : '';
+  document.getElementById('meta-after-name').textContent    = hasAfter ? meta.after.name : '';
   document.getElementById('meta-after-commit').textContent  = hasAfter && meta.after.commit ? ` ${meta.after.commit}` : '';
   document.getElementById('meta-after-info').style.display  = hasAfter && (meta.after.name || meta.after.commit) ? '' : 'none';
-  document.getElementById('btn-remove-after').style.display = hasAfter ? '' : 'none';
-  document.getElementById('btn-upload-after').textContent   = isReview ? '↑ compare…' : '↑ change';
+  document.getElementById('meta-arrow').style.display       = '';   // (before slot) → after, always
 
-  // Before/After toggle only in diff mode; review mode shows the single snapshot.
-  if (isReview) window.viewSide = 'before';
+  // Before/After toggle only when both sides exist; review shows the single
+  // (after) snapshot.
+  if (isReview) window.viewSide = 'after';
   document.querySelectorAll('[data-side]').forEach(b => {
-    b.style.display = hasAfter ? '' : 'none';
+    b.style.display = hasBefore ? '' : 'none';
     b.classList.toggle('active', b.dataset.side === window.viewSide);
   });
+  updateActiveSnapGroup();
 }
 
 // Files is the only graph level — nothing to toggle. Kept as a no-op so callers
@@ -150,8 +169,10 @@ function recomputeAll() {
   const EMPTY = { graphs: {} };
   const before = window.BEFORE;
   const after  = window.AFTER;
-  window.DIFF   = computeDiff(before ?? EMPTY, after ?? before ?? EMPTY);
-  window.CYCLES = computeCycles(before ?? EMPTY, after ?? before ?? EMPTY);
+  // Either side may be absent (review). Fall back the missing side to the present
+  // one so the diff is against itself (everything "unchanged"), never against empty.
+  window.DIFF   = computeDiff(before ?? after ?? EMPTY, after ?? before ?? EMPTY);
+  window.CYCLES = computeCycles(before ?? after ?? EMPTY, after ?? before ?? EMPTY);
   window.META   = computeMeta(before, after);
 
   buildSummary();
@@ -221,9 +242,16 @@ function renderView(section, opts = {}) {
   }, 30);
 }
 
-function buildSnapPopupHTML(snap, refSnap) {
+function buildSnapPopupHTML(snap, refSnap, sideLabel) {
   if (!snap) return '';
   const sections = [];
+
+  // Which snapshot this is (Before / After) and whether it is the one currently
+  // shown on the map / tables.
+  if (sideLabel) {
+    const shown = sideLabel.toLowerCase() === window.viewSide;
+    sections.push(`<div class="sp-side ${shown ? 'sp-side-shown' : ''}">${sideLabel}${shown ? ' · currently shown' : ''}</div>`);
+  }
 
   // General
   const genRows = [];
@@ -280,10 +308,10 @@ function setupSnapPopup() {
     hideTimer = setTimeout(() => { if (popup) popup.style.display = 'none'; }, 150);
   }
 
-  function show(snap, anchor, refSnap) {
+  function show(snap, anchor, refSnap, sideLabel) {
     if (!snap) return;
     const p = getPopup();
-    p.innerHTML = buildSnapPopupHTML(snap, refSnap);
+    p.innerHTML = buildSnapPopupHTML(snap, refSnap, sideLabel);
     p.querySelectorAll('.sp-copy-btn').forEach(btn => {
       btn.addEventListener('click', e => {
         e.stopPropagation();
@@ -310,9 +338,19 @@ function setupSnapPopup() {
       clearTimeout(hideTimer);
       const snap = i === 0 ? window.BEFORE : window.AFTER;
       const ref  = i === 1 ? window.BEFORE : null;
-      show(snap, grp, ref);
+      show(snap, grp, ref, i === 0 ? 'Before' : 'After');
     });
     grp.addEventListener('mouseleave', scheduleHide);
+  });
+}
+
+// Mark the header snapshot group (the file uploader at the top) for the side
+// currently shown, so the active input is visually distinguished. Hidden in
+// review mode (a single snapshot — nothing to distinguish).
+function updateActiveSnapGroup() {
+  const active = window.AFTER ? window.viewSide : null;
+  document.querySelectorAll('.snap-group[data-snap]').forEach(grp => {
+    grp.classList.toggle('snap-active', grp.dataset.snap === active);
   });
 }
 
@@ -345,8 +383,10 @@ function setupFileControls() {
   document.getElementById('btn-upload-before').addEventListener('click', () => inputBefore.click());
   document.getElementById('btn-upload-after').addEventListener('click',  () => inputAfter.click());
 
-  document.getElementById('btn-remove-after').addEventListener('click', () => {
-    window.AFTER = null;
+  // Removing the baseline (before) drops back to single-snapshot review; the
+  // after (primary) snapshot has no remove control.
+  document.getElementById('btn-remove-before').addEventListener('click', () => {
+    window.BEFORE = null;
     recomputeAll();
   });
 
@@ -397,14 +437,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.AFTER  = readEmbeddedSnapshot('cs-after');
 
   const EMPTY = { graphs: {} };
-  window.DIFF   = computeDiff(window.BEFORE ?? EMPTY, window.AFTER ?? window.BEFORE ?? EMPTY);
-  window.CYCLES = computeCycles(window.BEFORE ?? EMPTY, window.AFTER ?? window.BEFORE ?? EMPTY);
+  window.DIFF   = computeDiff(window.BEFORE ?? window.AFTER ?? EMPTY, window.AFTER ?? window.BEFORE ?? EMPTY);
+  window.CYCLES = computeCycles(window.BEFORE ?? window.AFTER ?? EMPTY, window.AFTER ?? window.BEFORE ?? EMPTY);
   window.META   = computeMeta(window.BEFORE, window.AFTER);
 
-  // Restore the active side from the URL (`side=before|after`); default to the
-  // after snapshot when present. Review mode (no after) is always 'before'.
+  // Restore the active side from the URL (`side=before/after`); default to the
+  // after (primary) snapshot. `before` is only honoured when a baseline exists.
   const urlSide = getNavParams().side;
-  window.viewSide = window.AFTER ? (urlSide === 'before' ? 'before' : 'after') : 'before';
+  window.viewSide = (urlSide === 'before' && window.BEFORE) ? 'before'
+                  : window.AFTER ? 'after'
+                  : 'before';
   // If the Prompt Generator was open (state in the URL), restore its selected
   // nodes before the tables render so those rows come up already selected.
   const epState = (typeof epReadUrl === 'function') ? epReadUrl() : null;

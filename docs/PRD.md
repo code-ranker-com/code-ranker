@@ -750,11 +750,20 @@ to the active side's value around its fixed centre (a file that grew or
 shrank changes size, not position). The active side is reflected
 throughout: the `side=before|after` URL parameter, the node-table title
 (`Details` / `Details Before` / `Details After`), and a `Before` / `After`
-badge on the node-popup and Prompt-Generator headers. When only one
-snapshot is loaded (review mode) the Before/After buttons are hidden and
-the header is relabelled. Cycle detection (Tarjan SCC) runs in-browser
-and annotates nodes/edges for red-stroke highlighting (solid red, no
-dasharray, same style for before/after). Internal `file` nodes render
+badge on the node-popup and Prompt-Generator headers. The two header
+slots are the **after** (right) — the primary snapshot the report is
+about, always present and **not removable** — and an optional **before**
+baseline (left, editable, removable). With no baseline it is
+single-snapshot **review** mode: the before slot is an empty, editable
+placeholder (`↑ compare…`) and the Before/After buttons are hidden;
+loading a baseline turns the report into a diff. Each header slot's hover
+tooltip is labelled `Before` / `After` and notes which side is currently
+shown; that slot is also highlighted in the header. Cycle detection
+(Tarjan SCC) runs in-browser and annotates nodes/edges for red-stroke
+highlighting (solid red, no dasharray); the highlight is **side-aware** —
+a `before-only` cycle is red only on the Before side, `after-only` only
+on After, `both` on either, so a cycle removed in the after snapshot
+stops being red once you switch to After. Internal `file` nodes render
 blue; `external` library nodes render amber with dashed edges. The node
 table column order is: checkbox, Name, Kind, Cycle, Status, LOC, HK,
 Fan-in, Fan-out, H.vol, H.bugs, H.effort, H.time, H.len, H.vocab,

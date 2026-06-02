@@ -14,7 +14,11 @@ header code { color: #1abc9c; }
 .ma { color: #7a92a8; margin: 0 2px; }
 .meta-info { color: #8ba6c0; font-size: 12px; }
 .snap-group { display: inline-flex; align-items: center; gap: 5px;
-              border: 1px solid rgba(255,255,255,.18); border-radius: 6px; padding: 3px 8px; }
+              border: 1px solid rgba(255,255,255,.18); border-radius: 6px; padding: 3px 8px;
+              transition: background .15s, border-color .15s, box-shadow .15s; }
+/* The snapshot input currently shown on the map / tables (active Before/After side). */
+.snap-group.snap-active { border-color: #1abc9c; background: rgba(26,188,156,.20);
+                          box-shadow: 0 0 0 1px rgba(26,188,156,.5) inset; }
 .hbtn { background: rgba(255,255,255,.12); color: #ecf0f1; border: 0;
         padding: 2px 7px; font-size: 11px; cursor: pointer; border-radius: 3px;
         line-height: 1.5; white-space: nowrap; }
@@ -463,6 +467,9 @@ g.sn-hint:hover rect { fill: #d4c39a; }
   box-shadow: 0 6px 24px rgba(0,0,0,.14);
   max-width: 820px; min-width: 380px;
 }
+.sp-side { font-weight: 700; font-size: 13px; color: #2c3e50; margin-bottom: 8px;
+           padding-bottom: 6px; border-bottom: 1px solid #eef1f5; }
+.sp-side.sp-side-shown { color: #117a65; }   /* the side currently shown on the map */
 .sp-row { display: flex; gap: 10px; margin: 3px 0; align-items: baseline; }
 .sp-lbl { color: #888; font-weight: 600; min-width: 88px; flex-shrink: 0; }
 .sp-cmd { font-family: ui-monospace, 'SF Mono', 'Fira Code', monospace; font-size: 11px; color: #2c3e50; }
@@ -494,13 +501,11 @@ body.mode-review [data-preset="before"],
 body.mode-review [data-preset="after"],
 body.mode-review [data-preset="diff"],
 body.mode-review [data-preset="cycles"] { display: none; }
-body.mode-review #meta-arrow           { display: none; }
-body.mode-review #meta-after-date,
-body.mode-review #meta-after-name,
-body.mode-review #meta-after-commit,
-body.mode-review #btn-remove-after     { display: none; }
 body.mode-review .control-panel        { display: none; }
 body.mode-review [data-col="status"]   { display: none; }
+/* Review (single snapshot) lives in the AFTER slot; the BEFORE slot is an empty,
+   editable baseline placeholder. Header element visibility is driven by JS
+   (updateHeader), so no mode-review hiding of the arrow / after metadata here. */
 
 /* ── Graphviz nodes / edges ──────────────────────────────────────────────────── */
 g.node polygon, g.node ellipse { stroke-width: 1; }
@@ -525,15 +530,23 @@ g.node polygon, g.node ellipse { stroke-width: 1; }
 :is(.hide-edges-added,.hide-edges-removed,.hide-edges-affected,.hide-edges-unchanged).show-cycle-after
   g.edge:is(.status-added,.status-removed,.status-affected,.status-unchanged):is(.cycle-status-after-only,.cycle-status-both)  { display: block; }
 
-/* ── Cycle highlights: members of a dependency cycle are always red ──────────── */
-g.node:is(.cycle-status-before-only,.cycle-status-after-only,.cycle-status-both) > polygon,
-g.node:is(.cycle-status-before-only,.cycle-status-after-only,.cycle-status-both) > ellipse {
+/* ── Cycle highlights: members of a dependency cycle are red — but only for the
+   side currently shown. `both` cycles are red on either side; `before-only` /
+   `after-only` only on their own side (`.side-before` / `.side-after` on the
+   frame), so a cycle that was removed in the after snapshot stops being red
+   when you switch to After. ───────────────────────────────────────────────── */
+.svg-frame.side-before g.node:is(.cycle-status-before-only,.cycle-status-both) > polygon,
+.svg-frame.side-before g.node:is(.cycle-status-before-only,.cycle-status-both) > ellipse,
+.svg-frame.side-after  g.node:is(.cycle-status-after-only,.cycle-status-both)  > polygon,
+.svg-frame.side-after  g.node:is(.cycle-status-after-only,.cycle-status-both)  > ellipse {
   stroke: #c00 !important; stroke-width: 3 !important;
 }
-g.edge:is(.cycle-status-before-only,.cycle-status-after-only,.cycle-status-both) > path {
+.svg-frame.side-before g.edge:is(.cycle-status-before-only,.cycle-status-both) > path,
+.svg-frame.side-after  g.edge:is(.cycle-status-after-only,.cycle-status-both)  > path {
   stroke: #c00 !important; stroke-width: 2.5 !important;
 }
-g.edge:is(.cycle-status-before-only,.cycle-status-after-only,.cycle-status-both) > polygon {
+.svg-frame.side-before g.edge:is(.cycle-status-before-only,.cycle-status-both) > polygon,
+.svg-frame.side-after  g.edge:is(.cycle-status-after-only,.cycle-status-both)  > polygon {
   stroke: #c00 !important; fill: #c00 !important;
 }
 
@@ -594,10 +607,13 @@ body.ctrl-link   .frame-wrap .kbd-hints { opacity: 1; }
 .node-table tr.row-selected td[data-col="name"] { background: rgb(254,245,222); }
 g.node.node-selected > polygon,
 g.node.node-selected > ellipse { fill: #fffde7 !important; stroke: #f9a825 !important; stroke-width: 2 !important; }
-/* The cycle stroke always wins over selection: a selected node that is also in a
-   cycle keeps its red outline (the yellow fill still marks it selected). */
-g.node.node-selected:is(.cycle-status-before-only,.cycle-status-after-only,.cycle-status-both) > polygon,
-g.node.node-selected:is(.cycle-status-before-only,.cycle-status-after-only,.cycle-status-both) > ellipse {
+/* The cycle stroke wins over selection: a selected node that is also in a cycle
+   on the shown side keeps its red outline (the yellow fill still marks it
+   selected). Side-gated, mirroring the cycle-highlight rules above. */
+.svg-frame.side-before g.node.node-selected:is(.cycle-status-before-only,.cycle-status-both) > polygon,
+.svg-frame.side-before g.node.node-selected:is(.cycle-status-before-only,.cycle-status-both) > ellipse,
+.svg-frame.side-after  g.node.node-selected:is(.cycle-status-after-only,.cycle-status-both)  > polygon,
+.svg-frame.side-after  g.node.node-selected:is(.cycle-status-after-only,.cycle-status-both)  > ellipse {
   stroke: #c00 !important; stroke-width: 3 !important;
 }
 /* Same selection highlight inside the per-node popup diagram (side + main cards). */

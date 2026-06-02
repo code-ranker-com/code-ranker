@@ -107,9 +107,11 @@ function buildSummary() {
   const thead = document.getElementById('summary-thead');
   if (!tbody) return;
 
-  const isReview = window.AFTER === null;
-  const before   = window.BEFORE;
-  const after    = window.AFTER ?? window.BEFORE;
+  // Review = a single snapshot (no baseline). `after` is the primary; in review
+  // the lone column reads whichever snapshot is present.
+  const isReview = !window.BEFORE || !window.AFTER;
+  const before   = window.BEFORE ?? window.AFTER;
+  const after    = window.AFTER  ?? window.BEFORE;
 
   const levels   = ['files'];
   const LLABELS  = { files: 'Files' };

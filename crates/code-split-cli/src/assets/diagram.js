@@ -205,12 +205,18 @@ function buildDiagramSVG(node, level) {
     return col.x + (col.px_w - span) / 2 + pos * CELL;
   };
 
-  // Cycle highlight state — a node in a dependency cycle is always marked red
-  // (no toggle), matching the main map.
+  // Cycle highlight state — a node in a dependency cycle is marked red, but only
+  // for the side currently shown (matching the main map): `both` always, and
+  // `before-only` / `after-only` only on their own side. So a cycle removed in
+  // the after snapshot stops being red once you switch to After.
   const cycleNodes = window.CYCLES?.[level]?.nodeCycleStatus;
   const isCycleNode = id => {
     const cs = cycleNodes?.get(id);
-    return cs != null && cs !== 'none';
+    if (cs == null || cs === 'none') return false;
+    if (cs === 'both') return true;
+    return (typeof viewMode === 'function' && viewMode() === 'after')
+      ? cs === 'after-only'
+      : cs === 'before-only';   // before, or review (single snapshot)
   };
 
   let s = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 ${VW} ${VH}" preserveAspectRatio="xMidYMid meet">`;

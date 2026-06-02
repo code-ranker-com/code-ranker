@@ -145,9 +145,13 @@ function computeMeta(before, after) {
   const label  = s => s?.git?.branch || s?.target?.split('/').pop() || 'snapshot';
   const commit = s => s?.git?.commit?.slice(0, 8) || '';
   const date   = s => s?.generated_at || '';
+  const meta   = s => ({ name: label(s), commit: commit(s), date: date(s) });
+  // `after` is the primary snapshot; `before` an optional baseline. Either may be
+  // absent — the present one names the report.
+  const primary = after || before;
   return {
-    target: (before?.target || before?.workspace || 'snapshot').split('/').pop(),
-    before: { name: label(before), commit: commit(before), date: date(before) },
-    after:  after ? { name: label(after), commit: commit(after), date: date(after) } : null,
+    target: (primary?.target || primary?.workspace || 'snapshot').split('/').pop(),
+    before: before ? meta(before) : null,
+    after:  after  ? meta(after)  : null,
   };
 }

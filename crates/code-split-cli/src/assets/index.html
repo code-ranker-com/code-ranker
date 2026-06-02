@@ -15,15 +15,15 @@
     <span class="header-brand">CODE SPLIT</span>
     <span class="header-title" id="title">— diff</span>
     <div class="header-meta">
-      <div class="snap-group">
+      <div class="snap-group" data-snap="before">
         <span class="mc" id="meta-before-date"></span><span class="meta-info" id="meta-before-info">(<code id="meta-before-name"></code><span class="mc" id="meta-before-commit"></span>)</span>
-        <button class="hbtn" id="btn-upload-before" title="Load different snapshot">↑ change</button>
+        <button class="hbtn" id="btn-upload-before" title="Load a baseline to compare against">↑ compare…</button>
+        <button class="hbtn hbtn-x" id="btn-remove-before" title="Remove baseline">✕</button>
       </div>
       <span class="ma" id="meta-arrow">→</span>
-      <div class="snap-group">
+      <div class="snap-group" data-snap="after">
         <span class="mc" id="meta-after-date"></span><span class="meta-info" id="meta-after-info">(<code id="meta-after-name"></code><span class="mc" id="meta-after-commit"></span>)</span>
-        <button class="hbtn" id="btn-upload-after" title="Load different snapshot">↑ change</button>
-        <button class="hbtn hbtn-x" id="btn-remove-after" title="Remove after snapshot">✕</button>
+        <button class="hbtn" id="btn-upload-after" title="Load a different snapshot">↑ change</button>
       </div>
       <span class="custom-indicator" id="custom-indicator"></span>
     </div>

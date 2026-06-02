@@ -1,6 +1,6 @@
 // Import from the defining modules (not the crate-root re-exports) so this module
 // does not depend "up" on the crate root, which would close a dependency cycle.
-use crate::graph::Graph;
+use crate::graph::{Edge, Graph};
 use crate::snapshot::Snapshot;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -107,10 +107,10 @@ fn diff_graph(before: &Graph, after: &Graph) -> LevelDiff {
     }
 
     // Edge key: "from\0to\0Kind".
-    let ekey = |e: &crate::Edge| format!("{}\x00{}\x00{:?}", e.from, e.to, e.kind);
+    let ekey = |e: &Edge| format!("{}\x00{}\x00{:?}", e.from, e.to, e.kind);
 
     // Local edges: both endpoints present in node_status.
-    let local_edges = |edges: &[crate::Edge]| -> HashMap<String, (String, String)> {
+    let local_edges = |edges: &[Edge]| -> HashMap<String, (String, String)> {
         edges
             .iter()
             .filter(|e| node_status.contains_key(&e.from) && node_status.contains_key(&e.to))

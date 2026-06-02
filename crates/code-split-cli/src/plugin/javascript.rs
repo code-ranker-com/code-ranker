@@ -10,7 +10,7 @@ use walkdir::WalkDir;
 use crate::logger;
 use crate::plugin::finalize::finalize_file_graph;
 
-pub fn run(workspace: &Path, _local_only: bool) -> Result<(PluginGraphs, Vec<StageTime>)> {
+pub fn run(workspace: &Path) -> Result<(PluginGraphs, Vec<StageTime>)> {
     let mut timings = Vec::new();
     let mut builder = GraphBuilder::new();
 
@@ -499,7 +499,7 @@ mod tests {
             "export function greet() { return \"hi\"; }\n",
         );
 
-        let (graphs, _timings) = run(root, false).expect("js/ts plugin runs");
+        let (graphs, _timings) = run(root).expect("js/ts plugin runs");
         let g = &graphs.files;
 
         assert!(

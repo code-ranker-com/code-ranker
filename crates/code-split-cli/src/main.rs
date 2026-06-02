@@ -25,13 +25,6 @@ struct Cli {
     command: Command,
 }
 
-/// Output artifact kind for `report` / `diff`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
-enum Format {
-    Json,
-    Html,
-}
-
 /// Diagnostics format for `check`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum, Default)]
 enum OutputFormat {
@@ -42,37 +35,32 @@ enum OutputFormat {
     Sarif,
 }
 
-/// Common analysis options shared by `check` and `report`.
+/// Common input + analysis options shared by `check` and `report`.
 #[derive(clap::Args, Debug)]
 struct AnalyzeArgs {
-    /// Workspace to analyze. Default: current directory.
+    /// Input: a directory (source tree → analyze) or a `.json`/`.html` snapshot
+    /// (read, no analysis). Default: current directory.
     #[arg(default_value = ".")]
-    workspace: PathBuf,
+    input: PathBuf,
 
     /// Plugin: rust | python | javascript | auto. Default: auto (detect by markers).
+    /// Only applies when the input is a directory.
     #[arg(long)]
     plugin: Option<String>,
-
-    /// Analyze only local code — skip network-dependent steps.
-    #[arg(long)]
-    local_only: bool,
 
     /// Config file path, or inline `KEY=VALUE` override (repeatable; inline wins).
     #[arg(long, value_name = "PATH | KEY=VALUE")]
     config: Vec<String>,
 
     /// Ignore paths matching these globs (repeatable). Merged with config file.
+    /// Only applies when the input is a directory.
     #[arg(long = "ignore", value_name = "GLOB")]
     ignore_paths: Vec<String>,
-
-    /// Extra arguments forwarded to the plugin after `--`.
-    #[arg(last = true)]
-    extra: Vec<String>,
 }
 
 #[derive(Subcommand, Debug)]
 enum Command {
-    /// Lint a workspace: analyze, evaluate rules, exit non-zero on any violation.
+    /// Lint: evaluate rules (and, with --baseline, regressions); exit non-zero on violation.
     Check {
         #[command(flatten)]
         analyze: AnalyzeArgs,
@@ -87,6 +75,12 @@ enum Command {
         #[arg(long = "threshold", value_name = "file.METRIC=N")]
         thresholds: Vec<String>,
 
+        /// Baseline snapshot (`.json`/`.html`). Switches the gate to relative mode:
+        /// fail only on regressions (new violations) against the baseline, not on
+        /// pre-existing ones.
+        #[arg(long, value_name = "SNAPSHOT")]
+        baseline: Option<PathBuf>,
+
         /// Diagnostics format.
         #[arg(long = "output-format", value_enum, default_value_t = OutputFormat::Human)]
         output_format: OutputFormat,
@@ -100,68 +94,38 @@ enum Command {
         exit_zero: bool,
 
         /// Also print the project's current values as a ready-to-paste
-        /// code-split.toml baseline (cycle counts + per-scope thresholds).
+        /// code-split.toml baseline (cycle counts + per-file thresholds).
         #[arg(long)]
         suggest_config: bool,
     },
 
-    /// Analyze a workspace and write artifacts (JSON snapshot and/or HTML viewer).
+    /// Write artifacts (HTML viewer and/or JSON snapshot). With --baseline, the HTML is a diff.
     Report {
         #[command(flatten)]
         analyze: AnalyzeArgs,
 
-        /// Artifacts to emit. Repeat or comma-separate: json,html.
-        #[arg(long = "format", value_enum, num_args = 1.., value_delimiter = ',',
-              default_values_t = [Format::Json, Format::Html])]
-        formats: Vec<Format>,
+        /// Baseline snapshot (`.json`/`.html`). Turns the HTML into a baseline↔current
+        /// diff with a verdict and names it `…-diff.html`.
+        #[arg(long, value_name = "SNAPSHOT")]
+        baseline: Option<PathBuf>,
 
-        /// Baseline snapshot — turns the HTML into a before/after diff in one run.
-        #[arg(long)]
-        before: Option<PathBuf>,
+        /// Emit the JSON snapshot (path from --output.json.path / config / default).
+        #[arg(long = "output.json")]
+        output_json: bool,
 
-        /// Output directory for artifacts.
-        #[arg(long = "report-path", default_value = ".code-split")]
-        report_path: PathBuf,
+        /// Emit the HTML viewer (path from --output.html.path / config / default).
+        #[arg(long = "output.html")]
+        output_html: bool,
 
-        /// Snapshot filename template. Placeholders: {project-dir}, {ts},
-        /// {git-hash}, {git-hash-N} (first N chars of the commit). Falls back to
-        /// `[output] json-name` in code-split.toml, then the built-in default.
-        #[arg(long = "json-name")]
-        json_name: Option<String>,
+        /// JSON snapshot destination: a path or name template, or `stdout`/`-`.
+        /// Placeholders: {project-dir}, {ts}, {git-hash}, {git-hash-N}. Selects JSON.
+        #[arg(long = "output.json.path", value_name = "PATH")]
+        output_json_path: Option<String>,
 
-        /// HTML filename template (data embedded inline). With --before, `-diff` is
-        /// inserted before `.html`. Placeholders: {project-dir}, {ts}, {git-hash},
-        /// {git-hash-N}. Falls back to `[output] html-name` in code-split.toml.
-        #[arg(long = "html-name")]
-        html_name: Option<String>,
-    },
-
-    /// Compare two existing snapshots and write a diff report.
-    Diff {
-        /// Snapshot taken before the change.
-        #[arg(long)]
-        before: PathBuf,
-
-        /// Snapshot taken after the change.
-        #[arg(long)]
-        after: PathBuf,
-
-        /// Artifacts to emit. Repeat or comma-separate: html,json.
-        #[arg(long = "format", value_enum, num_args = 1.., value_delimiter = ',',
-              default_values_t = [Format::Html])]
-        formats: Vec<Format>,
-
-        /// Output directory for artifacts.
-        #[arg(long = "report-path", default_value = ".code-split")]
-        report_path: PathBuf,
-
-        /// HTML diff filename.
-        #[arg(long = "html-name", default_value = "index.html")]
-        html_name: String,
-
-        /// JSON diff filename.
-        #[arg(long = "json-name", default_value = "diff.json")]
-        json_name: String,
+        /// HTML viewer destination: a path or name template, or `stdout`/`-`.
+        /// Placeholders: {project-dir}, {ts}, {git-hash}, {git-hash-N}. Selects HTML.
+        #[arg(long = "output.html.path", value_name = "PATH")]
+        output_html_path: Option<String>,
     },
 }
 
@@ -176,6 +140,7 @@ fn main() -> Result<()> {
             analyze,
             cycle_rules,
             thresholds,
+            baseline,
             output_format,
             top,
             exit_zero,
@@ -184,6 +149,7 @@ fn main() -> Result<()> {
             &analyze,
             &cycle_rules,
             &thresholds,
+            baseline.as_deref(),
             output_format,
             top,
             exit_zero,
@@ -191,33 +157,18 @@ fn main() -> Result<()> {
         ),
         Command::Report {
             analyze,
-            formats,
-            before,
-            report_path,
-            json_name,
-            html_name,
+            baseline,
+            output_json,
+            output_html,
+            output_json_path,
+            output_html_path,
         } => run_report(
             &analyze,
-            &formats,
-            before.as_deref(),
-            &report_path,
-            json_name.as_deref(),
-            html_name.as_deref(),
-        ),
-        Command::Diff {
-            before,
-            after,
-            formats,
-            report_path,
-            html_name,
-            json_name,
-        } => run_diff(
-            &before,
-            &after,
-            &formats,
-            &report_path,
-            &html_name,
-            &json_name,
+            baseline.as_deref(),
+            output_json,
+            output_html,
+            output_json_path.as_deref(),
+            output_html_path.as_deref(),
         ),
     };
     match &res {
@@ -229,44 +180,102 @@ fn main() -> Result<()> {
     res
 }
 
-/// Result of the shared analysis core, consumed by `check` and `report`.
+/// Result of the shared analysis core, consumed by `check` and `report`. The
+/// snapshot is either freshly analyzed (directory input) or loaded (snapshot input).
 struct Analyzed {
-    target: PathBuf,
-    cwd: String,
-    plugin_name: String,
-    plugin_graphs: code_split_core::PluginGraphs,
-    timings: Vec<code_split_core::StageTime>,
-    command: String,
-    source_file: Option<String>,
-    local_only: bool,
-    versions: HashMap<String, String>,
-    roots: HashMap<String, String>,
-    git: Option<code_split_core::GitInfo>,
+    snapshot: Snapshot,
     violations: Vec<config::Violation>,
     /// Effective cycle-rule policy (for the current-values config dump).
     cycles: config::CycleRules,
-    /// Output name templates from `[output]` in config (a CLI flag, if given,
-    /// still wins over these — resolved in `run_report`).
-    out_json_name: Option<String>,
-    out_html_name: Option<String>,
+    /// Effective rules (to recompute baseline violations for the regression gate).
+    rules: config::RulesConfig,
+    /// `[output.<fmt>]` config: per-format `path` template and `enabled` flag
+    /// (CLI flags still win — resolved in `run_report`).
+    output: config::OutputConfig,
 }
 
-/// Built-in artifact name templates, used when neither a CLI flag nor the
-/// `[output]` config section sets one.
-const DEFAULT_JSON_NAME: &str = "{ts}-{git-hash-3}.json";
-const DEFAULT_HTML_NAME: &str = "{ts}-{git-hash-3}.html";
+/// Built-in artifact path templates, used when neither a `--output.<fmt>` flag,
+/// a `--output.<fmt>.path`, nor the `[output.<fmt>]` config section sets one.
+const DEFAULT_JSON_PATH: &str = ".code-split/{ts}-{git-hash-3}.json";
+const DEFAULT_HTML_PATH: &str = ".code-split/{ts}-{git-hash-3}.html";
 
-/// Load config, run the plugin, annotate the graphs, and collect violations.
-/// Writes nothing — `check` and `report` decide what to do with the result.
-fn analyze_workspace(
+/// Does this input path denote a snapshot artifact (read directly) rather than a
+/// source directory to analyze?
+fn is_snapshot_input(p: &Path) -> bool {
+    matches!(
+        p.extension()
+            .and_then(|e| e.to_str())
+            .map(str::to_ascii_lowercase)
+            .as_deref(),
+        Some("json" | "html" | "htm")
+    )
+}
+
+/// Produce the analysis result for `[input]`: analyze a directory, or read a
+/// `.json`/`.html` snapshot. `check` and `report` decide what to do with it.
+fn analyze_input(
+    args: &AnalyzeArgs,
+    cycle_rules: &[String],
+    thresholds: &[String],
+) -> Result<Analyzed> {
+    if is_snapshot_input(&args.input) {
+        analyze_from_snapshot(args, cycle_rules, thresholds)
+    } else {
+        analyze_directory(args, cycle_rules, thresholds)
+    }
+}
+
+/// Snapshot input: read the embedded snapshot and evaluate the current rules
+/// against it — no source tree or toolchain required. Analysis-only flags
+/// (`--plugin` / `--ignore`) are rejected because there is nothing to analyze.
+fn analyze_from_snapshot(
+    args: &AnalyzeArgs,
+    cycle_rules: &[String],
+    thresholds: &[String],
+) -> Result<Analyzed> {
+    if args.plugin.is_some() {
+        anyhow::bail!(
+            "--plugin does not apply to a snapshot input ({}): there is nothing to analyze",
+            args.input.display()
+        );
+    }
+    if !args.ignore_paths.is_empty() {
+        anyhow::bail!(
+            "--ignore does not apply to a snapshot input ({}): there is nothing to analyze",
+            args.input.display()
+        );
+    }
+    let snapshot = load_snapshot_any(&args.input)?;
+    // Config (rules + output) is located from the cwd for a snapshot input.
+    let cwd = std::env::current_dir()?;
+    let loaded = config::load(&cwd, &args.config, &[], cycle_rules, thresholds)
+        .context("configuration error")?;
+    let cfg = loaded.config;
+
+    let mut graphs = snapshot.graphs.clone();
+    config::apply_cycle_rules(&mut graphs, &cfg.rules.cycles);
+    let violations = config::check_violations(&graphs, &cfg.rules);
+
+    Ok(Analyzed {
+        snapshot,
+        violations,
+        cycles: cfg.rules.cycles,
+        rules: cfg.rules,
+        output: cfg.output,
+    })
+}
+
+/// Directory input: load config, run the plugin, annotate the graphs, collect
+/// violations, and assemble the snapshot. Writes nothing.
+fn analyze_directory(
     args: &AnalyzeArgs,
     cycle_rules: &[String],
     thresholds: &[String],
 ) -> Result<Analyzed> {
     let target = args
-        .workspace
+        .input
         .canonicalize()
-        .with_context(|| format!("workspace not found: {}", args.workspace.display()))?;
+        .with_context(|| format!("input not found: {}", args.input.display()))?;
     let cwd = std::env::current_dir()?;
 
     // A bad config (malformed file, unknown scope/metric, bad inline override) is a
@@ -289,7 +298,7 @@ fn analyze_workspace(
         std::env::args().skip(1).collect::<Vec<_>>().join(" ")
     );
 
-    let (mut plugin_graphs, timings) = plugin::run(&plugin_name, &target, args.local_only)
+    let (mut plugin_graphs, timings) = plugin::run(&plugin_name, &target)
         .with_context(|| format!("plugin '{plugin_name}' failed"))?;
 
     let mut roots = detect_roots();
@@ -327,77 +336,139 @@ fn analyze_workspace(
         }
     }
 
-    Ok(Analyzed {
-        target,
-        cwd: cwd.display().to_string(),
-        plugin_name,
-        plugin_graphs,
-        timings,
+    let snapshot = Snapshot::new(
         command,
-        source_file: loaded.source_file,
-        local_only: args.local_only,
+        cwd.display().to_string(),
+        target.display().to_string(),
+        plugin_name,
+        loaded.source_file,
         versions,
         roots,
         git,
+        timings,
+        plugin_graphs,
+    );
+
+    Ok(Analyzed {
+        snapshot,
         violations,
         cycles: cfg.rules.cycles,
-        out_json_name: cfg.output.json_name,
-        out_html_name: cfg.output.html_name,
+        rules: cfg.rules,
+        output: cfg.output,
     })
 }
 
-/// `check` — the linter. Analyze, report violations, exit non-zero on any.
+/// Project label for diagnostics — the basename of the analyzed target.
+fn project_name(target: &str) -> String {
+    Path::new(target)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("workspace")
+        .to_string()
+}
+
+/// `check` — the linter. Evaluate rules (and, with `--baseline`, regressions);
+/// exit non-zero on any violation that fails the gate.
+#[allow(clippy::too_many_arguments)]
 fn run_check(
     args: &AnalyzeArgs,
     cycle_rules: &[String],
     thresholds: &[String],
+    baseline: Option<&Path>,
     output_format: OutputFormat,
     top: Option<usize>,
     exit_zero: bool,
     suggest_config: bool,
 ) -> Result<()> {
-    let mut a = analyze_workspace(args, cycle_rules, thresholds)?;
-    let total = a.violations.len();
+    let a = analyze_input(args, cycle_rules, thresholds)?;
+    let project = project_name(&a.snapshot.target);
+    let plugin = a.snapshot.plugin.clone();
 
-    // Rank worst-first by breach magnitude; `--top` limits only what is
-    // reported, never the exit code.
-    a.violations.sort_by(|x, y| y.weight.total_cmp(&x.weight));
-    let shown = match top {
-        Some(n) => &a.violations[..n.min(a.violations.len())],
-        None => &a.violations[..],
+    // Without --baseline the gate is absolute: every violation counts. With
+    // --baseline it is relative: only violations not already present in the
+    // baseline (under the same rules) count — pre-existing ones are tolerated.
+    let (mut findings, verdict) = match baseline {
+        None => (a.violations, None),
+        Some(bpath) => {
+            let base = load_snapshot_any(bpath)?;
+            let mut bgraphs = base.graphs.clone();
+            config::apply_cycle_rules(&mut bgraphs, &a.rules.cycles);
+            let base_v = config::check_violations(&bgraphs, &a.rules);
+            let sig = |v: &config::Violation| (v.rule.clone(), v.location.clone());
+            let base_sigs: HashSet<(String, String)> = base_v.iter().map(sig).collect();
+            let cur_sigs: HashSet<(String, String)> = a.violations.iter().map(sig).collect();
+            let resolved = base_sigs.iter().filter(|s| !cur_sigs.contains(*s)).count();
+            let new_v: Vec<config::Violation> = a
+                .violations
+                .into_iter()
+                .filter(|v| !base_sigs.contains(&sig(v)))
+                .collect();
+            let verdict = if !new_v.is_empty() {
+                "degraded"
+            } else if resolved > 0 {
+                "improved"
+            } else {
+                "neutral"
+            };
+            (new_v, Some(verdict))
+        }
     };
 
-    let project = a
-        .target
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("workspace");
-    emit_diagnostics(shown, total, &a.plugin_name, project, output_format);
+    let total = findings.len();
+    // Rank worst-first by breach magnitude; `--top` limits only what is
+    // reported, never the exit code.
+    findings.sort_by(|x, y| y.weight.total_cmp(&x.weight));
+    let shown = match top {
+        Some(n) => &findings[..n.min(findings.len())],
+        None => &findings[..],
+    };
+
+    emit_diagnostics(shown, total, &plugin, &project, output_format, verdict);
 
     // Surface the current measured values as ready-to-paste config blocks only on
     // request (`--suggest-config`), human output only — machine formats stay pure.
     if suggest_config && matches!(output_format, OutputFormat::Human) {
-        print_current_values(&a.plugin_graphs, &a.cycles);
+        print_current_values(&a.snapshot.graphs, &a.cycles);
     }
 
     if total > 0 && !exit_zero {
-        anyhow::bail!("{total} violation(s) found");
+        let what = if baseline.is_some() {
+            "new violation(s) vs baseline"
+        } else {
+            "violation(s) found"
+        };
+        anyhow::bail!("{total} {what}");
     }
     Ok(())
 }
 
-/// Render check diagnostics to stdout in the requested format.
+/// Render check diagnostics to stdout in the requested format. With a baseline,
+/// `verdict` (improved/degraded/neutral) is included: a trailing line in `human`,
+/// a wrapping object in `json`.
 fn emit_diagnostics(
     violations: &[config::Violation],
     total: usize,
     plugin: &str,
     project: &str,
     format: OutputFormat,
+    verdict: Option<&str>,
 ) {
     match format {
-        OutputFormat::Human => print_human_diagnostics(violations, total, plugin, project),
+        OutputFormat::Human => {
+            print_human_diagnostics(violations, total, plugin, project);
+            if let Some(v) = verdict {
+                println!("\nBaseline verdict: {v}");
+            }
+        }
         OutputFormat::Json => {
-            let json = serde_json::to_string_pretty(violations).unwrap_or_else(|_| "[]".into());
+            let json = match verdict {
+                Some(v) => serde_json::to_string_pretty(&serde_json::json!({
+                    "verdict": v,
+                    "violations": violations,
+                }))
+                .unwrap_or_else(|_| "{}".into()),
+                None => serde_json::to_string_pretty(violations).unwrap_or_else(|_| "[]".into()),
+            };
             println!("{json}");
         }
         OutputFormat::Github => {
@@ -643,78 +714,98 @@ fn sarif_document(violations: &[config::Violation]) -> String {
     serde_json::to_string_pretty(&doc).unwrap_or_else(|_| "{}".into())
 }
 
-/// `report` — analyze and write artifacts (JSON snapshot and/or HTML viewer).
+/// `report` — analyze (or read) the input and write artifacts. Which formats are
+/// written, and where, follows the `--output.<fmt>[.path]` flags and the
+/// `[output.<fmt>]` config (see [`want_format`]).
 fn run_report(
     args: &AnalyzeArgs,
-    formats: &[Format],
-    before: Option<&Path>,
-    report_path: &Path,
-    json_name: Option<&str>,
-    html_name: Option<&str>,
+    baseline: Option<&Path>,
+    output_json: bool,
+    output_html: bool,
+    json_path: Option<&str>,
+    html_path: Option<&str>,
 ) -> Result<()> {
-    let a = analyze_workspace(args, &[], &[])?;
-    let target = a.target.clone();
+    let a = analyze_input(args, &[], &[])?;
+    let snap = &a.snapshot;
+    let target = PathBuf::from(&snap.target);
+    let commit = snap.git.as_ref().map(|g| g.commit.as_str());
 
-    // Resolve the output name templates: explicit CLI flag wins, then the
-    // `[output]` section in config, then the built-in default.
-    let json_name = json_name
-        .or(a.out_json_name.as_deref())
-        .unwrap_or(DEFAULT_JSON_NAME)
-        .to_string();
-    let html_name = html_name
-        .or(a.out_html_name.as_deref())
-        .unwrap_or(DEFAULT_HTML_NAME)
-        .to_string();
+    // Decide which formats to write. A format is selected by a CLI flag
+    // (`--output.<fmt>` / `--output.<fmt>.path`), or by config (`enabled`, else a
+    // configured `path`). If nothing selects anything, write both by default.
+    let mut want_json = want_format(output_json, json_path, &a.output.json);
+    let mut want_html = want_format(output_html, html_path, &a.output.html);
+    if !want_json && !want_html {
+        want_json = true;
+        want_html = true;
+    }
 
-    let snap = Snapshot::new(
-        a.command,
-        a.cwd,
-        a.target.display().to_string(),
-        a.plugin_name,
-        a.source_file,
-        a.local_only,
-        a.versions,
-        a.roots,
-        a.git,
-        a.timings,
-        a.plugin_graphs,
-    );
+    let baseline_snap = match baseline {
+        Some(p) => Some(load_snapshot_any(p)?),
+        None => None,
+    };
 
-    std::fs::create_dir_all(report_path)
-        .with_context(|| format!("creating directory {}", report_path.display()))?;
-
-    if formats.contains(&Format::Json) {
-        let commit = snap.git.as_ref().map(|g| g.commit.as_str());
-        let path = report_path.join(render_name(&json_name, &target, commit));
-        let mut json = code_split_core::to_canonical_string_pretty(&snap)?;
+    if want_json {
+        let tpl = json_path
+            .or(a.output.json.path.as_deref())
+            .unwrap_or(DEFAULT_JSON_PATH);
+        let dest = render_name(tpl, &target, commit);
+        let mut json = code_split_core::to_canonical_string_pretty(snap)?;
         json.push('\n');
-        std::fs::write(&path, json)
-            .with_context(|| format!("writing snapshot to {}", path.display()))?;
-        logger::info(&format!("json-report={}", path.display()));
+        write_artifact(&dest, &json, "json")?;
     }
 
-    if formats.contains(&Format::Html) {
-        // `<project>-<ts>.html` for a single-snapshot review; `<project>-<ts>-diff.html`
-        // when comparing against a baseline. Data is embedded inline (self-contained).
-        let commit = snap.git.as_ref().map(|g| g.commit.as_str());
-        let mut name = render_name(&html_name, &target, commit);
-        if before.is_some() {
-            let stem = name
-                .strip_suffix(".html")
-                .unwrap_or(name.as_str())
-                .to_owned();
-            name = format!("{stem}-diff.html");
+    if want_html {
+        let tpl = html_path
+            .or(a.output.html.path.as_deref())
+            .unwrap_or(DEFAULT_HTML_PATH);
+        let mut dest = render_name(tpl, &target, commit);
+        // A baseline turns the HTML into a diff; mark the filename `…-diff.html`
+        // (unless it goes to the stdout stream).
+        if baseline_snap.is_some() && !is_stream(&dest) {
+            dest = match dest.strip_suffix(".html") {
+                Some(stem) => format!("{stem}-diff.html"),
+                None => format!("{dest}-diff"),
+            };
         }
-        let path = report_path.join(name);
-        let html = match before {
-            Some(p) => render_html_viewer(Some(&load_snapshot_any(p)?), Some(&snap)),
-            None => render_html_viewer(Some(&snap), None),
-        };
-        std::fs::write(&path, html)
-            .with_context(|| format!("writing report to {}", path.display()))?;
-        logger::info(&format!("html-report={}", path.display()));
+        let html = render_html_viewer(baseline_snap.as_ref(), Some(snap));
+        write_artifact(&dest, &html, "html")?;
     }
 
+    Ok(())
+}
+
+/// Whether an artifact format is written: a CLI flag/path forces it on; otherwise
+/// the config `enabled` flag decides; otherwise a configured `path` implies on.
+fn want_format(cli_flag: bool, cli_path: Option<&str>, cfg: &config::OutputArtifact) -> bool {
+    if cli_flag || cli_path.is_some() {
+        return true;
+    }
+    cfg.enabled.unwrap_or_else(|| cfg.path.is_some())
+}
+
+/// Is this destination the stdout stream rather than a file?
+fn is_stream(dest: &str) -> bool {
+    dest == "stdout" || dest == "-"
+}
+
+/// Write one artifact to its destination: the stdout stream for `stdout`/`-`,
+/// otherwise a file (creating parent directories).
+fn write_artifact(dest: &str, content: &str, kind: &str) -> Result<()> {
+    if is_stream(dest) {
+        print!("{content}");
+        return Ok(());
+    }
+    let path = Path::new(dest);
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("creating directory {}", parent.display()))?;
+    }
+    std::fs::write(path, content)
+        .with_context(|| format!("writing {kind} to {}", path.display()))?;
+    logger::info(&format!("{kind}-report={}", path.display()));
     Ok(())
 }
 
@@ -859,48 +950,9 @@ fn prune_unused_roots(graphs: &code_split_core::PluginGraphs, roots: &mut HashMa
     roots.retain(|name, _| used.contains(name));
 }
 
-/// `diff` — compare two existing snapshots and write a diff report.
-fn run_diff(
-    before: &Path,
-    after: &Path,
-    formats: &[Format],
-    report_path: &Path,
-    html_name: &str,
-    json_name: &str,
-) -> Result<()> {
-    // Either side may be a `.json` snapshot or a `.html` report (data extracted).
-    let snap_before = load_snapshot_any(before)?;
-    let snap_after = load_snapshot_any(after)?;
-
-    std::fs::create_dir_all(report_path)
-        .with_context(|| format!("creating directory {}", report_path.display()))?;
-
-    if formats.contains(&Format::Html) {
-        let path = report_path.join(html_name);
-        std::fs::write(
-            &path,
-            render_html_viewer(Some(&snap_before), Some(&snap_after)),
-        )
-        .with_context(|| format!("writing diff to {}", path.display()))?;
-        logger::info(&format!("html-report={}", path.display()));
-    }
-
-    if formats.contains(&Format::Json) {
-        let path = report_path.join(json_name);
-        let summary = code_split_core::compare_snapshots(&snap_before, &snap_after);
-        let mut json = code_split_core::to_canonical_string_pretty(&summary)?;
-        json.push('\n');
-        std::fs::write(&path, json)
-            .with_context(|| format!("writing diff to {}", path.display()))?;
-        logger::info(&format!("json-report={}", path.display()));
-    }
-
-    Ok(())
-}
-
 /// Load a snapshot from a `.json` file, or extract the one embedded in a `.html` report.
-/// For an HTML report the `cs-after` snapshot is preferred (the state it represents),
-/// falling back to `cs-before` (single-snapshot review reports).
+/// For an HTML report the `cs-current` snapshot is preferred (the state it represents),
+/// falling back to `cs-baseline` (single-snapshot review reports).
 fn load_snapshot_any(path: &Path) -> Result<Snapshot> {
     let is_html = path
         .extension()
@@ -910,8 +962,8 @@ fn load_snapshot_any(path: &Path) -> Result<Snapshot> {
     }
     let text =
         std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    extract_embedded_snapshot(&text, "cs-after")
-        .or_else(|| extract_embedded_snapshot(&text, "cs-before"))
+    extract_embedded_snapshot(&text, "cs-current")
+        .or_else(|| extract_embedded_snapshot(&text, "cs-baseline"))
         .with_context(|| format!("no embedded snapshot found in {}", path.display()))?
 }
 
@@ -955,10 +1007,10 @@ const ASSET_APP: &str = include_str!("assets/app.js");
 const ASSET_HTML: &str = include_str!("assets/index.html");
 
 /// Render a self-contained viewer with the snapshot data embedded inline. The snapshots
-/// are stored in `<script type="application/json">` tags (`cs-before` / `cs-after`) so
+/// are stored in `<script type="application/json">` tags (`cs-baseline` / `cs-current`) so
 /// they can be both read by the viewer and extracted from the HTML later (see
-/// [`load_snapshot_any`]). `before` only → review; both → diff.
-fn render_html_viewer(before: Option<&Snapshot>, after: Option<&Snapshot>) -> String {
+/// [`load_snapshot_any`]). `current` only → review; both → diff.
+fn render_html_viewer(baseline: Option<&Snapshot>, current: Option<&Snapshot>) -> String {
     // Embed as JSON in a typed script tag. Escape `</` so an embedded string can never
     // close the tag early; `JSON.parse` and serde both read `<\/` back as `</`.
     let embed = |id: &str, snap: Option<&Snapshot>| {
@@ -973,8 +1025,8 @@ fn render_html_viewer(before: Option<&Snapshot>, after: Option<&Snapshot>) -> St
     };
     let data_script = format!(
         "{}\n{}",
-        embed("cs-before", before),
-        embed("cs-after", after),
+        embed("cs-baseline", baseline),
+        embed("cs-current", current),
     );
 
     ASSET_HTML
@@ -1147,7 +1199,6 @@ mod tests {
             "tgt".into(),
             "rust".into(),
             None,
-            false,
             std::collections::HashMap::new(),
             std::collections::HashMap::new(),
             None,
@@ -1159,23 +1210,23 @@ mod tests {
     #[test]
     fn viewer_embeds_snapshot_inline_and_round_trips() {
         let snap = mk_snap();
-        // review: before = snapshot, after = null
-        let html = render_html_viewer(Some(&snap), None);
+        // review: current = snapshot, baseline = null
+        let html = render_html_viewer(None, Some(&snap));
         assert!(
-            html.contains(r#"<script type="application/json" id="cs-before">"#),
-            "embeds before snapshot inline"
+            html.contains(r#"<script type="application/json" id="cs-current">"#),
+            "embeds current snapshot inline"
         );
         assert!(
-            html.contains(r#"id="cs-after">null</script>"#),
-            "after is null in review mode"
+            html.contains(r#"id="cs-baseline">null</script>"#),
+            "baseline is null in review mode"
         );
-        let back = extract_embedded_snapshot(&html, "cs-before")
-            .expect("cs-before present")
+        let back = extract_embedded_snapshot(&html, "cs-current")
+            .expect("cs-current present")
             .unwrap();
         assert_eq!(back.plugin, "rust", "round-trips through embed/extract");
         assert!(
-            extract_embedded_snapshot(&html, "cs-after").is_none(),
-            "null after extracts to None"
+            extract_embedded_snapshot(&html, "cs-baseline").is_none(),
+            "null baseline extracts to None"
         );
     }
 

@@ -17,7 +17,7 @@
 - [5. Functional Requirements](#5-functional-requirements)
   - [5.1 Plugin System — Step 1](#51-plugin-system--step-1)
   - [5.2 Visualization Reports — Step 2](#52-visualization-reports--step-2)
-  - [5.3 Diff Analysis — Step 4](#53-diff-analysis--step-4)
+  - [5.3 Baseline Comparison — Step 4](#53-baseline-comparison--step-4)
 - [6. Non-Functional Requirements](#6-non-functional-requirements)
   - [6.1 NFR Inclusions](#61-nfr-inclusions)
   - [6.2 NFR Exclusions](#62-nfr-exclusions)
@@ -27,8 +27,8 @@
   - [7.3 Graph JSON Schema](#73-graph-json-schema)
 - [8. Use Cases](#8-use-cases)
   - [UC-001 Analyze Rust Workspace Offline](#uc-001-analyze-rust-workspace-offline)
-  - [UC-002 Before/After Refactoring Diff](#uc-002-beforeafter-refactoring-diff)
-  - [UC-003 CI Structural Diff on Pull Request](#uc-003-ci-structural-diff-on-pull-request)
+  - [UC-002 Before/After Refactoring Comparison](#uc-002-beforeafter-refactoring-comparison)
+  - [UC-003 CI Structural Gate on Pull Request](#uc-003-ci-structural-gate-on-pull-request)
 - [9. Acceptance Criteria](#9-acceptance-criteria)
 - [10. Dependencies](#10-dependencies)
 - [11. Assumptions](#11-assumptions)
@@ -78,7 +78,7 @@ language-specific, non-exportable, or single-level.
   seconds (typically a few seconds — no rust-analyzer)
 - Generate an HTML visualization report from JSON artifacts in under
   5 seconds
-- Generate a diff report between two snapshots in under 5 seconds
+- Generate a baseline-vs-current diff report between two snapshots in under 5 seconds
 - Works fully offline — no network access, no LLM calls required
 
 **Capabilities**:
@@ -98,8 +98,9 @@ language-specific, non-exportable, or single-level.
 | Graph | A directed graph whose nodes are source files (`file`) and third-party libraries (`external`), and whose edges are file dependencies (`uses`, `reexports`) |
 | External node | A third-party library recorded at depth 1 — one node per library (`ext:<name>`), never expanded into its internals |
 | Node weight | The coupling metric for a file: sum of its incoming and outgoing internal edge counts |
-| Diff | A structured comparison of two snapshots: nodes and edges added, removed, or with changed weight |
-| Coupling direction | The overall verdict of a diff: `improved`, `degraded`, or `neutral` |
+| Baseline / Current | The two sides of a comparison: **baseline** is the reference snapshot (`--baseline`), **current** is the positional `[input]` (analyzed now, or a snapshot) |
+| Diff | A structured comparison of baseline vs current: nodes and edges added, removed, or affected |
+| Verdict | The overall direction of a comparison: `improved`, `degraded`, or `neutral` |
 
 ## 2. Actors
 
@@ -133,8 +134,9 @@ magnitude; self-contained HTML that can be shared without tooling.
 **ID**: `cpt-code-split-actor-ci`
 
 **Role**: Runs the plugin at pull-request time, stores snapshot
-artifacts, runs the diff engine against the base-branch snapshot, and
-attaches the diff report to the pull request.
+artifacts, gates the branch against the base-branch snapshot with
+`check --baseline`, and attaches the `report --baseline` diff to the
+pull request.
 
 **Needs**: Non-interactive execution; deterministic artifact output;
 structured exit codes.
@@ -156,8 +158,8 @@ are implemented by Code Split; Step 3 is the user's own modification
 activity and is deliberately outside Code Split's scope.
 
 ```
-Step 1 ─ Extract   →   Step 2 ─ Visualize   →   Step 3 ─ Modify   →   Step 4 ─ Diff
-(code-split report)       (code-split report)          (User / AI)           (code-split diff)
+Step 1 ─ Extract   →   Step 2 ─ Visualize   →   Step 3 ─ Modify   →   Step 4 ─ Compare
+(code-split report)       (code-split report)          (User / AI)        (report --baseline)
 outputs JSON            outputs HTML              (we wait)             outputs HTML
 ```
 
@@ -179,10 +181,15 @@ LLM is required.
 decides what to refactor (manually or with AI assistance), and modifies
 the codebase. Code Split does not participate in this step.
 
-**Step 4 — Diff Analysis (Diff Engine)**: After modification, the user
-re-runs Step 1 to produce a new snapshot. The `code-split diff` subcommand
-compares the two existing snapshots and produces a diff HTML report and a
-machine-readable JSON diff. No network access or LLM is required.
+**Step 4 — Baseline Comparison**: After modification, the user re-runs
+Step 1 to capture the current state (or analyzes it live). Passing the
+earlier snapshot as `--baseline` compares the two: `code-split report
+. --baseline <snapshot>` produces a baseline↔current diff HTML report
+with a verdict, and `code-split check . --baseline <snapshot>` produces a
+machine-readable verdict and gates only on *new* violations. Because the
+positional input is polymorphic, `--baseline` can also compare two
+existing snapshots without re-analyzing. No network access or LLM is
+required.
 
 ## 4. Scope
 
@@ -194,7 +201,7 @@ machine-readable JSON diff. No network access or LLM is required.
 |------|-------|
 | Step 1 | Rust plugin only; single file-level JSON graph with external dependency nodes; no AI prompts; no CI integration |
 | Step 2 | Offline HTML report with file-graph visualization and node sorting by weight |
-| Step 4 | Offline HTML diff report and machine-readable JSON diff comparing two snapshots |
+| Step 4 | `report --baseline` offline HTML diff report and `check --baseline` machine-readable verdict comparing two snapshots |
 
 #### P2 — Follow-On
 
@@ -202,7 +209,7 @@ machine-readable JSON diff. No network access or LLM is required.
 |------|-------|
 | Step 1 | AI prompt generator (heaviest nodes → LLM prompt); CI artifact integration |
 | Step 2 | CI artifact hosting |
-| Step 4 | CI integration; diff artifacts for PR review automation |
+| Step 4 | CI integration; baseline-comparison artifacts for PR review automation |
 | Distribution | Multi-ecosystem binary distribution: single pre-compiled `code-split` binary per platform published via thin wrappers to PyPI (`pip install code-split`), npm (`npm install -g @code-split/cli`), and GitHub Releases |
 
 #### P3 — Future
@@ -233,36 +240,51 @@ machine-readable JSON diff. No network access or LLM is required.
 
 All user-facing operations MUST be accessible through a single binary
 `code-split`. Running it with no command prints help — every action goes
-through an explicit subcommand; there is no default command. The three
-top-level subcommands map to the workflow steps:
+through an explicit subcommand; there is no default command. There are
+exactly **two** subcommands, split by *what they emit* — `check` produces
+an exit code (a CI gate), `report` produces files (a snapshot and a
+viewer):
 
 ```
-code-split check  [path] --plugin <name|auto> [options] [-- <plugin-args>]
-code-split report [path] --plugin <name|auto> [--format json,html] [--before <baseline.json>] [options] [-- <plugin-args>]
-code-split diff   --before <snap-a.json> --after <snap-b.json> [--format html,json]
+code-split check  [input] [--plugin <name|auto>] [--baseline <snapshot>] [options]
+code-split report [input] [--plugin <name|auto>] [--baseline <snapshot>] [--output.<fmt>.path <path>] [options]
 ```
 
-- `check` is the linter: it analyzes the workspace, evaluates cycle rules
-  and thresholds, prints diagnostics, exits non-zero on any violation,
-  and writes **no files**.
-- `report` analyzes the workspace **now** and writes artifacts (a JSON
-  snapshot and/or an HTML viewer). It always re-analyzes. With
-  `--before <baseline.json>` it
-  compares against a baseline in the same run, turning the HTML into a diff
-  view and adding a verdict.
-- `diff` compares two **existing** snapshots (no analysis) and writes a diff
-  HTML report and/or a machine-readable JSON diff.
+The single positional `[input]` (default `.`) is **polymorphic**: a
+**directory** is analyzed in-process (run the plugin, build the graph,
+compute metrics), while a **`.json` snapshot** or **`.html` report** is
+read for its embedded snapshot — no analysis, source tree, or toolchain
+required. Analysis-only flags (`--plugin`, `--ignore`) are rejected with a
+snapshot input.
 
-`report` writes the snapshot to `--report-path` (default `.code-split`) as
-`{ts}-{git-hash-3}.json`, e.g. `.code-split/20260526-114144-a3f.json`;
-`{ts}` is a local `YYYYMMDD-HHMMSS` timestamp and `{git-hash-3}` is the first
-three characters of the commit. The filename is a template with placeholders
-`{project-dir}` (slugified workspace name), `{ts}`, `{git-hash}` (the 12-char
-short commit) and `{git-hash-N}` (its first N chars). The default is
-resolved as **`--json-name` flag › `[output] json-name` in `code-split.toml`
-› built-in `{ts}-{git-hash-3}.json`**, so a project can pin its own naming
-(e.g. `{project-dir}-{ts}.json`) while a flag still wins for named states
-(e.g., `pr.json`). No additional registry is created.
+- `check` is the linter: it evaluates cycle rules and thresholds, prints
+  diagnostics, exits non-zero on any violation, and writes **no files**.
+  With `--baseline <snapshot>` it switches to a **relative gate** that
+  fails only on *new* violations versus the baseline (pre-existing ones
+  tolerated) and emits a verdict (`improved` / `degraded` / `neutral`); a
+  machine-readable verdict is produced with `--output-format json`.
+- `report` writes artifacts (a JSON snapshot and/or an HTML viewer) and
+  always exits `0`. Without `--baseline` the HTML is a single-snapshot
+  viewer; with `--baseline <snapshot>` it becomes a baseline↔current diff
+  view with a verdict, named `…-diff.html`.
+
+`report` selects artifacts and their destinations through one flag family,
+`--output.<fmt>.path <path>` (`<fmt>` is `json` or `html`). When no
+`--output.*` flag is given it writes **both** formats with default names
+into `.code-split/`: `{ts}-{git-hash-3}.json` and `{ts}-{git-hash-3}.html`,
+e.g. `.code-split/20260526-114144-a3f.json` (`{ts}` is a local
+`YYYYMMDD-HHMMSS` timestamp, `{git-hash-3}` the first three chars of the
+commit). When one or more `--output.<fmt>.path` are given, **exactly** the
+listed formats are written. The `.path` value is a file path (or a name
+template, or `stdout`/`-` to stream the artifact); it supports placeholders
+`{project-dir}` (slugified workspace name), `{ts}`, `{git-hash}` (the
+12-char short commit) and `{git-hash-N}` (its first N chars). The
+destination resolves as **`--output.<fmt>.path` flag › `[output.<fmt>]
+path` in `code-split.toml` › built-in default**, so a project can pin its
+own naming while a flag still wins for named states (e.g., `pr.json`). With
+`--baseline`, the HTML default gains a `-diff` marker
+(`{ts}-{git-hash-3}-diff.html`); the JSON artifact is always the current
+snapshot, never a diff. No additional registry is created.
 
 Each snapshot is a **single self-contained `.json` file** combining
 metadata (command, versions, git state) and the one `files` graph. See
@@ -273,18 +295,19 @@ in alphabetical order and the `nodes` / `edges` arrays are sorted by a
 stable key (node `id`; edge `from`/`to`/`kind`). Re-analyzing unchanged
 code therefore yields byte-identical graph data — no churn from map
 iteration order — which keeps committed snapshots (e.g. the `samples/`
-goldens) diff-clean and makes `diff` output reflect only real changes.
+goldens) diff-clean and makes a baseline comparison reflect only real changes.
 
-`diff` consumes snapshot files produced by `report` and is
-plugin-agnostic. Splitting into separate binaries is forbidden at
+A `--baseline` comparison consumes snapshot files produced by `report` and
+is plugin-agnostic. Splitting into separate binaries is forbidden at
 P1; the separation of concerns lives inside the binary.
 
 **Rationale**: One file per snapshot is easier to copy, archive, attach
-to CI artifacts, and pass to `diff`. A timestamped, commit-stamped filename
-(`{ts}-{git-hash-3}`) means users never have to think about naming for
-routine snapshots while keeping per-commit runs distinct; the `[output]`
-config sets a project-wide template and explicit `--json-name` is available
-for named states (e.g., `snap-before-refactor.json`).
+to CI artifacts, and pass as a `--baseline`. A timestamped, commit-stamped
+filename (`{ts}-{git-hash-3}`) means users never have to think about naming
+for routine snapshots while keeping per-commit runs distinct; the
+`[output.<fmt>]` config sets a project-wide template and an explicit
+`--output.<fmt>.path` is available for named states (e.g.,
+`snap-before-refactor.json`).
 
 **Actors**: `cpt-code-split-actor-developer`, `cpt-code-split-actor-ci`
 
@@ -304,7 +327,6 @@ combines metadata and the one `files` graph in one document:
   "target":    "/Users/alice/projects/axum-api",
   "plugin": "rust",
   "config_file": "/Users/alice/projects/axum-api/code-split.toml",
-  "local_only": false,
   "versions": {
     "code-split": "0.3.1",
     "plugin_rust": "0.3.1",
@@ -343,7 +365,6 @@ Top-level fields:
 - `target` — absolute path to the analyzed project
 - `plugin` — resolved built-in plugin name (`rust`, `python`, or `javascript`)
 - `config_file` — absolute path of the config file used (`code-split.toml` or `Cargo.toml#metadata.code-split`); omitted when no config file was found
-- `local_only` — boolean
 - `versions` — `code-split` semver at minimum; the Rust plugin adds
   `plugin_rust` and `rustc`; other built-in plugins add `plugin_<name>`
   for the language they analyze
@@ -364,8 +385,8 @@ Top-level fields:
 - `graphs` — object with a single key: `files`; its value is a graph
   object with `nodes` and `edges` arrays
 
-`code-split report` (with `--before`) and `code-split diff` read snapshot
-files and embed the top-level metadata in the generated HTML as a
+`code-split report` and `code-split check` (with `--baseline`) read
+snapshot files and embed the top-level metadata in the generated HTML as a
 "Snapshot info" panel.
 
 **Rationale**: One file per snapshot is simpler to copy, archive, and
@@ -476,23 +497,6 @@ plugins.
 
 **Actors**: `cpt-code-split-actor-developer`, `cpt-code-split-actor-tech-lead`
 
-#### Local-Only Mode
-
-- [x] `p1` - **ID**: `cpt-code-split-fr-local-only`
-
-The Rust plugin MUST support a `--local-only` flag. When set, it MUST
-pass `--no-deps` to `cargo metadata` (external crates are not
-enumerated). The file graph and per-file complexity metrics are still
-produced; there are simply fewer (or no) `External` library nodes. This
-mode works even when external dependencies are unreachable or uncached.
-
-**Rationale**: Workspaces with private or unreachable git dependencies
-cannot have their dependencies resolved by `cargo metadata`. Local-only
-still produces the full internal file graph, which is sufficient for most
-structural coupling analysis.
-
-**Actors**: `cpt-code-split-actor-developer`, `cpt-code-split-actor-ci`
-
 #### Embedded Static Asset Tracking (P2)
 
 - [ ] `p2` - **ID**: `cpt-code-split-fr-rust-embedded-assets`
@@ -569,7 +573,7 @@ scalars; `ignore.paths` is merged):
 
 | Priority | Source |
 |---|---|
-| 1 | CLI flags (`--ignore`, `--cycle-rule`, `--threshold`, `--plugin`) |
+| 1 | CLI flags (`--ignore`, `--cycle-rule`, `--threshold`, `--plugin`, `--output.<fmt>.path`) |
 | 2 | `--config KEY=VALUE` inline overrides (dotted key into the config schema) |
 | 3 | `--config <file>` |
 | 4 | `code-split.toml` in cwd, then in target directory |
@@ -597,17 +601,28 @@ loc        = 800
 hk         = 500_000
 cyclomatic = 10
 
-[output]                     # default report artifact names (report command)
-json-name = "{project-dir}-{ts}.json"   # placeholders: {project-dir} {ts} {git-hash} {git-hash-N}
-html-name = "{project-dir}-{ts}.html"   # a --json-name/--html-name flag still overrides
+[output.json]                # default JSON snapshot destination (report command)
+path    = "{project-dir}-{ts}.json"   # placeholders: {project-dir} {ts} {git-hash} {git-hash-N}
+enabled = true               # whether to write this format by default
+
+[output.html]                # default HTML viewer destination (report command)
+path    = "{project-dir}-{ts}.html"   # a --output.html.path flag still overrides
+enabled = true
 ```
 
 **CLI flags**:
 
 - `--plugin <NAME|auto>` — override default plugin (`auto` detects by markers)
-- `--json-name <TEMPLATE>` / `--html-name <TEMPLATE>` (`report`) — override the
-  output filename template (placeholders `{project-dir}`, `{ts}`, `{git-hash}`,
-  `{git-hash-N}`); wins over `[output]`; built-in default `{ts}-{git-hash-3}`
+- `--output.<fmt>.path <PATH>` (`report`; `<fmt>` is `json` or `html`) — select
+  that artifact format and set its destination (a path, a name template with
+  placeholders `{project-dir}`, `{ts}`, `{git-hash}`, `{git-hash-N}`, or
+  `stdout`/`-`); wins over `[output.<fmt>] path`; built-in default
+  `{ts}-{git-hash-3}`. Presence of any `--output.*` flag selects exactly the
+  listed formats; with none, both `json` and `html` are written
+- `--baseline <SNAPSHOT>` (`check` / `report`) — compare the current `[input]`
+  against this baseline snapshot (`.json` or `.html`); on `check` it switches
+  to a relative gate (fail only on new violations), on `report` it turns the
+  HTML into a baseline↔current diff with a verdict
 - `--config <PATH | KEY=VALUE>` — load config from an explicit file path, or
   override a single setting inline via a dotted key (repeatable; inline wins)
 - `--ignore <GLOB>` — add a path glob (repeatable, merged with file)
@@ -669,10 +684,10 @@ modifying source code.
 
 - [x] `p1` - **ID**: `cpt-code-split-fr-html-report`
 
-The `code-split report` subcommand MUST analyze the workspace and, when
-`html` is requested in `--format` (default `json,html`), generate a single
-self-contained offline HTML file alongside the snapshot `.json`. The HTML
-MUST include:
+The `code-split report` subcommand MUST analyze the workspace and, when the
+`html` artifact is selected (the default set is both `json` and `html`),
+generate a single self-contained offline HTML file alongside the snapshot
+`.json`. The HTML MUST include:
 
 - Interactive file-graph visualization, with `external` library nodes
   shown in a distinct amber colour (dashed edges)
@@ -726,50 +741,52 @@ and instructs the LLM to audit the codebase against each principle.
 
 **Actors**: `cpt-code-split-actor-developer`, `cpt-code-split-actor-tech-lead`
 
-### 5.3 Diff Analysis — Step 4
+### 5.3 Baseline Comparison — Step 4
 
 #### Graph Diff Engine
 
 - [x] `p1` - **ID**: `cpt-code-split-fr-graph-diff`
 
-The `code-split diff` subcommand MUST accept two snapshot `.json` files
-and compute a structured diff per level: nodes and edges added, removed,
-or with changed weight. The diff MUST include an overall coupling
-direction verdict: `improved` (total weight fell), `degraded` (total
-weight rose), or `neutral` (no significant change). The interactive
+With `--baseline <snapshot>`, `code-split report` MUST compute a structured
+diff between the baseline snapshot and the current `[input]`: nodes and
+edges added, removed, or affected. The diff MUST include an overall
+verdict: `improved`, `degraded`, or `neutral`. The interactive
 diff HTML uses Graphviz WASM (bundled in the binary) for client-side
 DOT→SVG layout with directory cluster grouping; there is a single Files
 view (no level switcher). The map is laid out **once** from the **union**
 of both snapshots (Graphviz computes a single set of node positions); the
-`[data-side]` Before/After buttons are then a pure CSS visibility flip —
-after-only (added) elements are hidden on the Before side, before-only
-(removed) elements on the After side — so every file present on both sides
-keeps its exact position and never moves when toggling. **After is shown by
+`[data-side]` Baseline/Current buttons are then a pure CSS visibility flip —
+current-only (added) elements are hidden on the Baseline side, baseline-only
+(removed) elements on the Current side — so every file present on both sides
+keeps its exact position and never moves when toggling. **Current is shown by
 default.** In the metric node-size modes (SLOC/HK) each circle is resized
 to the active side's value around its fixed centre (a file that grew or
 shrank changes size, not position). The active side is reflected
-throughout: the `side=before|after` URL parameter, the node-table title
-(`Details` / `Details Before` / `Details After`), and a `Before` / `After`
-badge on the node-popup and Prompt-Generator headers. The two header
-slots are the **after** (right) — the primary snapshot the report is
-about, always present and **not removable** — and an optional **before**
-baseline (left, editable, removable). With no baseline it is
-single-snapshot **review** mode: the before slot is an empty, editable
-placeholder (`↑ compare…`) and the Before/After buttons are hidden;
+throughout: the `side=baseline|current` URL parameter, the node-table title
+(`Details` / `Details Baseline` / `Details Current`), and a `Baseline` /
+`Current` badge on the node-popup and Prompt-Generator headers. The two header
+slots are the **current** (right) — the primary snapshot the report is
+about, always present and **not removable** — and an optional **baseline**
+(left, editable, removable). With no baseline it is
+single-snapshot **review** mode: the baseline slot is an empty, editable
+placeholder (`↑ Set baseline`) and the Baseline/Current buttons are hidden;
 loading a baseline turns the report into a diff. Each header slot's hover
-tooltip is labelled `Before` / `After` and notes which side is currently
-shown; that slot is also highlighted in the header. Cycle detection
+tooltip is labelled `Baseline` / `Current` and notes which side is currently
+shown; that slot is also highlighted in the header. Two buttons swap in a
+different snapshot from disk (each accepts a `.json` snapshot or an `.html`
+report): **↑ Replace current** changes the evaluated snapshot, **↑ Set
+baseline** loads a reference to diff against. Cycle detection
 (Tarjan SCC) runs in-browser and annotates nodes/edges for red-stroke
 highlighting (solid red, no dasharray); the highlight is **side-aware** —
-a `before-only` cycle is red only on the Before side, `after-only` only
-on After, `both` on either, so a cycle removed in the after snapshot
-stops being red once you switch to After. Internal `file` nodes render
+a `baseline-only` cycle is red only on the Baseline side, `current-only` only
+on Current, `both` on either, so a cycle removed in the current snapshot
+stops being red once you switch to Current. Internal `file` nodes render
 blue; `external` library nodes render amber with dashed edges. The node
 table column order is: checkbox, Name, Kind, Cycle, Status, LOC, HK,
 Fan-in, Fan-out, H.vol, H.bugs, H.effort, H.time, H.len, H.vocab,
 Cyclomatic, Cognitive, MI, MI SEI, Logical, Comments, Blank. A checkbox column
 (leftmost) enables persistent multi-node selection (shared across
-Before/After by node id — a file present in both snapshots stays selected
+Baseline/Current by node id — a file present in both snapshots stays selected
 when toggling; the selected-row count reflects the active side): clicking a checkbox
 highlights the row (yellow) and the corresponding SVG node (yellow fill
 - amber stroke); shift-click selects a range; the header checkbox
@@ -810,18 +827,18 @@ static visualizations manually.
 
 - [x] `p1` - **ID**: `cpt-code-split-fr-diff-html-report`
 
-The diff tool MUST generate a single self-contained offline HTML report
-displaying:
+`code-split report --baseline` MUST generate a single self-contained
+offline HTML report displaying:
 
-- Added / removed / changed files and edges, color-coded by
-  direction (green = added, amber = removed, grey = affected)
+- Added / removed / affected files and edges, color-coded by per-node diff
+  state (added, removed, affected, unchanged)
 - Cycle detection: files/edges in dependency cycles annotated with
-  `before-only` / `after-only` / `both` / `none` status and red-stroke
+  `baseline-only` / `current-only` / `both` / `none` status and red-stroke
   highlighting
 - `external` library nodes shown in a distinct amber colour with dashed
   edges to distinguish them from internal file edges
 - Diff summary table: node/edge counts and cycle counts (SCCs, nodes in
-  cycles), before vs after with Δ
+  cycles), baseline vs current with Δ
 - All JavaScript and CSS bundled locally (no CDN or external resources)
 
 **Rationale**: Self-contained HTML is viewable without tooling and
@@ -830,41 +847,42 @@ suitable for attaching to PRs or sharing with stakeholders.
 **Actors**: `cpt-code-split-actor-developer`, `cpt-code-split-actor-tech-lead`,
 `cpt-code-split-actor-pr-reviewer`
 
-#### Structured JSON Diff Output
+#### Machine-Readable Comparison Verdict
 
 - [x] `p1` - **ID**: `cpt-code-split-fr-compare`
 
-The `code-split diff` subcommand with `--format json` MUST accept two
-snapshot `.json` files and output a machine-readable JSON diff summary.
-The JSON diff is written to `--report-path` (default `.code-split`) under
-`--json-name` (default `diff.json`). `--format html` (the default) and
-`--format json` are independent and may be combined.
+`code-split check --baseline <snapshot> --output-format json` MUST compare
+the current `[input]` against the baseline snapshot and emit a
+machine-readable verdict and new-violation summary to stdout. The verdict is
+`improved`, `degraded`, or `neutral`; the gate is **relative** — it fails
+only on violations not already present in the baseline.
 
-JSON schema:
+JSON summary:
 
 ```json
 {
   "schema_version": "1",
-  "before": { "target": "…", "branch": "…", "commit": "…" },
-  "after":  { "target": "…", "branch": "…", "commit": "…" },
+  "baseline": { "target": "…", "branch": "…", "commit": "…" },
+  "current":  { "target": "…", "branch": "…", "commit": "…" },
+  "verdict": "degraded",
   "identical": false,
   "files":     { "nodes": { "added": 0, "removed": 0, "affected": 0, "unchanged": 26 },
-                 "edges": { … }, "cycle_nodes_before": 10, "cycle_nodes_after": 10,
-                 "sccs_before": 4, "sccs_after": 4 }
+                 "edges": { … }, "cycle_nodes_baseline": 10, "cycle_nodes_current": 10,
+                 "sccs_baseline": 4, "sccs_current": 4 }
 }
 ```
 
-With `--format html` (the default), `code-split diff` outputs an interactive
-HTML viewer. The report is **fully self-contained**: it embeds all JS/CSS
-assets (including Graphviz WASM) inline **and** embeds both snapshots inline
-as `<script type="application/json">` data, so the single `.html` file opens
-straight from disk with no relative-path reference and no separate `before` /
-`after` JSON files needed. This is the CI-shareable artifact. The HTML and
-JSON outputs come from the same `code-split diff` invocation (`--format html,json`).
+The human-facing counterpart is `code-split report --baseline`, which writes
+an interactive diff HTML viewer. That report is **fully self-contained**: it
+embeds all JS/CSS assets (including Graphviz WASM) inline **and** embeds both
+snapshots inline as `<script type="application/json">` data tags
+(`cs-baseline` / `cs-current`), so the single `.html` file opens straight
+from disk with no relative-path reference and no separate snapshot files
+needed. This is the CI-shareable artifact.
 
-**Rationale**: Provides a stable machine-readable interface for CI
-pipelines and scripts; the default HTML output is a shareable diff viewer
-produced by the same command.
+**Rationale**: `check --baseline` is the machine gate (an exit code and a
+JSON verdict for CI), while `report --baseline` is the shareable human diff
+viewer — the same comparison surfaced two ways.
 
 **Actors**: `cpt-code-split-actor-developer`, `cpt-code-split-actor-ci`,
 `cpt-code-split-actor-pr-reviewer`
@@ -873,21 +891,23 @@ produced by the same command.
 
 - [x] `p1` - **ID**: `cpt-code-split-fr-diff-text-report`
 
-`code-split diff --format json` emits a structured JSON summary (see
-`cpt-code-split-fr-compare`) embeddable in CI logs and PR comments. The
-JSON contains node/edge counts and delta per level plus cycle SCC counts.
+`code-split check --baseline <snapshot> --output-format json` emits a
+structured JSON summary (see `cpt-code-split-fr-compare`) embeddable in CI
+logs and PR comments. The JSON contains the verdict, node/edge counts and
+delta per level, plus cycle SCC counts.
 
 **Actors**: `cpt-code-split-actor-ci`, `cpt-code-split-actor-pr-reviewer`
 
 #### CI Diff Integration (P2)
 
-- [ ] `p2` - **ID**: `cpt-code-split-fr-ci-diff`
+- [x] `p2` - **ID**: `cpt-code-split-fr-ci-diff`
 
-`code-split diff` SHOULD act as a CI linter: exit non-zero when the diff
-exceeds configurable thresholds (e.g. new cycles added, HK degraded
-beyond a limit). The base-branch snapshot is fetched from a stored CI
-artifact; the diff JSON (`--format json`) is attached to the pull request
-automatically.
+`code-split check --baseline <snapshot>` SHOULD act as a CI regression
+gate: exit non-zero when the current tree introduces *new* violations
+versus the baseline (e.g. new cycles added, HK degraded beyond a limit).
+The base-branch snapshot is fetched from a stored CI artifact; the verdict
+JSON (`--output-format json`) and the `report --baseline` diff HTML are
+attached to the pull request automatically.
 
 **Actors**: `cpt-code-split-actor-ci`, `cpt-code-split-actor-pr-reviewer`
 
@@ -900,7 +920,7 @@ automatically.
 - [x] `p1` - **ID**: `cpt-code-split-nfr-offline`
 
 All P1 components (Rust plugin, `code-split check`, `code-split report`,
-`code-split diff`) MUST operate without network access. External resources (CDNs, APIs, LLM
+and `--baseline` comparisons) MUST operate without network access. External resources (CDNs, APIs, LLM
 endpoints) are forbidden at P1. All JavaScript and CSS dependencies in
 generated HTML MUST be bundled into the `code-split` binary as embedded
 assets; no CDN or external resource references in generated HTML.
@@ -917,9 +937,9 @@ requirement shared by all three steps.
 
 The Rust plugin MUST complete graph extraction for a 50k-LOC workspace
 in ≤ 30 seconds wall-clock on a modern developer laptop (8-core, 16 GB
-RAM, SSD), measured cold-cache. The `code-split report` and `code-split diff`
+RAM, SSD), measured cold-cache. The `code-split report` and `code-split check`
 subcommands MUST each complete in ≤ 5 seconds for graphs with up to
-10,000 nodes.
+10,000 nodes (including a `--baseline` comparison).
 
 **Threshold**: ≤ 30 s for the plugin at 50k LOC; ≤ 5 s for each
 subcommand at 10k nodes.
@@ -931,7 +951,7 @@ subcommand at 10k nodes.
 - [x] `p1` - **ID**: `cpt-code-split-nfr-portability`
 
 JSON snapshot artifacts MUST conform to Graph JSON Schema v1 and MUST
-be readable by the report generator and diff engine without migration
+be readable by the report generator and baseline comparison without migration
 for all v1.x releases. Generated HTML reports MUST open correctly in
 Chrome, Firefox, and Safari without installation.
 
@@ -961,21 +981,26 @@ across plugin and tool version bumps within a major version.
 command; every action is an explicit subcommand.
 
 ```
-# Lint — analyze and gate on cycle rules & thresholds; writes no files
-code-split check  [path] --plugin <name|auto> [--threshold ...] [--cycle-rule ...] [--output-format <human|json|github|sarif>] [--exit-zero] [-- <plugin-args>]
+# Lint — gate on cycle rules & thresholds; writes no files
+code-split check  [input] [--plugin <name|auto>] [--threshold ...] [--cycle-rule ...] [--baseline <snapshot>] [--output-format <human|json|github|sarif>] [--exit-zero]
 
-# Steps 1+2 — analyze the workspace and write a snapshot and/or HTML viewer
-code-split report [path] --plugin <name|auto> [--format json,html] [--before <baseline.json>] [--local-only] [-- <plugin-args>]
-
-# Step 4 — compare two existing snapshots (no analysis)
-code-split diff   --before <snap-a.json> --after <snap-b.json> [--format html,json]   # HTML default; JSON for CI
+# Steps 1+2 — analyze (or read) the input and write a snapshot and/or HTML viewer
+code-split report [input] [--plugin <name|auto>] [--output.<fmt>.path <path>] [--baseline <snapshot>]
 ```
+
+The positional `[input]` (default `.`) is polymorphic: a directory is
+analyzed, while a `.json` snapshot or `.html` report is read for its
+embedded snapshot (no analysis). Step 4 is `--baseline <snapshot>`, accepted
+by both commands: `report --baseline` writes a baseline↔current diff HTML
+viewer with a verdict, and `check --baseline` is a relative CI gate (fail
+only on new violations) whose verdict is machine-readable with
+`--output-format json`.
 
 Global options accepted by every command: `--config <PATH | KEY=VALUE>`
 (repeatable; inline wins), `--color <when>`, `-v/--verbose`, `-q/--quiet`,
 `-h/--help`, `-V/--version`.
 
-**Exit codes**: 0 = `check` passed (or `--exit-zero`), `report` / `diff`
+**Exit codes**: 0 = `check` passed (or `--exit-zero`), `report`
 completed; non-zero = generic failure, or `check` found a violation;
 failures emit a structured JSON error on stderr.
 
@@ -1020,7 +1045,6 @@ to the binary.
   "command":        "<full command line>",
   "workspace":      "<absolute-path>",
   "plugin":         "<plugin-id>",
-  "local_only":     false,
   "versions":       { "code-split": "0.3.1", "plugin_rust": "0.3.1", "rustc": "1.78.0" },
   "git":            { "branch": "main", "commit": "a3f9c21b4d5e", "dirty_files": 0, "origin": "git@gitlab.example.com:team/proj.git" },
   "graphs": {
@@ -1143,38 +1167,41 @@ at any step.
 - **Plugin fails (cargo metadata error)**: Plugin exits non-zero with
   a structured JSON error on stderr; no JSON files are written.
 
-### UC-002 Before/After Refactoring Diff
+### UC-002 Before/After Refactoring Comparison
 
 **ID**: `cpt-code-split-usecase-diff-refactor`
 
 **Actors**: `cpt-code-split-actor-developer`, `cpt-code-split-actor-tech-lead`
 
-**Preconditions**: A "before" snapshot exists from a prior run; the
+**Preconditions**: A baseline snapshot exists from a prior run; the
 developer has made structural changes to the codebase.
 
 **Main Flow**:
 
-1. Developer runs `code-split report . --plugin rust --format json --json-name snap-after.json`
-2. Developer runs
-   `code-split diff --before .code-split/snap-before.json --after .code-split/snap-after.json --format html,json`
-3. Developer opens `.code-split/index.html` to see coupling changes
-   color-coded by direction
-4. Developer reads `.code-split/diff.json` for the machine-readable summary
-   including the overall coupling verdict
+1. Developer runs
+   `code-split report . --baseline .code-split/snap-before.json --output.html.path=diff.html`
+   (analyzes the current tree and compares it against the baseline in one run)
+2. Developer opens `.code-split/diff.html` to see coupling changes
+   color-coded by per-node diff state, with the baseline↔current verdict
+3. Developer reads the machine-readable verdict with
+   `code-split check . --baseline .code-split/snap-before.json --output-format json`
 
-(Alternatively, `code-split report . --plugin rust --before .code-split/snap-before.json`
-analyzes and compares in a single run, writing the after snapshot and a
-diff-mode HTML viewer with a verdict.)
+(Because `[input]` is polymorphic, the developer can instead capture the
+current state first — `code-split report . --output.json.path=snap-after.json`
+— then compare two existing snapshots without re-analyzing:
+`code-split report snap-after.json --baseline .code-split/snap-before.json
+--output.html.path=diff.html`.)
 
-**Postconditions**: Diff HTML and JSON reports exist; the verdict
-quantifies whether the refactoring improved the architecture.
+**Postconditions**: A diff HTML report exists and a machine-readable
+verdict is available; the verdict quantifies whether the refactoring
+improved the architecture.
 
 **Alternative Flows**:
 
-- **Schema version mismatch**: Diff tool exits non-zero with an error
+- **Schema version mismatch**: the comparison exits non-zero with an error
   identifying the incompatible artifact; no report is produced.
 
-### UC-003 CI Structural Diff on Pull Request
+### UC-003 CI Structural Gate on Pull Request
 
 **ID**: `cpt-code-split-usecase-ci-diff`
 
@@ -1188,11 +1215,13 @@ the PR branch has been pushed.
 **Main Flow**:
 
 1. CI downloads the base-branch snapshot to `.code-split/snap-base.json`
-2. CI runs `code-split report . --plugin rust --format json --json-name snap-pr.json`
+2. CI runs `code-split check . --baseline .code-split/snap-base.json --output-format json`
+   to gate the PR — it fails only on *new* violations versus the base
 3. CI runs
-   `code-split diff --before .code-split/snap-base.json --after .code-split/snap-pr.json --format html,json`
-4. CI attaches `.code-split/index.html` to the PR and posts the verdict from
-   `.code-split/diff.json` as a PR comment
+   `code-split report . --baseline .code-split/snap-base.json --output.html.path=diff.html`
+   to render the shareable diff viewer
+4. CI attaches `.code-split/diff.html` to the PR and posts the verdict from
+   the `check --baseline` JSON as a PR comment
 5. PR Reviewer reads the coupling-change summary and diff report without
    local setup
 
@@ -1205,14 +1234,14 @@ as a self-contained HTML report.
   a reference workspace in ≤ 30 s on a modern laptop (typically seconds)
 - [x] HTML report opens in Chrome/Firefox/Safari with interactive graph
   visualization and client-side node sorting by coupling weight
-- [x] Diff tool produces color-coded HTML report from two snapshots;
-  the coupling direction verdict is present
+- [x] `report --baseline` produces a color-coded HTML diff from two
+  snapshots; the verdict (`improved` / `degraded` / `neutral`) is present
 - [x] All P1 tools operate with zero outbound network calls
 - [x] Generated HTML reports contain no external resource references
 - [x] JSON artifacts conform to Graph JSON Schema v1 and pass schema
   validation
-- [ ] Diff tool exits non-zero with a structured error on schema version
-  mismatch
+- [ ] A `--baseline` comparison exits non-zero with a structured error on
+  schema version mismatch
 
 ## 10. Dependencies
 
@@ -1227,7 +1256,7 @@ as a self-contained HTML report.
 ## 11. Assumptions
 
 - Target Rust workspaces have resolvable dependencies (`cargo metadata`
-  succeeds) for full mode; `--local-only` covers the rest
+  succeeds) for full external-node enumeration
 - Browsers rendering the HTML reports support modern JavaScript (ES2020+)
 - The base-branch snapshot used for diffs was produced by the same
   major version of the Rust plugin (schema compatibility guaranteed

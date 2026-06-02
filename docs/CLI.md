@@ -3,7 +3,7 @@
 Pluggable multi-language structural analysis platform.
 
 ```
-code-split <command> [path] [options]
+code-split <command> [input] [options]
 ```
 
 `code-split` is command-driven: running it with no command prints help — every action
@@ -17,11 +17,14 @@ goes through an explicit subcommand, there is no default action. Run
 
 ## Commands
 
-| Command | What it does |
+| Command | What it produces |
 |---|---|
-| [`check`](#check) | Lint a workspace: analyze, evaluate thresholds & cycle rules, print diagnostics, exit non-zero on violation. Writes no files. |
-| [`report`](#report) | Analyze a workspace and write artifacts — a JSON snapshot and/or an HTML viewer. Optionally compares against a baseline in the same run (`--before`). |
-| [`diff`](#diff) | Compare two existing snapshots (no analysis) and write a diff report with an `improved` / `degraded` / `neutral` verdict. |
+| [`check`](#check) | A **verdict**: evaluates thresholds, cycle rules, and (with `--baseline`) regressions, prints diagnostics, and **exits non-zero** on violation. Writes no files. |
+| [`report`](#report) | **Artifacts**: an HTML viewer and/or a JSON snapshot. With `--baseline`, the HTML becomes a diff with a verdict. Always exits `0`. |
+
+There are exactly two commands, split by *what they emit*: `check` produces an exit
+code (a CI gate), `report` produces files (a snapshot and a viewer). Both take the same
+input and share the same vocabulary below.
 
 ## Global options
 
@@ -32,42 +35,74 @@ goes through an explicit subcommand, there is no default action. Run
 | `-h, --help` | Print help — top-level, or per-command with `code-split <cmd> --help`. |
 | `-V, --version` | Print the version. |
 
-There is **no** `--color`, `--verbose`, or `--quiet` flag. Progress and timing
-lines are always written to **stderr** (`[HH:MM:SS] …`); diagnostics and machine
-output go to **stdout** or files, so the two streams never mix. All other flags
+Progress and timing lines are written to **stderr** (`[HH:MM:SS] …`); diagnostics and
+machine output go to **stdout** or files, so the two streams never mix. All other flags
 are per-command and must follow the command name.
+
+## Input: code or snapshot
+
+Both commands take a single positional `[input]` (default `.`). It is **polymorphic** —
+its kind decides whether analysis runs:
+
+| `[input]` | Behaviour |
+|---|---|
+| A **directory** (source tree) | **Analyze** it: run the plugin, build the graph, compute metrics. |
+| A **`.json` snapshot** or **`.html` report** | **Read** the embedded snapshot — no analysis, no source tree or toolchain required. |
+
+So `check .` analyzes the current directory in memory and never writes a file, while
+`check snapshot.json` evaluates a snapshot produced earlier. Analysis is a built-in
+capability of both commands; a JSON snapshot is written only when you explicitly ask for
+one.
+
+A JSON snapshot is an **optional artifact**, useful when you want to:
+
+- keep a **baseline** to compare future runs against (`--baseline`);
+- **analyze once, consume many** — produce a snapshot, then run cheap `check` / `report`
+  passes over it without re-analyzing (handy for large repos and for CI steps that run
+  without a toolchain).
+
+```sh
+# fast path — each command analyzes the code itself (analysis is seconds)
+code-split check .
+code-split report . --output.html.path=report.html
+
+# analyze-once — one analysis, then cheap consumers over the snapshot
+code-split report . --output.json.path=snap.json --output.html.path=report.html
+code-split check  snap.json --threshold file.loc=800
+code-split check  snap.json --baseline main.json
+```
 
 ## Common analysis options
 
-Shared by `check` and `report` (the two commands that analyze a workspace);
-**not** accepted by `diff`.
+`--plugin` and `--ignore` govern analysis itself and apply **only when `[input]` is a
+directory** — they are rejected with a snapshot input. `--config` is always accepted:
+its rule and output keys apply to snapshots too, while analysis-only keys (e.g. `plugin`)
+are ignored when reading one.
 
 | Flag | Meaning |
 |---|---|
-| `[path]` | Workspace to analyze (positional). Default `.` (current directory). |
 | `--plugin <name\|auto>` | Plugin to use: `rust`, `python`, or `javascript` (covers TypeScript). `auto` (default) resolves the language automatically — see [Plugin resolution](#plugin-resolution). |
 | `--config <PATH \| KEY=VALUE>` | Repeatable. Load config from a file path, **or** override one setting inline (`KEY=VALUE`); inline values win. See [Config](#config). |
 | `--ignore <glob>` | Repeatable. Glob to exclude paths from analysis. Merged with config-file globs. |
-| `--local-only` | Skip any network-dependent step (e.g. `cargo metadata` dependency resolution). |
-| `-- <extra-args>` | Reserved: arguments after `--` are accepted but **not currently forwarded** to any built-in plugin (no built-in plugin consumes them yet). |
 
 ## `check`
 
-The linter. Analyzes the workspace, evaluates cycle rules and thresholds, prints
-diagnostics, and **exits non-zero** when any violation is found. Writes no files.
+The linter. Evaluates cycle rules, thresholds, and — with `--baseline` — regressions,
+prints diagnostics, and **exits non-zero** when any violation is found. Writes no files.
 
 ```
-code-split check [path] [options]
+code-split check [input] [options]
 ```
 
 | Flag | Meaning |
 |---|---|
 | `--threshold <file.METRIC=N>` | Hard limit on a per-file metric — a breach fails the check. Scope is always `file` (a single file). METRIC: `cyclomatic`, `cognitive`, `hk`, `fan_in`, `fan_out`, `loc`. Repeatable. See [ERRORS.md](ERRORS.md#threshold-scopes). |
 | `--cycle-rule <KIND=on\|off\|N>` | Configure a cycle check. KIND: `test-embed`, `mutual`, `chain`. Value: `on` (any cycle fails), `off` (ignored), or `N` (allow up to N cycles of that kind — e.g. `chain=7` forbids an 8th). Defaults: `test-embed` off, `mutual`/`chain` on. |
+| `--baseline <snapshot>` | Compare `[input]` (current) against this baseline snapshot (`.json` or `.html`) and switch to a **relative gate**: fail only on *new* violations vs the baseline; pre-existing ones are tolerated. See [`--baseline`](#--baseline-comparison). |
 | `--output-format <fmt>` | Diagnostics format: `human` (default), `json`, `github`, `sarif`. Use `github` for PR annotations, `sarif`/`json` for tooling. |
 | `--top <N>` | Report only the `N` worst violations (ranked worst-first) and suppress the rest. A reporting limit only — it does **not** change the exit code. Default: all. |
 | `--exit-zero` | Return exit code 0 even when violations exist. Useful in non-blocking CI checks. |
-| `--suggest-config` | After the findings, also print the project's current values as a ready-to-paste `code-split.toml` baseline (cycle counts + per-scope thresholds). Off by default; `human` output only. |
+| `--suggest-config` | After the findings, also print the project's current values as a ready-to-paste `code-split.toml` baseline (cycle counts + per-file thresholds). Off by default; `human` output only. |
 
 Every rule is binary: a cycle check or threshold is either **enabled** (a violation is
 reported and fails the check) or **disabled** (not checked). There is no warning tier —
@@ -89,6 +124,9 @@ code-split check ./api --plugin python \
 
 # CI gate with machine-readable annotations; also flag test-embed cycles
 code-split check --cycle-rule test-embed=on --output-format github
+
+# regression gate: fail if the current tree got worse than the baseline
+code-split check . --baseline .code-split/main.json
 
 # useful for AI agents: surface only the single worst violation to fix
 code-split check --top 1
@@ -117,7 +155,9 @@ threshold.file.cognitive  ·  CPX  ·  files graph
 
 The rule id and group are present in every `--output-format`: the block header
 (`human`), `"rule"` + `"group"` fields (`json`), the annotation title (`github`),
-and `ruleId` plus a fired-rules `tool.driver.rules` catalog (`sarif`).
+and `ruleId` plus a fired-rules `tool.driver.rules` catalog (`sarif`). With
+`--baseline`, the verdict (`improved` / `degraded` / `neutral`) and any regressions
+are included in the diagnostics too.
 
 ### Current-values config block (`--suggest-config`)
 
@@ -134,74 +174,139 @@ code-split check --suggest-config
 
 ## `report`
 
-Analyzes the workspace and writes artifacts into `--report-path`. The analyzed state
-is the **after** side. Pass `--before <snapshot>` to turn the HTML into a diff and add
-a verdict — **report and comparison in a single run**.
+Analyzes (or reads) `[input]` and writes artifacts. Without `--baseline` the HTML is a
+single-snapshot viewer; with `--baseline` it becomes a diff with a verdict. `report`
+always exits `0` — it produces artifacts, it does not gate.
 
 ```
-code-split report [path] [options]
+code-split report [input] [options]
 ```
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--format <kinds>` | `json,html` | Artifacts to emit: `json`, `html`. Comma-separated or repeatable (`--format json --format html`). |
-| `--before <file>` | — | Baseline snapshot (`.json`, or a prior `.html` report). Makes the HTML a diff (before = this file, after = this run) with a verdict, and names it `…-diff.html`. |
-| `--report-path <dir>` | `.code-split` | Output directory for all artifacts. |
-| `--json-name <tpl>` | `{ts}-{git-hash-3}.json` | Snapshot filename template (overrides `[output] json-name` in config). Placeholders — see [Name templates](#name-templates). |
-| `--html-name <tpl>` | `{ts}-{git-hash-3}.html` | HTML filename template (data embedded inline; overrides `[output] html-name`). With `--before`, `-diff` is inserted before `.html`. |
+| `--output.<fmt>.path <path>` | `json` + `html` in `.code-split/` | Which artifacts to emit and where. `<fmt>` is `json` or `html`. Repeatable, one per format. See [Output paths](#output-paths). |
+| `--baseline <snapshot>` | — | Baseline snapshot (`.json` or `.html`). Turns the HTML into a diff (baseline vs current) with a verdict, and names it `…-diff.html`. See [`--baseline`](#--baseline-comparison). |
 
 ```sh
-# snapshot + viewer, in .code-split/
-code-split report --format json,html
+# default: snapshot + viewer in .code-split/
+code-split report
 
-# report AND compare against a baseline, one command:
-# after = this analysis, before = the given snapshot, + verdict
-code-split report --format json,html --before .code-split/user-provisioning-20260526-004000.json
+# only the HTML viewer, to a fixed path
+code-split report --output.html.path=report.html
 
-# just the snapshot JSON, no viewer
-code-split report --format json
+# snapshot to stdout for a pipe, no HTML
+code-split report --output.json.path=stdout
+
+# render a diff viewer against a baseline (current = this run)
+code-split report . --baseline .code-split/main.json --output.html.path=diff.html
 ```
 
 The HTML is **self-contained**: the snapshot data is embedded inline, so the single file
 opens straight from disk (no server, no extra files). See [HTML viewer](#html-viewer).
 
-## `diff`
+## Output paths
 
-Compares two **existing** snapshots — no analysis — and writes a diff report. Use this
-in CI when both sides are already built (e.g. base-branch snapshot vs PR snapshot).
+`report` selects artifacts and their destinations through one flag family,
+`--output.<fmt>.path`, where `<fmt>` is `json` or `html`.
+
+**Which formats are written:**
+
+- No `--output.*` flag → the default set: **both** `json` and `html`, with default
+  names, into `.code-split/`.
+- One or more `--output.<fmt>.path` given → **exactly** the listed formats, nothing else.
+
+**The `.path` value:**
+
+- A file path, relative to the cwd or absolute. The directory is part of the path.
+- Supports [name template](#name-templates) placeholders (`{ts}`, `{git-hash}`, …),
+  which are expanded before the file is written.
+- The special value `stdout` (or `-`) writes that artifact to the stdout stream instead
+  of a file — useful for piping the JSON snapshot in CI.
+
+**Defaults** (when no `--output.*` is given):
 
 ```
-code-split diff --before <a.json> --after <b.json> [options]
+.code-split/{ts}-{git-hash-3}.json
+.code-split/{ts}-{git-hash-3}.html
 ```
 
-| Flag | Default | Meaning |
+With `--baseline`, the HTML default gains a `-diff` marker:
+`.code-split/{ts}-{git-hash-3}-diff.html`. The JSON artifact is always the snapshot of
+the current input (reusable as a future baseline), never a diff.
+
+To pin destinations project-wide instead of passing flags every time, set them in
+config:
+
+```toml
+[output.json]
+path = "dist/{project-dir}-{ts}.json"
+
+[output.html]
+path = "dist/{project-dir}-{ts}.html"
+```
+
+### Name templates
+
+`--output.<fmt>.path` values accept placeholders:
+
+| Placeholder | Expands to | Example |
 |---|---|---|
-| `--before <file>` | required | Baseline snapshot (`.json`, or a prior `.html` report). |
-| `--after <file>` | required | New snapshot (`.json`, or a prior `.html` report). |
-| `--format <kinds>` | `html` | Artifacts to emit: `html`, `json`. Comma-separated or repeatable. JSON is the machine-readable diff for CI parsing. |
-| `--report-path <dir>` | `.code-split` | Output directory. |
-| `--html-name <name>` | `index.html` | HTML diff filename. |
-| `--json-name <name>` | `diff.json` | JSON diff filename. |
+| `{project-dir}` | The analyzed directory's basename, lowercased, non-alphanumerics collapsed to `-`. | `user-provisioning` |
+| `{ts}` | Local timestamp, `YYYYMMDD-HHMMSS`. | `20260526-114144` |
+| `{git-hash}` | The 12-char short commit hash (zeros if not a git repo). | `a3f9c21b4d5e` |
+| `{git-hash-N}` | The first `N` chars of the commit hash. | `{git-hash-3}` → `a3f` |
+
+So the default `{ts}-{git-hash-3}.json` yields `20260526-114144-a3f.json`. When `[input]`
+is a **snapshot**, `{git-hash}` / `{ts}` are read from the snapshot's embedded metadata —
+the commit and time of the original analysis — not the current repo or clock.
+
+The destination resolves as **`--output.<fmt>.path` flag › `[output.<fmt>] path` in
+`code-split.toml` › built-in default**.
+
+## `--baseline` (comparison)
+
+Both commands accept `--baseline <snapshot>` (a `.json` snapshot or a prior `.html`
+report). It names the **reference point** to compare the current `[input]` against:
+
+| Side | Source | UI label |
+|---|---|---|
+| **baseline** | `--baseline <snapshot>` | Baseline |
+| **current** | the positional `[input]` (analyzed now, or a snapshot) | Current |
+
+The comparison yields a top-level **verdict** — `improved` / `degraded` / `neutral` —
+and a per-node state in the diff viewer: **added**, **removed**, **affected** (present in
+both, but touching an added/removed edge), or **unchanged**.
+
+- In `report`, `--baseline` turns the HTML into a diff viewer (baseline ↔ current) and
+  embeds the verdict; the file is named `…-diff.html`.
+- In `check`, `--baseline` switches the gate to **relative** mode: it fails only on
+  *new* violations (those not already present in the baseline under the same rules), so
+  pre-existing ones are tolerated. The verdict is `degraded` if there are new violations,
+  `improved` if some were resolved and none added, else `neutral`. With `--output-format
+  json` the verdict and the new violations are the machine output.
 
 ```sh
-# HTML diff for humans
-code-split diff --before main.json --after pr.json
+# human-facing diff
+code-split report . --baseline .code-split/main.json --output.html.path=diff.html
 
-# JSON diff for CI, read the verdict
-code-split diff --before main.json --after pr.json --format json
-cat .code-split/diff.json | jq '.verdict'
+# machine-readable verdict for CI
+code-split check . --baseline .code-split/main.json --output-format json
 
 # typical PR flow
-code-split report --format json --json-name pr.json   # on the PR
+code-split report . --output.json.path=.code-split/pr.json    # on the PR
 git stash; git checkout main
-code-split report --format json --json-name main.json  # on base
+code-split report . --output.json.path=.code-split/main.json   # on base
 git checkout -; git stash pop
-code-split diff --before .code-split/main.json --after .code-split/pr.json
+code-split report .code-split/pr.json --baseline .code-split/main.json --output.html.path=diff.html
 ```
+
+Because the input is polymorphic, the last step compares **two existing snapshots**
+without re-analyzing anything — the JSON/HTML snapshot stands in for the code.
 
 ## Plugin resolution
 
-With `--plugin auto` (the default), the plugin is resolved in this order:
+With `--plugin auto` (the default), the plugin is resolved in this order (applies only
+when `[input]` is a directory):
 
 1. **Explicit `--plugin <name>`** on the command line (any value other than `auto`) wins.
 2. Otherwise the **`plugin` key in the config file** (`code-split.toml` /
@@ -213,30 +318,6 @@ With `--plugin auto` (the default), the plugin is resolved in this order:
 4. If **more than one** marker matches, `code-split` errors and asks you to disambiguate
    with an explicit `--plugin`. If **no** marker matches, it errors with the same hint.
 
-## Name templates
-
-`--json-name` / `--html-name` accept placeholders:
-
-| Placeholder | Expands to | Example |
-|---|---|---|
-| `{project-dir}` | The analyzed directory's basename, lowercased, non-alphanumerics collapsed to `-`. | `user-provisioning` |
-| `{ts}` | Local timestamp, `YYYYMMDD-HHMMSS`. | `20260526-114144` |
-| `{git-hash}` | The 12-char short commit hash (zeros if not a git repo). | `a3f9c21b4d5e` |
-| `{git-hash-N}` | The first `N` chars of the commit hash. | `{git-hash-3}` → `a3f` |
-
-So the default `{ts}-{git-hash-3}.json` yields `20260526-114144-a3f.json`.
-
-The name is resolved as **`--json-name` flag › `[output] json-name` in
-`code-split.toml` › built-in default**. To pin a project-wide template
-(e.g. include the project name), set it in config instead of passing the flag
-every time:
-
-```toml
-[output]
-json-name = "{project-dir}-{ts}.json"   # → user-provisioning-20260526-114144.json
-# html-name = "{project-dir}-{ts}.html"
-```
-
 ## HTML viewer
 
 The HTML report is **self-contained**: the viewer app (Dagre graph layout, pan/zoom,
@@ -246,18 +327,23 @@ ADP / SRP / OCP / LSP / ISP / DIP / DRY / KISS / LoD / MISU / CoI / YAGNI preset
 the one file. External library nodes render in a distinct amber colour with dashed
 edges. No network, no telemetry — `open` it straight from disk.
 
-The data is embedded as `<script type="application/json">` tags (`cs-before` / `cs-after`),
-which the viewer reads on load and which `--before` / `diff` can extract back out — so an
-`.html` report is interchangeable with a `.json` snapshot as a diff input.
+The data is embedded as `<script type="application/json">` tags (`cs-baseline` /
+`cs-current`), which the viewer reads on load and which `--baseline` can extract back out —
+so an `.html` report is interchangeable with a `.json` snapshot as a comparison input.
 
 | Invocation | Output file | Mode | Embedded data |
 |---|---|---|---|
-| `report --format html` | `{ts}-{git-hash-3}.html` | review (single snapshot) | this run |
-| `report --format html --before A` | `{ts}-{git-hash-3}-diff.html` | diff + verdict | `A` and this run |
-| `diff --before A --after B` | `index.html` | diff + verdict | `A` and `B` |
+| `report` | `{ts}-{git-hash-3}.html` | review (single snapshot) | this run (`cs-current`) |
+| `report --baseline A` | `{ts}-{git-hash-3}-diff.html` | diff + verdict | `A` (`cs-baseline`) and this run (`cs-current`) |
 
-In the viewer, the **↑ change** / **↑ compare…** buttons swap in a different snapshot from
-disk — accepting either a `.json` snapshot or a `.html` report.
+In the viewer, two buttons swap in a different snapshot from disk (each accepts either a
+`.json` snapshot or an `.html` report): **↑ Replace current** changes the evaluated
+snapshot, **↑ Set baseline** loads a reference to diff against.
+
+In a diff, each node is coloured by its state — **added** (in current, not in baseline),
+**removed** (in baseline, gone from current), **affected** (in both, unchanged itself but
+touching an added/removed edge), or **unchanged** — while the top-level **verdict**
+(`improved` / `degraded` / `neutral`) summarizes the whole diff.
 
 Per-node modal: clicking a node opens a fullscreen card; for project files its
 field list includes a **Source** link to the file on the project's git host
@@ -271,7 +357,7 @@ source on the git host in a new tab.
 
 Settings merge from several sources; **higher priority wins**:
 
-1. CLI flags (`--threshold`, `--ignore`, …)
+1. CLI flags (`--threshold`, `--ignore`, `--output.<fmt>.path`, …)
 2. `--config KEY=VALUE` inline overrides
 3. `--config <file>`
 4. `code-split.toml` (cwd, then workspace root)
@@ -284,6 +370,9 @@ The inline form takes a dotted key into the config schema:
 # tighten one rule in CI without editing code-split.toml
 code-split check --config rules.thresholds.file.cognitive=25 \
                  --config rules.cycles.test-embed=true
+
+# override an output destination inline
+code-split report --config output.html.path=dist/report.html
 ```
 
 `--ignore` globs are **merged** (union) with config globs; cycle rules and thresholds
@@ -293,8 +382,8 @@ code-split check --config rules.thresholds.file.cognitive=25 \
 
 | Code | Meaning |
 |---|---|
-| 0 | `check` passed (no violations, or `--exit-zero`); `report` / `diff` completed successfully. |
-| 1 | Any failure — a `check` violation (cycle or threshold, without `--exit-zero`) **or** a runtime error (IO / plugin failure, ambiguous-or-undetected plugin under `auto`, malformed config). |
+| 0 | `check` passed (no violations, or `--exit-zero`); `report` completed successfully. |
+| 1 | Any failure — a `check` violation (cycle, threshold, or regression, without `--exit-zero`) **or** a runtime error (IO / plugin failure, ambiguous-or-undetected plugin under `auto`, malformed config, analysis flags passed with a snapshot input). |
 | 2 | Argument-parsing error (unknown flag, missing required option, bad value) — emitted by the CLI parser before any work runs. |
 
 `check` does **not** use a distinct exit code for "violation found" vs "tool
@@ -315,21 +404,6 @@ Built-in (no install needed):
   `uses` edges, and one `external` node per top-level package.
 - `javascript` — tree-sitter-javascript / tree-sitter-typescript; one plugin handles
   `.js`, `.jsx`, `.ts`, `.tsx`. Same file + external model as Python.
-
-### Rust plugin: offline mode
-
-The built-in `rust` plugin honours the **common** `--local-only` flag (there are no
-Rust-specific flags). `--local-only` passes `--no-deps` to `cargo metadata`, so the
-run is fully offline — external dependencies are not enumerated. The file graph and
-per-file complexity metrics are still produced.
-
-```sh
-# default: full file graph with external library nodes
-code-split check . --plugin rust
-
-# offline: skip dependency resolution
-code-split report . --plugin rust --local-only
-```
 
 All plugins are built into the `code-split` binary — there is nothing to install and no
 external plugin processes. Adding a language means adding a built-in plugin to the binary.

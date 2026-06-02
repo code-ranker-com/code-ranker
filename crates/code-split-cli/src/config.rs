@@ -19,17 +19,23 @@ pub struct Config {
     pub output: OutputConfig,
 }
 
-/// Default output artifact names. Overridden by the `--json-name` / `--html-name`
-/// CLI flags; when neither config nor flag is set, built-in defaults are used.
-/// Templates accept the same placeholders as the CLI flags: `{project-dir}`,
-/// `{ts}`, `{git-hash}`, `{git-hash-N}`.
-#[derive(Debug, Deserialize, Default)]
+/// Per-format output config: `[output.json]` / `[output.html]`, each with a
+/// `path` template and an optional `enabled` flag. Overridden by the
+/// `--output.<fmt>` / `--output.<fmt>.path` CLI flags.
+#[derive(Debug, Clone, Deserialize, Default)]
 #[serde(default)]
 pub struct OutputConfig {
-    #[serde(rename = "json-name", alias = "json_name")]
-    pub json_name: Option<String>,
-    #[serde(rename = "html-name", alias = "html_name")]
-    pub html_name: Option<String>,
+    pub json: OutputArtifact,
+    pub html: OutputArtifact,
+}
+
+/// One artifact's destination and on/off state. `path` accepts the placeholders
+/// `{project-dir}`, `{ts}`, `{git-hash}`, `{git-hash-N}`, or `stdout`/`-`.
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(default)]
+pub struct OutputArtifact {
+    pub path: Option<String>,
+    pub enabled: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -354,6 +360,10 @@ fn apply_inline_overrides(cfg: &mut Config, entries: &[&str]) -> Result<()> {
                 .ignore
                 .paths
                 .extend(value.split(',').map(|s| s.trim().to_string())),
+            "output.json.path" => cfg.output.json.path = Some(value.to_string()),
+            "output.html.path" => cfg.output.html.path = Some(value.to_string()),
+            "output.json.enabled" => cfg.output.json.enabled = Some(parse_on_off(value)?),
+            "output.html.enabled" => cfg.output.html.enabled = Some(parse_on_off(value)?),
             _ if key.strip_prefix("rules.cycles.").is_some() => {
                 let kind = key.strip_prefix("rules.cycles.").unwrap();
                 set_cycle(cfg, kind, parse_cycle_rule(value)?)?;
@@ -1347,19 +1357,41 @@ cognitive = 30
     }
 
     #[test]
-    fn config_toml_parses_output_names() {
+    fn config_toml_parses_output_paths() {
         let src = "
-[output]
-json-name = \"{project-dir}-{ts}.json\"
-html_name = \"custom.html\"
+[output.json]
+path = \"{project-dir}-{ts}.json\"
+enabled = false
+
+[output.html]
+path = \"custom.html\"
 ";
         let cfg: Config = toml::from_str(src).expect("parse config");
-        assert_eq!(cfg.output.json_name.as_deref(), Some("{project-dir}-{ts}.json"));
-        // snake_case alias is accepted too.
-        assert_eq!(cfg.output.html_name.as_deref(), Some("custom.html"));
+        assert_eq!(
+            cfg.output.json.path.as_deref(),
+            Some("{project-dir}-{ts}.json")
+        );
+        assert_eq!(cfg.output.json.enabled, Some(false));
+        assert_eq!(cfg.output.html.path.as_deref(), Some("custom.html"));
+        assert_eq!(cfg.output.html.enabled, None, "unset enabled stays None");
         // Unset → None (caller falls back to the built-in default).
         let empty: Config = toml::from_str("").unwrap();
-        assert!(empty.output.json_name.is_none());
+        assert!(empty.output.json.path.is_none());
+    }
+
+    #[test]
+    fn inline_config_overrides_output_path_and_enabled() {
+        let mut cfg = Config::default();
+        apply_inline_overrides(
+            &mut cfg,
+            &[
+                "output.json.path=dist/snap.json",
+                "output.html.enabled=false",
+            ],
+        )
+        .unwrap();
+        assert_eq!(cfg.output.json.path.as_deref(), Some("dist/snap.json"));
+        assert_eq!(cfg.output.html.enabled, Some(false));
     }
 
     #[test]

@@ -27,33 +27,35 @@
 
 ### 1.1 Architectural Vision
 
-Code Split is a four-step pipeline: **extract → visualize → (user
-modifies) → diff**. The platform is built around a single portable
+Code Split is a pipeline: **extract → evaluate / visualize → (user
+modifies) → compare**. The platform is built around a single portable
 JSON artifact format that decouples the extraction layer (plugins) from
-the consumption layer (report generator, diff engine). Either layer can
-evolve independently as long as the schema version is respected.
+the consumption layer (the `check` linter and `report` artifact writer).
+Either layer can evolve independently as long as the schema version is
+respected.
 
 At P1 the platform ships three components:
 
 - **Rust Plugin** (`code-split-rust`): a Cargo workspace analyzer built
   on `syn` (syntactic analysis). It builds the Rust module graph and
-  collapses it to a single **file graph**; outputs a single snapshot
-  `.json` file per run
-- **Report Generator** (`code-split report`): built into `code-split-cli`;
-  re-analyzes the workspace and writes artifacts — a snapshot `.json`
-  and/or a single self-contained offline HTML viewer (optionally a diff
-  view against a `--before` baseline in the same run); all JS/CSS assets
-  embedded in the binary via `include_str!`
-- **Diff Engine** (`code-split diff`): built into `code-split-cli`; compares
-  two existing snapshot files (no analysis); produces an interactive HTML
-  diff report (client-side layout, a single Files view, one shared
-  union layout where the Before/After toggle is a CSS visibility flip so
-  common nodes never move) and/or a
-  machine-readable JSON diff with an `improved` / `degraded` / `neutral` verdict
+  collapses it to a single **file graph**; produces a single snapshot
+  per run
+- **Check** (`code-split check`): built into `code-split-cli`; analyzes (or
+  reads) the input, evaluates cycle rules and thresholds, prints diagnostics,
+  and exits non-zero on violation. With `--baseline <snapshot>` it switches
+  to a **relative gate** — failing only on *new* violations vs the baseline —
+  and emits a verdict (`improved` / `degraded` / `neutral`). Writes no files
+- **Report** (`code-split report`): built into `code-split-cli`; analyzes (or
+  reads) the input and writes artifacts — a snapshot `.json` and/or a single
+  self-contained offline HTML viewer; all JS/CSS assets embedded in the binary
+  via `include_str!`. With `--baseline <snapshot>` the HTML becomes a
+  baseline↔current diff with a verdict (one shared union layout where the
+  Baseline/Current toggle is a CSS visibility flip so common nodes never move),
+  named `…-diff.html`
 
 The three pillars of the design are:
 
-1. **JSON-first artifact contract** — the single snapshot file is the
+1. **JSON-first artifact contract** — the single snapshot is the
    sole handoff between all components; any plugin can feed any
    consumer
 2. **Offline-first** — every P1 component runs without network access;
@@ -72,20 +74,19 @@ The three pillars of the design are:
 | `cpt-code-split-fr-rust-plugin` | Implemented by `code-split-syn`, orchestrated in-process by `code-split-cli`'s `plugin::rust` module, which collapses the module graph to a file graph. Outputs a single snapshot `.json`. |
 | `cpt-code-split-fr-lang-plugins` (Python, JS/TS) | Python: `plugin::python` using `tree-sitter-python`. JS/TS: `plugin::javascript` using `tree-sitter-javascript` / `tree-sitter-typescript`, supporting both ESM and CommonJS. Both emit `File` nodes + file→file `uses` edges + `External` library nodes, and annotate per-file complexity via `code-split-complexity`. |
 | `cpt-code-split-fr-file-graph` | All plugins emit a single file graph: `File` nodes with `uses` / `reexports` edges between files, plus `External` library nodes at depth 1 reached by `uses` edges flagged `external: true`. The Rust plugin derives it by collapsing its module graph; Python/JS/TS build it directly from import resolution. |
-| `cpt-code-split-fr-local-only` | `--local-only` passes `--no-deps` to `cargo metadata`; external dependencies are not enumerated. The file graph and per-file complexity are still produced. |
-| `cpt-code-split-fr-html-report` | Built-in Rust renderer in `code-split-cli`: `report` re-analyzes the workspace, then renders an HTML template with inline assets alongside the JSON snapshot. |
+| `cpt-code-split-fr-html-report` | Built-in Rust renderer in `code-split-cli`: `report` analyzes (or reads) the input, then renders an HTML template with inline assets alongside the JSON snapshot. |
 | `cpt-code-split-fr-node-sorting` | Node weight (fan-in + fan-out) is computed at render time and embedded in the HTML; client-side JavaScript sorts the table on user interaction. |
-| `cpt-code-split-fr-graph-diff` | Built-in diff in `code-split-cli`: reads two snapshot files, performs node/edge set difference on the file graph, computes weight delta per node. |
-| `cpt-code-split-fr-diff-html-report` | The diff data structure is rendered into a self-contained HTML template with color-coded before/after views; all assets inlined. |
-| `cpt-code-split-fr-diff-text-report` | The diff data structure is serialized to a machine-readable JSON diff (`diff --format json`) with counts, top-delta nodes, and the `improved` / `degraded` / `neutral` verdict for CI parsing. |
+| `cpt-code-split-fr-graph-diff` | Browser-side diff in the HTML viewer (`diff.js`), plus `compare_snapshots()` in `code-split-core` for the `check --baseline` regression gate: node/edge set difference on the file graph, weight delta per node, `affected` propagation. |
+| `cpt-code-split-fr-diff-html-report` | With `report --baseline <snapshot>` the viewer becomes a self-contained diff with color-coded baseline/current views and a verdict; all assets inlined; the file is named `…-diff.html`. |
+| `cpt-code-split-fr-diff-text-report` | `check --baseline <snapshot> --output-format json` emits the machine-readable verdict (`improved` / `degraded` / `neutral`) and the list of new violations for CI parsing. |
 
 #### NFR Allocation
 
 | NFR ID | Summary | Allocated To | Design Response |
 |--------|---------|--------------|-----------------|
-| `cpt-code-split-nfr-offline` | Zero outbound network calls | All components | Rust plugin: no HTTP; `code-split report` / `code-split diff`: HTML assets embedded in binary, no CDN references in generated output. |
-| `cpt-code-split-nfr-performance` | ≤ 30 s @ 50k LOC (plugin); ≤ 5 s @ 10k nodes (report/diff) | `code-split-syn`, `code-split-complexity`, `code-split-cli` | Syntactic analysis + the module→file collapse run in seconds (no rust-analyzer); report/diff subcommands process JSON in a single pass. |
-| `cpt-code-split-nfr-portability` | JSON artifacts stable within a major version | All components | Schema version field in `meta`; diff tool aborts on mismatch; additive-only changes within a major version. |
+| `cpt-code-split-nfr-offline` | Zero outbound network calls | All components | Rust plugin: no HTTP; `code-split check` / `code-split report`: HTML assets embedded in binary, no CDN references in generated output. |
+| `cpt-code-split-nfr-performance` | ≤ 30 s @ 50k LOC (plugin); ≤ 5 s @ 10k nodes (check/report) | `code-split-syn`, `code-split-complexity`, `code-split-cli` | Syntactic analysis + the module→file collapse run in seconds (no rust-analyzer); `check` / `report` process a snapshot in a single pass. |
+| `cpt-code-split-nfr-portability` | JSON artifacts stable within a major version | All components | Schema version field in `meta`; consumers abort on mismatch; additive-only changes within a major version. |
 
 ### 1.3 Architecture Layers
 
@@ -102,30 +103,27 @@ flowchart TD
         cx --> core
     end
 
-    core -->|"snapshot.json (one `files` graph)"| artifacts["JSON Artifact<br/>(snapshot dir)"]
+    core -->|"snapshot (one `files` graph)"| artifacts["In-memory or JSON snapshot"]
 
-    subgraph step2["Step 2 — Report Generator (built-in Rust)"]
+    subgraph consume["Consumers (built-in Rust)"]
+        check["code-split check<br/>(code-split-cli)"]
         report["code-split report<br/>(code-split-cli)"]
     end
 
-    subgraph step4["Step 4 — Diff Engine (built-in Rust)"]
-        diff["code-split diff<br/>(code-split-cli)"]
-    end
-
+    artifacts --> check
     artifacts --> report
-    artifacts --> diff
-    report -->|"{ts}-{git-hash-3}.html + snapshot.json"| html_report["HTML Report"]
-    diff -->|"index.html / diff.json"| diff_report["Diff Report"]
+    check -->|"diagnostics + exit code (verdict with --baseline)"| gate["CI gate"]
+    report -->|"{ts}-{git-hash-3}.{json,html} (-diff.html with --baseline)"| html_report["Snapshot + HTML viewer"]
 ```
 
 | Layer | Responsibility | Technology |
 |-------|---------------|------------|
 | Plugin — Presentation | Argument parsing, output routing, artifact writing | `clap`, `anyhow` (Rust) |
-| Plugin — Application | Orchestrate analyzers, collapse modules→files, write the JSON snapshot | `code-split-cli` (Rust) |
+| Plugin — Application | Orchestrate analyzers, collapse modules→files, assemble the snapshot | `code-split-cli` (Rust) |
 | Plugin — Domain | Graph types, JSON schema, builder API | `code-split-core`, `petgraph`, `serde` (Rust) |
 | Plugin — Infrastructure | Syntactic analysis, per-file complexity metrics | `code-split-syn`, `code-split-complexity`, `syn`, `rust-code-analysis` (Rust) |
-| Report Generator | Re-analyze workspace, write snapshot JSON + offline HTML viewer | `code-split-cli` (Rust), assets embedded via `include_str!` |
-| Diff Engine | Compare two existing snapshots, produce interactive HTML diff + JSON diff | `code-split-cli` (Rust), Graphviz WASM bundled in binary |
+| Check | Analyze (or read) input, evaluate rules and (with `--baseline`) regressions, print diagnostics, exit non-zero on violation | `code-split-cli` (Rust) |
+| Report | Analyze (or read) input, write snapshot JSON + offline HTML viewer (a diff with `--baseline`) | `code-split-cli` (Rust), Graphviz WASM bundled in binary, assets embedded via `include_str!` |
 
 ## 2. Principles & Constraints
 
@@ -135,11 +133,11 @@ flowchart TD
 
 - [x] `p1` - **ID**: `cpt-code-split-principle-json-contract`
 
-The single JSON snapshot file (one `files` graph plus metadata) is the
+The single JSON snapshot (one `files` graph plus metadata) is the
 ONLY handoff between the plugin layer and the consumer layer. No
-in-process coupling between the analysis crates and the report/diff
+in-process coupling between the analysis crates and the report
 rendering code is permitted. This contract is versioned via
-`schema_version`; the diff tool aborts on a version mismatch.
+`schema_version`; consumers abort on a version mismatch.
 
 #### Offline-First
 
@@ -177,7 +175,7 @@ library usage, which would otherwise drown out real structural signal.
 
 - [x] `p1` - **ID**: `cpt-code-split-principle-pluggable`
 
-The report generator and diff engine are schema consumers, not
+The `check` linter and `report` artifact writer are schema consumers, not
 language-aware tools. Adding a new language plugin MUST NOT require
 changes to any consumer tool. All language-specific knowledge lives
 exclusively in the plugin.
@@ -223,15 +221,15 @@ in `crates/code-split-core/schemas/graph.schema.json`.
 | GraphStats | Optional summary attached to the `files` graph after all annotations. Mirrors the `Complexity` node structure with averages: top-level `cyclomatic`, `cognitive`; sub-objects `coupling?` (`AvgCoupling`), `maintainability?`, `loc?`, `halstead?`. Zero-valued scalar fields and absent sub-objects are omitted. Percentiles are not stored — the viewer computes them client-side from raw node data. Populated by `annotate_stats()` in `code-split-core`. | `crates/code-split-core/src/graph.rs`, `crates/code-split-core/src/stats.rs` |
 | Snapshot | A single `.json` file combining `workspace` (cwd), `target` (analyzed project), `plugin`, `config_file?` (path of loaded config file, omitted when none), `roots` (named path prefixes; pruned to only those actually used to shorten a node path, so e.g. a JS/TS/Python snapshot carries no Rust toolchain roots), `versions`, `git`, `timings`, and a `graphs` object with a single key: `files`. Serialized via `to_canonical_string_pretty` — **canonical JSON**: every object key alphabetical, `nodes`/`edges` arrays sorted by stable key — so unchanged code re-serializes byte-for-byte (no `HashMap`-order churn). | `crates/code-split-core/src/snapshot.rs` |
 | StageTime | Per-stage timing entry: `stage` (name), `ms` (elapsed milliseconds), `detail` (human summary). Stored in `Snapshot.timings` in execution order. | `crates/code-split-core/src/snapshot.rs` |
-| GraphDiff | Computed from two `Snapshot`s: per-level sets of added/removed nodes and edges, weight-delta per node, coupling direction verdict | `crates/code-split-cli/src/main.rs` |
+| CompareSummary | Computed from two `Snapshot`s (baseline, current) by `compare_snapshots`: added/removed/affected/unchanged counts for nodes and edges on the `files` graph, plus cycle/SCC counts per side. Drives the `check --baseline` regression gate. | `crates/code-split-core/src/diff.rs` |
 
 **Relationships**:
 
 - `Node` → `Node`: linked via `Edge`.
 - `Graph` → `Node`/`Edge`: ownership; nodes carry an optional `parent`
   pointing to the containing node.
-- `GraphDiff` is computed from two `Snapshot`s and owns no graph data —
-  it references node IDs only.
+- `CompareSummary` is computed from two `Snapshot`s and owns no graph data —
+  it carries only counts.
 
 ### 3.2 Component Model
 
@@ -261,11 +259,11 @@ Modules beyond graph types:
   than 3rd-party library breadth. The `loc` factor is the same one shown
   in `complexity.loc` (`loc.source`). With no loc or no internal
   in/out coupling, `hk` is 0.
-- **`diff.rs`** — `compare_snapshots(before, after) -> CompareSummary`:
+- **`diff.rs`** — `compare_snapshots(baseline, current) -> CompareSummary`:
   mirrors `computeDiff()` from `diff.js`; computes added/removed/affected/
   unchanged counts for nodes and edges in the file graph, then propagates
-  `affected` to unchanged nodes adjacent to changed edges. Used by
-  `code-split diff --format json`.
+  `affected` to unchanged nodes adjacent to changed edges. Used by the
+  `check --baseline` regression gate.
 - **`snapshot.rs`** — snapshot types plus path relativization
   (`relativize_graphs` / `rewrite_ids`, mapping absolute paths to
   `{target}` / `{cargo}` / … tokens) and **canonical serialization**
@@ -440,9 +438,15 @@ functions, arrow functions, and methods in the file; see §3.2
 - [x] `p1` - **ID**: `cpt-code-split-component-cli`
 
 The single user-facing binary `code-split`. There is no default command —
-a bare invocation prints help. `main()` owns three subcommands:
+a bare invocation prints help. `main()` owns two subcommands — `check` and
+`report` — both taking a single polymorphic positional `[input]` (a directory
+to **analyze**, or a `.json`/`.html` snapshot to **read**, via
+`analyze_input` → `is_snapshot_input`):
 
-The shared analysis core (used by both `check` and `report`) loads layered
+The shared analysis core (`analyze_input`, used by both `check` and `report`)
+either reads an embedded snapshot (`.json`/`.html` input — `analyze_from_snapshot`,
+which rejects `--plugin`/`--ignore` since there is nothing to analyze) or
+analyzes a directory (`analyze_directory`). For a directory it loads layered
 config (`config.rs` — code-split.toml / Cargo.toml metadata / CLI flags);
 resolves the plugin name (CLI `--plugin` → config `plugin` → marker
 auto-detect, all under `auto`); invokes the selected built-in plugin
@@ -482,41 +486,39 @@ config filters: `config::apply_ignore` (path globs + `tests` /
   as paste-ready `code-split.toml` blocks for baselining (off by default;
   machine formats omit it). Honours `--top <N>` (report only the N worst) and exits
   non-zero on any violation; `--exit-zero` suppresses the non-zero exit. Writes no
-  files.
-- **`report`**: runs the shared analysis core (re-analyzing the workspace),
-  then writes artifacts into `--report-path` (default `.code-split`) per
-  `--format` (`json`, `html`; default both). The JSON snapshot records
-  `config_file` when a config was found; default name `{ts}-{git-hash-3}.json`.
-  Names are templates (`render_name`) with placeholders `{project-dir}`,
-  `{ts}`, `{git-hash}` (12-char short commit) and `{git-hash-N}` (first N
-  chars), resolved as **`--json-name` flag › `[output] json-name` config ›
-  built-in default**. The HTML viewer template and all assets
-  (CSS, JS) are embedded in the binary via `include_str!` from
-  `crates/code-split-cli/src/assets/`, and the snapshot data is embedded
-  inline in the same file as `cs-before` / `cs-after` JSON `<script>` tags;
-  default name `{ts}-{git-hash-3}.html` (`--html-name` / `[output] html-name`).
-  With
-  `--before <snapshot>` the HTML becomes a diff view (after = this run, before
-  = the file) plus a verdict, named `{ts}-{git-hash-3}-diff.html` (`-diff`
-  inserted before `.html`). `--before` accepts a `.json` snapshot or a prior
-  `.html` report (the embedded snapshot is extracted via `load_snapshot_any`).
-- **`diff`**: reads two **existing** snapshot files (`--before` / `--after`,
-  no analysis), computes a structured diff via
-  `code_split_core::compare_snapshots()`, and emits per `--format`
-  (default `html`):
-  - JSON diff (`--format json`, default name `diff.json`): `{ identical,
-    before, after, files }` — the `files` graph has
-    `{ nodes: { added, removed, affected, unchanged }, edges: { … },
-    cycle_nodes_before, cycle_nodes_after, sccs_before, sccs_after }`, plus
-    the `improved` / `degraded` / `neutral` verdict.
-  - Interactive HTML viewer (`--format html`): all JS/CSS assets
-    (`graphviz.umd.js`, `snarkdown.umd.js`, `diff.js`, `layout.js`, etc.) are
-    embedded via `include_str!` constants (`ASSET_GV`, `ASSET_SNARKDOWN`,
-    `ASSET_DIFF`, …); the snapshots
-    are also embedded **inline** as `<script type="application/json">` tags
-    (`cs-before` / `cs-after`), which the viewer reads on load. The single
-    `.html` file is fully self-contained — no relative-path references, no
-    `fetch`, so it opens straight from `file://`.
+  files. With `--baseline <snapshot>` (`.json`/`.html`, loaded via `load_snapshot_any`)
+  the gate switches to **relative** mode: it recomputes the baseline's violations under
+  the current rules and fails only on *new* ones (those not already present under the
+  same `(rule, location)` signature) — pre-existing violations are tolerated. The
+  comparison yields a verdict (`degraded` if any new violations, `improved` if some were
+  resolved and none added, else `neutral`), included in the diagnostics (a trailing line
+  in `human`, a wrapping `{ verdict, violations }` object in `json`).
+- **`report`** (`run_report`): runs the shared analysis core (analyzing the
+  directory or reading the snapshot), then writes artifacts. Which formats are
+  written, and where, is decided by one flag family, `--output.<fmt>[.path]`
+  (`<fmt>` = `json` / `html`), backed by `want_format`: a `--output.<fmt>`
+  presence flag or a `--output.<fmt>.path` selects that format; the
+  `[output.<fmt>]` config (`enabled`, else a configured `path`) is consulted
+  next; if **nothing** selects anything, **both** are written. Each `.path`
+  is a name template, or `stdout`/`-` to write to the stdout stream
+  (`is_stream` / `write_artifact`). The JSON snapshot records `config_file`
+  when a config was found. Names are templates (`render_name`) with
+  placeholders `{project-dir}`, `{ts}`, `{git-hash}` (12-char short commit)
+  and `{git-hash-N}` (first N chars), resolved as **`--output.<fmt>.path` flag
+  › `[output.<fmt>] path` config › built-in default**
+  (`DEFAULT_JSON_PATH` / `DEFAULT_HTML_PATH` = `.code-split/{ts}-{git-hash-3}.{json,html}`).
+  The HTML viewer template and all assets (CSS, JS) are embedded in the binary
+  via `include_str!` from `crates/code-split-cli/src/assets/`, and the snapshot
+  data is embedded inline in the same file as `cs-baseline` / `cs-current` JSON
+  `<script>` tags (`render_html_viewer`). With `--baseline <snapshot>` the HTML
+  becomes a diff view (current = this run, baseline = the file) plus a verdict,
+  and its name gains a `-diff` marker before `.html`
+  (`{ts}-{git-hash-3}-diff.html`); the JSON snapshot is always the current
+  input (never a diff). `--baseline` accepts a `.json` snapshot or a prior
+  `.html` report — the embedded snapshot is extracted via `load_snapshot_any`
+  (preferring the `cs-current` tag, falling back to `cs-baseline`). `report`
+  always exits `0`. The single `.html` file is fully self-contained — no
+  relative-path references, no `fetch`, so it opens straight from `file://`.
 
 **Responsibility boundary**: holds no domain logic; no analysis, no
 rendering, no rules. Its sole job is argument parsing, plugin
@@ -526,22 +528,23 @@ dispatch, and artifact I/O routing.
 
 - [x] `p1` - **ID**: `cpt-code-split-component-html-assets`
 
-Static assets for the `code-split report` and `code-split diff` HTML output,
-embedded into the `code-split` binary via `include_str!`. Files:
+Static assets for the `code-split report` HTML output (a single-snapshot viewer,
+or a baseline↔current diff with `--baseline`), embedded into the `code-split`
+binary via `include_str!`. Files:
 
 | File | Purpose |
 |------|---------|
-| `index.html` | Shell template with a single Files view section and the diff/review summary table. Header: `.header-brand` ("CODE SPLIT"), `#title` (`<target> — diff/review`), two `data-snap` metadata slots — the **after** (right) is the primary snapshot (always present, not removable, `↑ change`); the **before** (left) an optional baseline (editable `↑ compare…` / `↑ change`, removable via `#btn-remove-before`); review (no baseline) leaves the before slot an empty editable placeholder, with `.snap-active` marking whichever side is shown. Nav: `[data-side]` Before/After buttons (diff mode only — hidden in review) and `#nav-prompt-btn` ("Prompt Generator AI", always visible) with a plain warning-count (`#nav-warn-count`) after the "AI" label — the number of distinct warning **types** (metrics with ≥1 file over their `warning` threshold, plus `cycle` as one binary type when any file is in a dependency cycle; `window.warningTypeCount`), no highlight, hidden when zero. There is one graph level, so no level switcher. No control panel / status chips / review buttons. The map is one shared union layout; Before/After is a CSS visibility flip (`.hide-{nodes,edges}-{added,removed}` on the `.svg-frame`), so common nodes never move. The active side is reflected in the `side=before/after` URL param, the node-table title (`Details` / `Details Before` / `Details After`), and a `Before` / `After` badge on the node-popup and Prompt-Generator headers; **After** is the default side. |
-| `index.css` | Layout, nav, SVG styling; cross-highlight: `.row-hl` (solid blue bg) and `g.node.node-hl` (blue drop-shadow) for hover; `.row-selected` (solid amber bg `rgb(254,245,222)`) and `g.node.node-selected > polygon/ellipse` (yellow fill + amber stroke) for persistent selection — hover rules last so they win; a node that is both selected **and** in a cycle keeps its **red** cycle stroke (a higher-specificity `.node-selected:is(.cycle-status-…)` rule, mirrored in the popup by `.diag-cycle.diag-selected`) — the cycle outline always wins, the yellow fill still marks it selected; `body.shift-select` changes the cursor over the map (crosshair on `.svg-frame`, `copy` on `g.node`) to signal Shift-to-select, and `body.ctrl-link` changes it (`alias` on `g.node`) to signal open-source-on-modifier-click (⌘ on macOS, Ctrl elsewhere); while either modifier class is on `body` it also sets `user-select: none` (so a Shift/⌘-click on a card never drag-selects label text) and reveals the popup's own `#node-modal-hints` legend; on the map, the modifier class (or the right-edge hover that sets `.show-zoom`) reveals the right-side `.zoom-controls` / `.size-controls` **and** the bottom-left `.kbd-hints` shortcut legend, as a cue the modes exist/are active (the legend's key labels are filled per-platform in JS — ⌘ vs Ctrl); the map uses a GitHub-style drag-to-pan cursor — `grab` (open hand) on `.svg-frame svg` at rest, `grabbing` (closed hand) under `.svg-frame.panning` while dragging (winning over a node's `pointer`); the same modifier cursors apply inside the popup diagram (`#node-modal-diagram g[data-diag-node]:not(.diag-ext)` → `copy`/`alias`; `.diag-ext` → `not-allowed`), and `#node-modal-diagram … .diag-selected > rect` gives popup cards the main-map selection highlight; `.nm-src` styles the modal's git-host "Source" link; header-slot visibility is JS-driven (`updateHeader`), with `.snap-active` highlighting the shown slot and `.sp-side` styling its `Before` / `After` hover-tooltip label; `#node-modal` fills 100% width/height (fullscreen); `body.overflow:hidden` set on open, cleared on close. The popup main card uses `.mn-card` (`copy` cursor); on `.copied` the card body (`.mn-card-body`) is hidden and a centred `.mn-copied-msg` ("copied") is shown for ~1s. The `hide-nodes-*` / `hide-edges-*` rules drive the Before/After visibility flip on the shared union layout (toggled per-side by `applySideVisibility`); the same helper sets a `.svg-frame.side-before` / `.side-after` marker that **gates the red cycle stroke** (a `before-only` cycle is red only on Before, `after-only` only on After, `both` on either) — including the selected-and-in-cycle override. The `show-cycle-*` cycle-chip overrides remain in the file but are unused. |
+| `index.html` | Shell template with a single Files view section and the diff/review summary table. Header: `.header-brand` ("CODE SPLIT"), `#title`, two `data-snap` metadata slots — the **current** (right, `data-snap="after"`) is the primary snapshot (always present, not removable, `↑ Replace current`); the **baseline** (left, `data-snap="before"`) an optional reference (`↑ Set baseline`, removable via `#btn-remove-before`); review (no baseline) leaves the baseline slot an empty editable placeholder, with `.snap-active` marking whichever side is shown. Nav: `[data-side]` Baseline/Current buttons (diff mode only — hidden in review) and `#nav-prompt-btn` ("Prompt Generator AI", always visible) with a plain warning-count (`#nav-warn-count`) after the "AI" label — the number of distinct warning **types** (metrics with ≥1 file over their `warning` threshold, plus `cycle` as one binary type when any file is in a dependency cycle; `window.warningTypeCount`), no highlight, hidden when zero. There is one graph level, so no level switcher. No control panel / status chips / review buttons. The map is one shared union layout; the Baseline/Current toggle is a CSS visibility flip (`.hide-{nodes,edges}-{added,removed}` on the `.svg-frame`), so common nodes never move. The active side is reflected in the `side=before/after` URL param, the node-table title (`Details` / `Details Baseline` / `Details Current`), and a `Baseline` / `Current` badge on the node-popup and Prompt-Generator headers; **Current** is the default side. |
+| `index.css` | Layout, nav, SVG styling; cross-highlight: `.row-hl` (solid blue bg) and `g.node.node-hl` (blue drop-shadow) for hover; `.row-selected` (solid amber bg `rgb(254,245,222)`) and `g.node.node-selected > polygon/ellipse` (yellow fill + amber stroke) for persistent selection — hover rules last so they win; a node that is both selected **and** in a cycle keeps its **red** cycle stroke (a higher-specificity `.node-selected:is(.cycle-status-…)` rule, mirrored in the popup by `.diag-cycle.diag-selected`) — the cycle outline always wins, the yellow fill still marks it selected; `body.shift-select` changes the cursor over the map (crosshair on `.svg-frame`, `copy` on `g.node`) to signal Shift-to-select, and `body.ctrl-link` changes it (`alias` on `g.node`) to signal open-source-on-modifier-click (⌘ on macOS, Ctrl elsewhere); while either modifier class is on `body` it also sets `user-select: none` (so a Shift/⌘-click on a card never drag-selects label text) and reveals the popup's own `#node-modal-hints` legend; on the map, the modifier class (or the right-edge hover that sets `.show-zoom`) reveals the right-side `.zoom-controls` / `.size-controls` **and** the bottom-left `.kbd-hints` shortcut legend, as a cue the modes exist/are active (the legend's key labels are filled per-platform in JS — ⌘ vs Ctrl); the map uses a GitHub-style drag-to-pan cursor — `grab` (open hand) on `.svg-frame svg` at rest, `grabbing` (closed hand) under `.svg-frame.panning` while dragging (winning over a node's `pointer`); the same modifier cursors apply inside the popup diagram (`#node-modal-diagram g[data-diag-node]:not(.diag-ext)` → `copy`/`alias`; `.diag-ext` → `not-allowed`), and `#node-modal-diagram … .diag-selected > rect` gives popup cards the main-map selection highlight; `.nm-src` styles the modal's git-host "Source" link; header-slot visibility is JS-driven (`updateHeader`), with `.snap-active` highlighting the shown slot and `.sp-side` styling its `Baseline` / `Current` hover-tooltip label; `#node-modal` fills 100% width/height (fullscreen); `body.overflow:hidden` set on open, cleared on close. The popup main card uses `.mn-card` (`copy` cursor); on `.copied` the card body (`.mn-card-body`) is hidden and a centred `.mn-copied-msg` ("copied") is shown for ~1s. The `hide-nodes-*` / `hide-edges-*` rules drive the Baseline/Current visibility flip on the shared union layout (toggled per-side by `applySideVisibility`); the same helper sets a `.svg-frame.side-before` / `.side-after` marker that **gates the red cycle stroke** (a `before-only` cycle is red only on the baseline side, `after-only` only on the current side, `both` on either) — including the selected-and-in-cycle override. The `show-cycle-*` cycle-chip overrides remain in the file but are unused. |
 | `graphviz.umd.js` | Graphviz compiled to WASM via `@hpcc-js/wasm` (~802 KB, self-contained, no network required); renders DOT→SVG in-browser |
 | `snarkdown.umd.js` | Tiny (~2 KB) Markdown→HTML renderer (`window.snarkdown`), vendored so it works offline; used by `export-popup.js` to render the generated prompt as a styled preview |
-| `diff.js` | Browser-side diff computation: `computeDiff()` (node/edge status), `computeCycles()` via `buildSCCOf()` helper — prefers backend `graph.cycles` array when present (accurate `CycleKind` classification); falls back to Tarjan SCC on edges when absent; marks nodes/edges as `before-only`/`after-only`/`both`/`none`; `computeMeta()` — either side may be null (`after` is the primary snapshot, `before` an optional baseline). |
-| `layout.js` | `buildDOT()` — for the single file graph: internal `file` nodes are blue (`fillcolor="#dbe9f4" color="#4d6f9c"`) and clustered by directory; `external` library nodes (when present) are amber with dashed amber edges. `contains` edges are **skipped** (kept in the JSON as structural ownership, but never drawn on the main map). **At most one edge is emitted per `(from, to)` pair** — a file that both `use`s and `pub use`-reexports the same target draws a single arrow. Cycle-status class still added for CSS red-stroke overlay; `class="node-<kind> status-<status> cycle-status-<cs>"` on every node/edge. In `loc`/`hk` size mode nodes become circles scaled by the metric and labelled with it abbreviated to a **whole number** (`fmtShort` — no decimals, e.g. 1.6M → 2M). Because the layout is shared across Before/After, each circle is laid out at the **max** of its before/after diameter (`layoutDiam`) so the per-side resize (`applySideSizing`, around the fixed centre) never overflows its reserved slot; the metric sizing helpers (`metricNodeDiam` / `metricNodeVal` / `fmtMetricShort` / `metricFontSize`) are module-scope so layout and the post-render resize use identical math |
+| `diff.js` | Browser-side diff computation: `computeDiff()` (node/edge status), `computeCycles()` via `buildSCCOf()` helper — prefers backend `graph.cycles` array when present (accurate `CycleKind` classification); falls back to Tarjan SCC on edges when absent; marks nodes/edges as `before-only`/`after-only`/`both`/`none` (the baseline-only / current-only / both states); `computeMeta()` — either side may be null (the current snapshot is primary, the baseline optional). |
+| `layout.js` | `buildDOT()` — for the single file graph: internal `file` nodes are blue (`fillcolor="#dbe9f4" color="#4d6f9c"`) and clustered by directory; `external` library nodes (when present) are amber with dashed amber edges. `contains` edges are **skipped** (kept in the JSON as structural ownership, but never drawn on the main map). **At most one edge is emitted per `(from, to)` pair** — a file that both `use`s and `pub use`-reexports the same target draws a single arrow. Cycle-status class still added for CSS red-stroke overlay; `class="node-<kind> status-<status> cycle-status-<cs>"` on every node/edge. In `loc`/`hk` size mode nodes become circles scaled by the metric and labelled with it abbreviated to a **whole number** (`fmtShort` — no decimals, e.g. 1.6M → 2M). Because the layout is shared across the Baseline/Current sides, each circle is laid out at the **max** of its baseline/current diameter (`layoutDiam`) so the per-side resize (`applySideSizing`, around the fixed centre) never overflows its reserved slot; the metric sizing helpers (`metricNodeDiam` / `metricNodeVal` / `fmtMetricShort` / `metricFontSize`) are module-scope so layout and the post-render resize use identical math |
 | `modal.js` | `getModal()` returns (or lazily creates) the `#node-modal` overlay; `closeModal()` / `closeModalSilent()` hide it and restore `body.overflow`; fixed-position tooltip on `.nm-has-hint`; delegated click handlers for `.nm-copy-btn` (textContent ✓ feedback) and `.mn-card` (copies `data-copy`, adds a CSS `copied` class for ~1s — no textContent swap, since it is an SVG group). While the modal is open a `keydown` listener handles **Esc** (close) and **Space** (toggle `#node-modal-cb`, the selection checkbox — `preventDefault` avoids page-scroll and a double-toggle). The `#node-modal-diagram` click handler mirrors the main map's modifier gestures (`window.isOpenSrcClick` / `shiftKey`): **⌘/Ctrl-click** opens a side node's source (`window.nodeSourceUrl`), **Shift-click** toggles its selection (`window.toggleNodeSelected` + live `diag-selected`); a plain click navigates (`openModalForNode`). 3rd-party (`diag-ext`) cards are inert under either modifier (no select, no source, no ⌘-navigate). The central `.mn-card` reacts to modifiers too: ⌘/Ctrl-click views its source, Shift-click toggles its selection (routed through `#node-modal-cb` for full sync) — a *plain* click still copies its path; external main cards (`diag-ext`) are inert. Every diagram render goes through `setModalDiagram(html)`, which sets the SVG and re-attaches a `#node-modal-hints` legend (same `window.kbdHintsHtml`) **inside** `#node-modal-diagram`, so the legend sits bottom-left of the SVG area (not the page) and shows while a modifier is held. |
 | `export-popup.js` | `openExportPopup()` — "Prompt Generator" popup. Top row: a checkbox group (Paths / connections common / in / out — each **disabled + unchecked when it would contribute nothing** for the active node set, recomputed on every change) and a source selector: `<N> Selected` (real selected-row count) **OR** an editable count + a **sort-metric dropdown** (`sorted by` HK / SLOC / fan-out / cyclomatic / cognitive / item count / in-a-cycle). The recommended set is the **top-N nodes sorted** by the chosen metric (`recoFor` sorts the full pool worst-first — it is a *sort*, not a `> threshold` filter, so raising the count keeps adding the next rows). Two-tier thresholds per metric (`METRIC_TH_BY_LANG`, tiers **`info`** / **`warning`**) drive only the **colour**: the count is red while ≤ the `warning` count, yellow up to the `info` count, normal beyond. The thresholds are **empirically calibrated and language-specific** (each language has its own block; unknown languages fall back to `rust`), so that ~50 % of projects breach `info` and ~10 % breach `warning`. Rust (calibrated on 21 crates ≥2K SLOC): `hk` 150 000/10 000 000, `sloc` 800/3 000, `fan_out` 8/18, `item_count` 20/50; `cyclomatic` and `cognitive` are **not tracked for Rust** (file-level cyclomatic ≈1 and cognitive absent in the corpus). **These numbers are kept in sync with `principles/<lang>/metric-thresholds.md`** (the human-readable derivation; must be updated in the same commit as a threshold change). Default count is **1**; with nothing selected the `Selected` radio + `OR` are hidden and the source defaults to Recommended. Clicking a preset points the dropdown at the preset's metric (`PRESET_METRIC`; cycle presets use cycle membership) and sets the count to its headline recommendation (strict count if any, else neutral). Preset buttons (equal-width grid, ~2 rows): `CPX` (reduce complexity) plus the SOLID/principle set (ADP, SRP, OCP, LSP, ISP, DIP, DRY, KISS, LoD, MISU, CoI, YAGNI), labelled by bare code with a count badge on the right — a **low-sensitivity** display: the `warning`-level count as a calm pill in the **text colour** (`.exp-preset-count--warn`, not red), else the `info`-level count as a **plain number** (`.exp-preset-count--info` — no pill, no highlight), else empty (no zero). The button itself gets **no border/colour emphasis** for either tier — only the badge differs. The Recommended count field mirrors this: warning → `.exp-rec-warn` (text-colour tint), info → left plain. Each preset stores a language-neutral `title\n\nsummary` in `PROMPTS`; `composePrompt(key)` wraps it into a **Markdown** instruction the AI receives — `# <title>`, `## Summary`, `**Full principle:** [<url>](<url>)` (the link text is the full URL so it is never hidden behind a short code; `principles/<lang>/<slug>.md` via `PRINCIPLE_DOCS`/`principleUrl`; `lang` from the snapshot's `plugin`, JS→`typescript`), then a `## Task` checklist (download & read the principle, report violations in the modules below, save the report to `.code-split/<YYYYMMDD-HHMMSS>-<CODE>.md`). Each preset auto-selects relevant connection checkboxes via `PRESET_CHECKS` (node **paths are always included**). Output (Markdown) = composed prompt + a `## Modules` list + `## Connections — common/in/out` edge lists per active checkboxes. In Recommended mode the path list is titled `## Modules ordered by <metric>`, each line `` - `src/a.rs` (HK: 19300) `` annotated with the node's value, preceded by a one-line explanation of that metric and its `**Formula:**` (`metricHeader` → `METRIC_DESCS`/`METRIC_FORMULAS`); connection lines render endpoints as paths, not ids. The raw Markdown lives in a hidden `<textarea id="export-textarea">` (the Copy source); the user sees it rendered to HTML by **snarkdown** in `#export-preview` — a white document card on the popup's soft-grey background, styled by `.exp-md-preview` (headings, lists, links, `` `code` ``). Fixed-size `Copy markdown ⎘` button overlaid bottom-right. **State persists in the URL**: `epWriteUrlState` mirrors the full popup state into the query string (`ep` = level/open, `eppreset`, `epsrc`, `epn`, `epsort`, `epconn`, repeated `epsel` per selected id) on every change; `epClearUrl` strips it on close; on load `app.js` reads `epReadUrl()`, restores the selection before the tables render, and re-opens the popup via `openExportPopup(level, restore)` — so a refresh restores the popup exactly. Popup is created once and re-used across opens. |
 | `panzoom.js` | `setupPanZoom()` — viewBox-based drag-to-pan; +/−/fit/fullscreen buttons bottom-right (visible when mouse in right 15% of frame); size-mode buttons (■/LOC/HK) top-right re-render the active view; dblclick on SVG background zooms 2× at cursor; stores the fit-all viewBox on `frame.dataset.naturalVB` so `renderView` can preserve pan/zoom across re-renders; fullscreen overlay (`fs-bar`) hosts the live `<nav>` (the control panel was removed) |
-| `ui.js` | Intentionally empty — Before/After visibility on the shared union layout is handled by `applySideVisibility` (CSS class flip) in `app.js`, so there is no separate chip-filtering module. Kept as a file because the report inlines its assets by name. |
-| `app.js` | `DOMContentLoaded` handler. `window.viewSide` (`'before'`/`'after'`, restored from the `side=` URL param and defaulting to **after**) selects which side the node table / modal show and which side's elements are visible on the map; `viewMode()` / `viewModeSuffix()` derive the `before` / `after` / review label used across the UI (URL, table title, popup/Prompt-Generator badges). The map is laid out **once** from `unionGraph()` (the diff's union graph — already external-free; externals appear only in the per-node modal, drawn in amber); `activeGraph()` returns the active snapshot's nodes for the table / modal. `setViewSide()` (the Before/After buttons) does **not** relayout — it flips the CSS visibility (`applySideVisibility` → `.hide-{nodes,edges}-{added,removed}`, plus a `.side-*` marker that gates side-aware cycle highlighting) and, in the metric size modes, resizes each circle to the active side's value around its fixed centre (`applySideSizing`), then refreshes the tables, the nav warning count, the shown header slot (`updateActiveSnapGroup`) and the `side=` URL (`navSetSide`). `renderView()` lays out the union via `drawSVG` (which, above `SVG_NODE_LIMIT` = 500 nodes, shows a `too many nodes: N` placeholder with a *Render diagram* confirmation button instead of laying out a slow large graph — confirmed once per frame via `frame.dataset.bigConfirmed`), then applies side visibility + sizing and re-applies the node-table selection; pan/zoom is preserved across **size-mode** re-renders (Before/After no longer relayouts) by carrying the *relative* zoom + fractional centre vs `frame.dataset.naturalVB` (so differing layout extents don't drift the framing). `updateHeader()` sets review/diff mode: `after` is the primary snapshot (always shown, not removable), `before` an optional baseline (left, editable, removable); `viewMode()` returns `'review'` when either side is absent, which defaults `viewSide` to `after` and hides the Before/After buttons. The header hover tooltip (`buildSnapPopupHTML`) labels each slot `Before` / `After` and marks the shown one. `buildSummary()` is mode-aware. Reads inline `cs-before` / `cs-after` JSON via `readEmbeddedSnapshot`; `setupFileControls()` / `recomputeAll()` swap a `.json` snapshot or prior `.html` report from disk (removing the before baseline drops back to review; after is not removable); `#nav-prompt-btn` → `openExportPopup()`. On load it also reads `epReadUrl()` and, if the Prompt Generator was open, restores its selected nodes (into `window._ntSelected`) **before** the tables render, then re-opens it via `openExportPopup(level, restore)`. |
+| `ui.js` | Intentionally empty — Baseline/Current visibility on the shared union layout is handled by `applySideVisibility` (CSS class flip) in `app.js`, so there is no separate chip-filtering module. Kept as a file because the report inlines its assets by name. |
+| `app.js` | `DOMContentLoaded` handler. `window.viewSide` (`'before'`/`'after'`, restored from the `side=` URL param and defaulting to **after**) selects which side the node table / modal show and which side's elements are visible on the map; `viewMode()` / `viewModeSuffix()` derive the `before` / `after` / review label used across the UI (URL, table title, popup/Prompt-Generator badges). The map is laid out **once** from `unionGraph()` (the diff's union graph — already external-free; externals appear only in the per-node modal, drawn in amber); `activeGraph()` returns the active snapshot's nodes for the table / modal. `setViewSide()` (the Baseline/Current buttons) does **not** relayout — it flips the CSS visibility (`applySideVisibility` → `.hide-{nodes,edges}-{added,removed}`, plus a `.side-*` marker that gates side-aware cycle highlighting) and, in the metric size modes, resizes each circle to the active side's value around its fixed centre (`applySideSizing`), then refreshes the tables, the nav warning count, the shown header slot (`updateActiveSnapGroup`) and the `side=` URL (`navSetSide`). `renderView()` lays out the union via `drawSVG` (which, above `SVG_NODE_LIMIT` = 500 nodes, shows a `too many nodes: N` placeholder with a *Render diagram* confirmation button instead of laying out a slow large graph — confirmed once per frame via `frame.dataset.bigConfirmed`), then applies side visibility + sizing and re-applies the node-table selection; pan/zoom is preserved across **size-mode** re-renders (the Baseline/Current toggle no longer relayouts) by carrying the *relative* zoom + fractional centre vs `frame.dataset.naturalVB` (so differing layout extents don't drift the framing). `updateHeader()` sets review/diff mode: `after` is the primary snapshot (always shown, not removable), `before` an optional baseline (left, editable, removable); `viewMode()` returns `'review'` when either side is absent, which defaults `viewSide` to `after` and hides the Baseline/Current buttons. The header hover tooltip (`buildSnapPopupHTML`) labels each slot `Baseline` / `Current` and marks the shown one. `buildSummary()` is mode-aware. Reads inline `cs-baseline` / `cs-current` JSON via `readEmbeddedSnapshot` (`window.BEFORE`/`window.AFTER`, internally still keyed `before`/`after`); `setupFileControls()` / `recomputeAll()` swap a `.json` snapshot or prior `.html` report from disk (the **↑ Set baseline** / **↑ Replace current** buttons — removing the baseline drops back to review; current is not removable); `#nav-prompt-btn` → `openExportPopup()`. On load it also reads `epReadUrl()` and, if the Prompt Generator was open, restores its selected nodes (into `window._ntSelected`) **before** the tables render, then re-opens it via `openExportPopup(level, restore)`. |
 | `diagram.js` | `buildDiagramSVG(node)` — inline SVG popup diagram for a selected node. Edges are read from the raw snapshot (`window.AFTER ?? window.BEFORE`) so external library nodes (filtered from `window.DIFF`) are still visible. Connections are **deduped by node** (`collectConns`) into just two columns per direction — an unlabelled internal-`connections` column and a separate grey `external` column — both on the **same tier** (side by side). Each card records the *set* of edge kinds linking it to the main node. A node is shown only if it has an information-flow edge (`uses`/`reexports`); a `contains`-only structural link stays hidden. One arrow per column: the internal arrow is labelled `Fan-in: N` / `Fan-out: N` (distinct connected nodes); the external arrow is grey with no label (external edges count as `fan_out_external`, not `fan_in`/`fan_out`). **Side card layout**: a centred title (always visible). The card has two CSS-toggled states (`g[data-diag-node]:hover` in `index.css`): by default (`.sn-simple`) it shows only the bare `hk` (left, abbreviated, e.g. `189K`/`1.5M`; **nothing** when hk is absent — no `—`) and `loc` (right); on hover (`.sn-detail`) those become labelled `value:key` (`189K:hk` / `loc:210`, and `0:hk` when hk is absent), a bottom row of three connection-kind slots (`uses` · `reexport` · `contains`) appears (split exactly into thirds; absent kinds leave their third empty), and a `pr` chip (private nodes) is revealed top-right. **Tooltips** are the styled `#tt` ones shared with the node table (`renderDescTooltip` — title + bold formula line + description), so a metric's tooltip is byte-identical everywhere: each hk/loc label carries `data-tip`/`data-tip-formula` keyed to the same `COL_TIPS`/`COL_FORMULAS` (the whole `value:key` string is one hover target), each connection-kind label its own description, the title shows the node `path`, and the `pr` chip explains private visibility. Metric tooltips additionally carry `data-tip-calc` — the formula filled with this node's real numbers (`metricCalc`), rendered as a third line so the value's derivation is visible. This is set wherever the inputs are stored and the formula faithfully reproduces the displayed value: `hk` (`sloc × (fan_in × fan_out)²`), Halstead `volume` (`length × log₂(vocabulary)`), `bugs` (`effort^⅔ ÷ 3000` — the engine's actual definition, not the classic `volume ÷ 3000`) and `time` (`effort ÷ 18`). It is deliberately omitted where the computation would not match the displayed value: `mi`/`mi_sei` (the engine feeds MI a different cyclomatic aggregation than the per-file `cyclomatic` we store, so it wouldn't reconcile), `cyclomatic`/`cognitive`, and Halstead `length`/`vocabulary`/`effort` (no stored sub-terms — N₁/N₂, η₁/η₂, difficulty). The matching node-table value cells show the identical computation, but **lazily**: the cells carry no precomputed tooltip attributes — `setupTooltip` derives the description / formula / computation on hover (from the row's node), so nothing is built for cells the user never points at. Every tooltip's title is the metric's **full name** (`COL_NAMES`, e.g. "Halstead volume" — never the abbreviated column label or the cell value), via `data-tip-title` or the element's column id. Arrow labels read `Fan-in: N` / `Fan-out: N`. The hovered label is highlighted (`.sn-hint:hover`). No native `<title>` tooltips on the cards (they conflicted with `#tt`). External (3rd-party) cards and their arrows are **grey** (`#ececec` fill / `#9aa0a6` stroke), tagged `diag-ext` — they are inert under modifiers (not selectable, no source link). Nodes that are selected on the main map render here with the same yellow highlight (`diag-selected` on the side `[data-diag-node]` / main `.mn-card`, recoloured by `#node-modal-diagram … .diag-selected > rect` in the CSS). Toggling selection runs `markPopupSelected(id)`, which updates **every** card for that node — a cycle node appears twice (once as fan-in, once as fan-out) plus possibly the central card, and all toggle together. External cards show the library name (without the `ext:` prefix) and no metrics; an opened external main card uses the same layout as an internal file card — a centred title plus left-aligned `key: value` rows: `kind` (`external`), `version`, and the cargo-cache `path` (e.g. `{registry}/tokio-1.49.0`). The modal field table (left) lists every external field — `id`, `kind`, `version`, `external`, plus the full path — and routes metric rows through the same `#tt`/`COL_FORMULAS` tooltip, with the tooltip attached to the whole `<tr>` so it fires on both the key and the value. The main node card shows `path` / `hk` / `loc` (no `id`) — its labels carry the same `#tt` tooltips (incl. the `hk` computation); a `visibility` row is shown only when **not** `public` (e.g. `private`), since `public` is the default and appears in the left field list; a **plain click on the whole card copies** its path (`.mn-card` + `data-copy`; a modifier click acts instead of copying — see modal.js), and on copy it flashes the copied value above a centred `copied` confirmation for ~1s (no native `<title>`, to avoid conflicting with `#tt`). The metric table spells out abbreviated keys via `NM_LABELS` (`hk` → "Henry-Kafura", `mi` → "Maintainability Index", `mi_sei` → "Maintainability Index (SEI)", `fan_in`/`fan_out` → "Fan-in"/"Fan-out"). `MAX_ITEMS = 24` per column. Columns wrap **wide-first** — up to `MAX_COL_CARDS` (6) cards per row, then a new row below — so a busy fan-in/out spreads horizontally instead of growing into a tall stack. For project (non-external) files the left field table adds a **Source** row after `path` — a link to the file on the project's git host, built by `gitWebBase`/`gitSourceUrl` from the snapshot's `git.origin` (SSH/HTTPS normalized to a web blob URL: GitLab `/-/blob/`, GitHub `/blob/`) at `git.commit`, anchored to `#L<line>` when the node has one. `setupTooltips` also wires two map modifier gestures that skip the modal: **Shift-click** toggles a node's selection (`toggleNodeSelected` — syncs the shared `_ntSelected` set, the row, its checkbox and the footer), and the **"open source" modifier-click** (`⌘` on macOS, `Ctrl` elsewhere — `IS_MAC`/`isOpenSrcClick`) opens the node's source (`nodeSourceUrl` → `window.open`, project files only). A window `keydown`/`keyup`/`blur` listener (`initMapModifiers`, keyed on `OPEN_SRC_KEY`) toggles `body.shift-select` / `body.ctrl-link` for the cursor cues. |
 | `nav.js` | `openModalForNode(nodeId)` — looks up node data first in `window.DIFF.files.nodes`, then falls back to the raw snapshot (`window.AFTER ?? window.BEFORE`) to support external library nodes that are excluded from the diff. Calls `window.hideMetricTooltip()` before re-rendering so a tooltip anchored to the replaced element never lingers over the new content. |
 | `node-table.js` | Sortable per-file table ("**Details**" section — re-titled "Details Before" / "Details After" in a diff to track the active side — collapsed by default). The header shows the title + row-count badge always; the **search box and `⎘ Copy <N> selected` button appear only when expanded** (CSS on `.node-table-wrap.collapsed`); the copy button shows the live selected-row count. `cyclomatic`/`cognitive` columns are omitted; non-name columns are narrow. A **summary footer row** (`.nt-foot`) shows the **average** for each numeric column and a **count** for text columns (Name = total rows; Cycle = nodes in a cycle); its numeric cells carry a `data-tt` percentile distribution (p1/p10/p50/p90/p99 via `pctOf`) shown through the shared `#tt` tooltip, exactly like the summary section. Metric tooltips elsewhere in the table are derived **lazily** on hover (`setupTooltip`), never precomputed per cell. `window.hideMetricTooltip()` (and a capture-phase document `click` handler) force-hides `#tt` so it never lingers when popup nodes are switched or the modal closes. |
@@ -572,12 +575,15 @@ binding.
 #### Unified CLI (`cpt-code-split-interface-cli`)
 
 - **Technology**: Rust binary with `clap`-derived subcommands
-  (`check`, `report`, `diff`; no default command)
+  (`check`, `report`; no default command). Both take a polymorphic positional
+  `[input]` (directory → analyze; `.json`/`.html` snapshot → read) and accept
+  `--baseline <snapshot>`.
 - **Location**: `crates/code-split-cli/src/main.rs`
-- **Output**: `report` writes a snapshot `.json` to
-  `{--report-path}/{ts}-{git-hash-3}.json` (default dir `.code-split`); name
-  tunable via `--json-name` flag or `[output] json-name` config, directory via
-  `--report-path`
+- **Output**: `report` writes a snapshot `.json` and/or an HTML viewer to the
+  paths selected by `--output.<fmt>[.path]` (default
+  `.code-split/{ts}-{git-hash-3}.{json,html}`); each `.path` is a name template
+  or `stdout`/`-`, resolved as **`--output.<fmt>.path` flag › `[output.<fmt>]
+  path` config › built-in default**
 
 #### Plugins (built-in, in-process)
 
@@ -589,13 +595,20 @@ See [§3.7 Plugin System](#37-plugin-system).
 #### Report Generator (`cpt-code-split-interface-report-cli`)
 
 - **Technology**: built-in Rust renderer in `code-split-cli`
-- **Location**: `crates/code-split-cli/src/main.rs` (`run_report`)
-- **Template**: inline HTML string with all JS/CSS embedded
+- **Location**: `crates/code-split-cli/src/main.rs` (`run_report`,
+  `render_html_viewer`)
+- **Template**: inline HTML string with all JS/CSS embedded; the snapshot data
+  is embedded inline as `cs-baseline` / `cs-current` `<script>` tags. With
+  `--baseline <snapshot>` the HTML is a baseline↔current diff named `…-diff.html`.
 
-#### Diff Engine (`cpt-code-split-interface-diff-cli`)
+#### Check / Regression Gate (`cpt-code-split-interface-check-cli`)
 
-- **Technology**: built-in Rust renderer in `code-split-cli`
-- **Location**: `crates/code-split-cli/src/main.rs` (`run_diff`)
+- **Technology**: built-in Rust linter in `code-split-cli`
+- **Location**: `crates/code-split-cli/src/main.rs` (`run_check`,
+  `emit_diagnostics`)
+- **Output**: diagnostics in `--output-format human|json|github|sarif` plus an
+  exit code. With `--baseline <snapshot>` the gate is relative (fails only on new
+  violations) and emits an `improved` / `degraded` / `neutral` verdict.
 
 #### Graph JSON Schema (`cpt-code-split-interface-graph-schema`)
 
@@ -613,9 +626,8 @@ See [§3.7 Plugin System](#37-plugin-system).
 | `code-split-cli` | `code-split-core` | `GraphBuilder`, `compare_snapshots()`, `serde_json` serialization |
 | `code-split-syn` | `code-split-core` | `GraphBuilder` write API |
 | `code-split-complexity` | `code-split-core` | `GraphBuilder` read+write API, `Complexity` struct |
-| `code-split-cli` (`run_report`) | snapshot `.json` | top-level metadata + `graphs` object |
-| `code-split-cli` (`run_diff`) | two snapshot `.json` files | top-level metadata + `graphs` objects from both |
-| `code-split-cli` (`run_compare`) | two snapshot `.json` files | `CompareSummary` JSON or self-contained HTML via `render_compare_html` |
+| `code-split-cli` (`run_report`) | the analyzed snapshot (+ optional `--baseline`) | top-level metadata + `graphs` object; rendered via `render_html_viewer` |
+| `code-split-cli` (`run_check`) | the analyzed snapshot (+ optional `--baseline`) | `graphs` object; `compare_snapshots` / violation diff for the relative gate |
 
 **Rules**:
 
@@ -626,7 +638,7 @@ See [§3.7 Plugin System](#37-plugin-system).
 - The Rust plugin's module→file collapse lives in
   `code-split-cli/src/plugin/rust.rs`, downstream of `code-split-syn`.
 - `code-split-cli` reads JSON artifacts from disk; no in-process coupling
-  between the analysis crates and the report/diff rendering code.
+  between the analysis crates and the report rendering code.
 
 ### 3.5 External Dependencies
 
@@ -657,7 +669,7 @@ sequenceDiagram
     participant Core as code-split-core::GraphBuilder
     participant FS as Filesystem
 
-    User ->> CLI: code-split report . --plugin rust --format json
+    User ->> CLI: code-split report . --plugin rust --output.json
     CLI ->> Disc: resolve("rust")
     Disc -->> CLI: built-in Rust plugin
     CLI ->> Plugin: run(workspace)
@@ -688,35 +700,48 @@ sequenceDiagram
     participant Report as code-split report (built-in Rust)
     participant FS as Filesystem
 
-    User ->> Report: code-split report . --format json,html
+    User ->> Report: code-split report . (default: both json + html)
     Report ->> Report: run analysis pipeline (syn → complexity → module-to-file collapse, see Step 1)
     Report ->> Report: compute node weights (fan-in + fan-out)
-    Report ->> FS: write {ts}-{git-hash-3}.json snapshot (when --format json)
-    Report ->> Report: embed snapshot data inline as cs-before / cs-after JSON script tags
+    Report ->> FS: write {ts}-{git-hash-3}.json snapshot (when json selected)
+    Report ->> Report: embed snapshot data inline as cs-baseline / cs-current JSON script tags
     Report ->> FS: write {ts}-{git-hash-3}.html (self-contained: assets + data embedded)
     Report -->> User: exit 0
 ```
 
-#### Step 4 — Diff
+#### Step 4 — Compare against a baseline
 
-**ID**: `cpt-code-split-seq-diff`
+**ID**: `cpt-code-split-seq-baseline`
+
+A comparison is `--baseline <snapshot>` on `report` (an HTML diff) or `check` (a
+machine verdict / regression gate). The current side is the positional `[input]`
+— analyzed now, or an already-existing snapshot, so the comparison can run over
+two snapshot files without re-analyzing anything.
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant Diff as code-split diff (built-in Rust)
+    participant Report as code-split report --baseline (built-in Rust)
     participant FS as Filesystem
 
-    User ->> Diff: code-split diff --before before.json --after after.json
-    Diff ->> FS: read both snapshot files
-    Diff ->> Diff: validate schema version compatibility
-    Diff ->> Diff: compute GraphDiff on the files graph (added/removed nodes & edges, weight delta)
-    Diff ->> Diff: promote unchanged nodes/edges adjacent to changes → affected status
-    Diff ->> Diff: determine coupling direction verdict (improved / degraded / neutral)
-    Diff ->> Diff: embed both snapshots inline as cs-before / cs-after JSON script tags
-    Diff ->> FS: write index.html (self-contained: all assets + data embedded from binary) [--format html, default]
-    Diff ->> FS: write diff.json (machine-readable diff + verdict) [--format json]
-    Diff -->> User: exit 0
+    User ->> Report: code-split report current.json --baseline baseline.json --output.html.path diff.html
+    Report ->> FS: load_snapshot_any(baseline.json) and read current.json
+    Report ->> Report: embed both snapshots inline as cs-baseline / cs-current JSON script tags
+    Note over Report: diff (computeDiff/computeCycles, verdict) runs browser-side in diff.js
+    Report ->> FS: write diff.html (self-contained: assets + both snapshots embedded), named …-diff.html
+    Report -->> User: exit 0
+```
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Check as code-split check --baseline (built-in Rust)
+
+    User ->> Check: code-split check . --baseline baseline.json --output-format json
+    Check ->> Check: analyze current input + recompute baseline violations under current rules
+    Check ->> Check: new = current violations absent from baseline (same rule+location)
+    Check ->> Check: verdict = degraded (new) / improved (resolved, none new) / neutral
+    Check -->> User: diagnostics { verdict, violations } + exit non-zero if new violations
 ```
 
 ### 3.7 Plugin System
@@ -752,20 +777,21 @@ Multiple matching markers or none → error asking for an explicit
 
 #### Snapshot File Format
 
-`code-split report` writes the snapshot into `--report-path` (default
-`.code-split` in the current working directory) with a templated name —
-default `{ts}-{git-hash-3}.json` (timestamp + first 3 chars of the commit):
+`code-split report` writes the snapshot to the path selected by
+`--output.json[.path]`, defaulting to `.code-split/{ts}-{git-hash-3}.json`
+(timestamp + first 3 chars of the commit) in the current working directory:
 
 ```
 .code-split/<YYYYMMDD-HHMMSS>-<hash3>.json
 ```
 
-The name template is resolved as **`--json-name` flag › `[output] json-name`
-in config › built-in default**, with placeholders `{project-dir}` (slugified
-workspace name), `{ts}`, `{git-hash}` (12-char short commit) and `{git-hash-N}`
-(first N chars). Example: `code-split report /path/to/axum-api --plugin rust
---format json` → `.code-split/20260522-112233-a3f.json` (or
-`axum-api-20260522-112233.json` if `[output] json-name = "{project-dir}-{ts}.json"`).
+The name template is resolved as **`--output.json.path` flag › `[output.json]
+path` in config › built-in default**, with placeholders `{project-dir}`
+(slugified workspace name), `{ts}`, `{git-hash}` (12-char short commit) and
+`{git-hash-N}` (first N chars). Example: `code-split report /path/to/axum-api
+--plugin rust --output.json.path=.code-split/{ts}-{git-hash-3}.json` →
+`.code-split/20260522-112233-a3f.json` (or `axum-api-20260522-112233.json` if
+`[output.json] path = "{project-dir}-{ts}.json"`).
 
 The file combines metadata and the single `files` graph in one document:
 
@@ -773,14 +799,13 @@ The file combines metadata and the single `files` graph in one document:
 {
   "schema_version": "1",
   "generated_at":   "2026-05-22T11:22:33Z",
-  "command":        "code-split report /path/to/axum-api --plugin rust --format json",
+  "command":        "code-split report /path/to/axum-api --plugin rust",
   "workspace":      "/Users/alice/projects/code-split",
   "target":         "/Users/alice/projects/axum-api",
   "plugin":         "rust",
-  "local_only":     false,
   "versions": {
     "code-split": "0.3.1",
-    "plugin_rust": "0.3.1",
+    "code_split_plugin_rust": "0.3.1",
     "rustc": "1.78.0"
   },
   "roots": {
@@ -829,8 +854,8 @@ writes the final snapshot file.
 path relativization so an absolute `file:/abs/path` becomes
 `file:{root}/…` using the named roots.
 
-`versions.plugin_<name>` is the built-in plugin's version, which equals
-the `code-split` binary's own version (all plugins ship inside it).
+`versions.code_split_plugin_<name>` is the built-in plugin's version, which
+equals the `code-split` binary's own version (all plugins ship inside it).
 
 The `git` fields are collected by `code-split` before invoking the plugin:
 
@@ -846,9 +871,8 @@ If branch/commit fail the `git` key is omitted entirely — no error is raised.
 or `https://…` is normalized to a web blob URL — GitLab `/-/blob/`, GitHub
 `/blob/` — at the commit).
 
-`code-split report` (from the snapshot it just produced) and `code-split diff`
-(from the two snapshot files it reads) embed this metadata in the generated
-HTML as a visible "Snapshot info" panel.
+`code-split report` embeds this metadata in the generated HTML as a visible
+"Snapshot info" panel — for both snapshots when `--baseline` is given.
 
 #### Built-in Plugin: Rust
 
@@ -867,7 +891,6 @@ The Rust plugin has two modes selected by flags on the analyzing commands
 | Mode | Flag | `cargo` required | Network / registry | External nodes |
 |------|------|------------------|--------------------|----------------|
 | Full | *(none)* | yes | yes (or cached) | yes |
-| Local-only | `--local-only` | yes | no | not enumerated |
 
 The project does NOT need to compile in any mode — `syn` parses source
 syntactically and tolerates errors. Only dependency resolution
@@ -879,8 +902,9 @@ syntactically and tolerates errors. Only dependency resolution
 code-split report /path/to/my-crate --plugin rust
 ```
 
-1. `code-split-cli` creates the output directory (`--report-path`, default
-   `.code-split/`).
+1. `code-split-cli` resolves the output path(s) from `--output.<fmt>[.path]` /
+   config / the built-in `.code-split/` default, creating parent directories
+   as needed when the artifacts are written.
 2. Collects git state (`branch`, `commit`, `dirty_files`) from
    `/path/to/my-crate`.
 3. Invokes `code-split-syn::analyze`:
@@ -927,26 +951,12 @@ code-split report /path/to/my-crate --plugin rust
 7. Writes the final snapshot `.json` (metadata + `timings` + `files` graph)
    via `to_canonical_string_pretty` — canonical, byte-stable JSON.
 
-##### Local-Only Mode — Step-by-Step
-
-```
-code-split report /path/to/my-crate --plugin rust --local-only
-```
-
-Steps are identical to full mode except `cargo metadata` is called with
-`--no-deps`, so external packages are not enumerated and
-`metadata.resolve` is `None`. The file graph and per-file complexity are
-still produced; there are simply fewer (or no) `External` library nodes.
-
-Use this mode when dependencies are unreachable or you only need the
-internal file graph.
-
 ##### Failure Modes
 
 | Situation | Behavior |
 |-----------|----------|
 | `cargo` not on `$PATH` | exit 1 — "cargo not found" (the Rust plugin requires `cargo` for `cargo metadata`) |
-| `cargo metadata` fails (dependency resolution error) | exit 1 — cargo stderr forwarded verbatim + hint to try `--local-only` |
+| `cargo metadata` fails (dependency resolution error) | exit 1 — cargo stderr forwarded verbatim, including the underlying dependency resolution failure |
 | Workspace member glob matches no directories | warning logged; zero crates emitted for that glob |
 | A source file has a syntax error | `syn` parse failure logged as a warning; file is skipped; analysis continues |
 | Output directory not writable | exit 1 before analysis starts |
@@ -977,106 +987,94 @@ Example — a Django-specific annotation on a file node:
 }
 ```
 
-### 3.8 CLI Examples
+### 3.8 CLI Reference and Examples
 
-#### Snapshots — `code-split report --format json`
+The full CLI surface is documented in [CLI.md](CLI.md). The two commands are
+`check` (verdict + exit code, no files) and `report` (artifacts). Both take a
+polymorphic `[input]` and accept `--baseline <snapshot>`.
 
-`code-split report` always re-analyzes the project and writes the snapshot
-to `--report-path` (default `.code-split/`) under the name template
-(default `{ts}-{git-hash-3}.json`, e.g. `.code-split/20260522-112233-a3f.json`;
-override via `--json-name` flag or `[output] json-name` config).
+#### Snapshots — `code-split report --output.json`
+
+`report` analyzes the project (or reads a snapshot input) and writes the
+snapshot to the path selected by `--output.json[.path]` (default
+`.code-split/{ts}-{git-hash-3}.json`, e.g. `.code-split/20260522-112233-a3f.json`).
 
 **Rust (built-in)**
 
 ```bash
-# 1. Default snapshot: .code-split/20260522-112233-a3f.json ({ts}-{git-hash-3})
-code-split report . --plugin rust --format json
+# 1. Default snapshot only: .code-split/20260522-112233-a3f.json ({ts}-{git-hash-3})
+code-split report . --plugin rust --output.json
 
-# 2. Explicit file name — for a named state
-code-split report . --plugin rust --format json --json-name before-refactor.json
-
-# 3. Local-only mode — file graph without external dependency resolution
-code-split report . --plugin rust --local-only --format json
-# → .code-split/my-crate-20260522-114500.json, "local_only": true
+# 2. Explicit path — for a named state
+code-split report . --plugin rust --output.json.path=.code-split/before-refactor.json
 ```
 
 **Python (built-in)**
 
 ```bash
 # 1. Default dated snapshot
-code-split report ~/projects/my-lib --plugin python --format json
+code-split report ~/projects/my-lib --plugin python --output.json
 
-# 2. Explicit name for a named state
-code-split report . --plugin python --format json --json-name v2.4.0.json
+# 2. Explicit path for a named state
+code-split report . --plugin python --output.json.path=.code-split/v2.4.0.json
 
-# 3. Pass the root package via plugin-args
-code-split report . --plugin python --format json -- --root-package src/myapp
-# → .code-split/my-lib-20260522-120000.json
+# 3. Snapshot to stdout for a pipe
+code-split report . --plugin python --output.json.path=stdout | jq '.plugin'
 ```
 
 **JavaScript / TypeScript (built-in)**
 
 ```bash
 # 1. Default dated snapshot
-code-split report ~/projects/frontend --plugin javascript --format json
+code-split report ~/projects/frontend --plugin javascript --output.json
 
-# 2. Explicit tsconfig via plugin-args
-code-split report . --plugin javascript --format json -- --tsconfig ./packages/core/tsconfig.json
-
-# 3. Only src/, ignore node_modules and dist
-code-split report . --plugin javascript --format json \
-    --json-name src-only.json \
-    --ignore node_modules --ignore dist -- --root src
+# 2. Named snapshot, ignoring node_modules and dist
+code-split report . --plugin javascript \
+    --output.json.path=.code-split/src-only.json \
+    --ignore node_modules --ignore dist
 ```
 
 ---
 
 #### Visualization — `code-split report`
 
-`report` always re-analyzes the project and writes the snapshot `.json` **and** the
-HTML viewer together.
+With no `--output.*` flag, `report` writes the snapshot `.json` **and** the
+HTML viewer together into `.code-split/`.
 
 ```bash
-# 1. Snapshot + report side by side, in .code-split/ (default format json,html)
+# 1. Snapshot + viewer side by side, in .code-split/ (default: both json + html)
 code-split report . --plugin rust
 open .code-split/20260522-112233-a3f.html   # default {ts}-{git-hash-3}.html
 
-# 2. Report in docs/ for sharing with the team
-code-split report . --plugin rust \
-    --report-path docs --html-name coupling.html
+# 2. Only the HTML viewer, to docs/ for sharing with the team
+code-split report . --plugin rust --output.html.path=docs/coupling.html
 
-# 3. CI: analyze the project → artifacts into the CI folder
+# 3. CI: artifacts into the CI folder
 code-split report . --plugin rust \
-    --report-path /artifacts/code-split --html-name report-pr-1234.html
+    --output.html.path=/artifacts/code-split/report-pr-1234.html
 ```
 
 ---
 
-#### Diff — `code-split diff`
+#### Compare against a baseline — `--baseline`
 
-`diff` compares two existing snapshots (no analysis). The default is
-`--format html` (`index.html`); `--format json` writes a machine-readable
-`diff.json` with a verdict for CI.
+A comparison is `--baseline <snapshot>` on `report` (an HTML diff named
+`…-diff.html`) or `check` (a machine verdict for CI). Because `[input]` is
+polymorphic, the current side can be an already-existing snapshot, so the
+comparison runs over two files without re-analyzing.
 
 ```bash
-# 1. Before and after a refactor — HTML viewer
-code-split diff \
-    --before .code-split/app-20260520-093000.json \
-    --after  .code-split/app-20260522-112233.json \
-    --html-name diff-20260522.html
+# 1. HTML diff: baseline vs the current tree
+code-split report . --baseline .code-split/main.json --output.html.path=diff.html
+open diff.html
 
-# 2. Named snapshots
-code-split diff \
-    --before .code-split/before-refactor.json \
-    --after  .code-split/after-refactor.json \
-    --html-name diff-refactor.html
+# 2. HTML diff: two existing snapshots (no analysis)
+code-split report .code-split/pr.json --baseline .code-split/main.json \
+    --output.html.path=diff-refactor.html
 
-# 3. CI: main vs PR, JSON verdict for a PR comment
-code-split diff \
-    --before /artifacts/code-split/main.json \
-    --after  /artifacts/code-split/pr-1234.json \
-    --report-path /artifacts/code-split --format json
-cat /artifacts/code-split/diff.json | jq '.verdict'
+# 3. CI: regression gate / JSON verdict for a PR comment
+code-split check . --baseline /artifacts/code-split/main.json --output-format json \
+    | jq '.verdict'
 ```
 
 ---
@@ -1084,25 +1082,18 @@ cat /artifacts/code-split/diff.json | jq '.verdict'
 #### Full end-to-end workflow
 
 ```bash
-# Steps 1+2: snapshot before the refactor + report (report does both)
-code-split report . --plugin rust --json-name before.json
+# Step 1+2: snapshot the baseline + open the viewer (report writes both)
+code-split report . --plugin rust --output.json.path=.code-split/before.json
 open .code-split/20260522-112233-a3f.html   # {ts}-{git-hash-3}.html, inspect the heavy nodes
 
 # -- Step 3: the user makes changes (by hand or with an AI) --
 
-# Steps 1+2 again: snapshot after the changes + report
-code-split report . --plugin rust --json-name after.json
+# Step 4a: gate the change in CI against the baseline (fail only on new violations)
+code-split check . --baseline .code-split/before.json --output-format json
 
-# Step 4: diff the two snapshots
-code-split diff \
-    --before .code-split/before.json \
-    --after  .code-split/after.json \
-    --html-name diff.html
-open .code-split/diff.html
-
-# Alternative: report + compare against a baseline in one run (--before)
-code-split report . --plugin rust --before .code-split/before.json
-open .code-split/my-crate-20260522-112233-diff.html   # --before names it -diff.html; already a diff view + verdict
+# Step 4b: render the HTML diff against the baseline in one run
+code-split report . --plugin rust --baseline .code-split/before.json
+open .code-split/my-crate-20260522-112233-diff.html   # --baseline names it -diff.html; a diff view + verdict
 ```
 
 ## 4. Additional Context
@@ -1115,11 +1106,11 @@ code-split/
     code-split-core/          # Rust — graph types, JSON schema, StageTime, cycles/hk/diff
     code-split-syn/           # Rust — syntactic analysis (module tree)
     code-split-complexity/    # Rust — per-file complexity metrics (rust-code-analysis)
-    code-split-cli/           # Rust — orchestrator, module→file collapse, artifact writer, report/diff renderer
+    code-split-cli/           # Rust — orchestrator, module→file collapse, check linter, report/viewer renderer
       src/
         plugin/            # Built-in plugins: rust.rs (incl. module→file collapse), python.rs, javascript.rs, finalize.rs (file-graph normalizer for Python/JS), mod.rs
         assets/            # HTML/CSS/JS assets embedded via include_str!
-          index.html       # Shell template (single Files view); cs-before / cs-after JSON script tags embedded inline at render time
+          index.html       # Shell template (single Files view); cs-baseline / cs-current JSON script tags embedded inline at render time
           index.css        # Node/edge/nav styling (external nodes amber)
           graphviz.umd.js  # Graphviz WASM (~802 KB, offline)
           snarkdown.umd.js # Markdown→HTML renderer (~2 KB, offline) for the prompt preview
@@ -1135,7 +1126,7 @@ code-split/
           export-popup.js  # Prompt-generator popup
           nav.js           # openModalForNode — node popup navigation
           utils.js         # Shared helpers
-          ui.js            # (empty — before/after visibility handled in app.js on the union layout)
+          ui.js            # (empty — baseline/current visibility handled in app.js on the union layout)
   docs/
     PRD.md
     DESIGN.md
@@ -1161,8 +1152,9 @@ connections are fully preserved in the single graph model. There is no
 function-level call graph: resolving call sites semantically would
 require rust-analyzer (slow, volatile), which has been removed.
 
-**HTML asset bundling**: All JS/CSS assets for `code-split report` and
-`code-split diff` are embedded into the binary via `include_str!`. The
+**HTML asset bundling**: All JS/CSS assets for the `code-split report` viewer
+(single-snapshot or `--baseline` diff) are embedded into the binary via
+`include_str!`. The
 Graphviz WASM bundle is committed under
 `crates/code-split-cli/src/assets/` and never fetched at runtime.
 Generated HTML files work offline via `file://` with no network access.

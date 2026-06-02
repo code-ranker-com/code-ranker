@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>code-split diff</title>
+<title>code-split report</title>
 <link rel="stylesheet" href="./index.css">
 <script src="./graphviz.umd.js"></script>
 <script src="./snarkdown.umd.js"></script>
@@ -17,13 +17,13 @@
     <div class="header-meta">
       <div class="snap-group" data-snap="before">
         <span class="mc" id="meta-before-date"></span><span class="meta-info" id="meta-before-info">(<code id="meta-before-name"></code><span class="mc" id="meta-before-commit"></span>)</span>
-        <button class="hbtn" id="btn-upload-before" title="Load a baseline to compare against">↑ compare…</button>
+        <button class="hbtn" id="btn-upload-before" title="Load a baseline to compare against">↑ Set baseline</button>
         <button class="hbtn hbtn-x" id="btn-remove-before" title="Remove baseline">✕</button>
       </div>
       <span class="ma" id="meta-arrow">→</span>
       <div class="snap-group" data-snap="after">
         <span class="mc" id="meta-after-date"></span><span class="meta-info" id="meta-after-info">(<code id="meta-after-name"></code><span class="mc" id="meta-after-commit"></span>)</span>
-        <button class="hbtn" id="btn-upload-after" title="Load a different snapshot">↑ change</button>
+        <button class="hbtn" id="btn-upload-after" title="Replace the current snapshot">↑ Replace current</button>
       </div>
       <span class="custom-indicator" id="custom-indicator"></span>
     </div>
@@ -38,8 +38,8 @@
     <a data-view="files" href="#" class="selected" style="display:none">Files</a>
   </div>
   <div class="nav-separator"></div>
-  <button data-side="before">Before</button>
-  <button data-side="after">After</button>
+  <button data-side="before">Baseline</button>
+  <button data-side="after">Current</button>
   <button id="nav-prompt-btn">Prompt Generator <span class="nav-ai-letters">AI</span><span class="nav-warn-count" id="nav-warn-count"></span></button>
 </nav>
 

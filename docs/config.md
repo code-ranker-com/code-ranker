@@ -45,20 +45,24 @@ cognitive  = 25
 hk         = 500_000         # `_` separators; or a quoted suffix: hk = "5M"
 fan_out    = 50
 
-[output]                     # default artifact names for `report`
-json-name = "{project-dir}-{ts}.json"   # default if unset: {ts}-{git-hash-3}.json
-html-name = "{project-dir}-{ts}.html"   # default if unset: {ts}-{git-hash-3}.html
+[output.json]                # `report` JSON snapshot artifact
+path = "{project-dir}-{ts}.json"   # default if unset: .code-split/{ts}-{git-hash-3}.json
+# enabled = false            # keep the path but don't write JSON unless re-selected
+
+[output.html]                # `report` HTML viewer artifact
+path = "{project-dir}-{ts}.html"   # default if unset: .code-split/{ts}-{git-hash-3}.html
 ```
 
 The threshold scope is always `file` — a single source file on the one graph
 code-split builds.
 
-### `[output]` — report artifact names
+### `[output.json]` / `[output.html]` — report artifacts
 
-`[output] json-name` / `html-name` set the default filename templates for
-`code-split report`. A `--json-name` / `--html-name` flag still overrides them;
-when neither is set the built-in default `{ts}-{git-hash-3}` is used. Both keys
-accept `_`/kebab spelling (`json-name` or `json_name`) and these placeholders:
+Each table configures one `code-split report` artifact: `path` is the destination
+(a filename template, or `stdout`/`-`), and `enabled` (a bool) forces the format on
+or off. `--output.<fmt>.path` / `--output.<fmt>` on the CLI override these; when no
+artifact is selected anywhere, both are written to `.code-split/` under the built-in
+default `{ts}-{git-hash-3}`. `path` accepts these placeholders:
 
 | Placeholder | Expands to |
 |---|---|
@@ -147,6 +151,29 @@ separators and `K`/`M`/`G` suffixes (e.g. `5M`, `1_500`). Repeatable.
 ```bash
 code-split check . --threshold file.loc=800 --threshold file.cognitive=25 \
   --threshold file.cyclomatic=10
+```
+
+### `--baseline <SNAPSHOT>`
+
+Compare the input against a baseline snapshot (`.json`/`.html`). On `check` it makes
+the gate **relative** — fail only on *new* violations vs the baseline, tolerating
+pre-existing ones; on `report` it turns the HTML into a baseline↔current diff.
+
+```bash
+code-split check . --baseline .code-split/main.json
+```
+
+### `--output.json` / `--output.html` / `--output.<fmt>.path` (report)
+
+Select which artifacts `report` writes and where. `--output.json` / `--output.html`
+select a format (path from config/default); `--output.json.path=…` /
+`--output.html.path=…` select it and set the destination (a template, or `stdout`/`-`).
+With none given, both are written to `.code-split/`.
+
+```bash
+code-split report .                              # both, default names
+code-split report . --output.html                # only HTML, default path
+code-split report . --output.json.path=stdout    # JSON to stdout, no HTML
 ```
 
 ### `--exit-zero`

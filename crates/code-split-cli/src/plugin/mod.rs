@@ -11,15 +11,11 @@ use std::path::Path;
 ///
 /// All plugins are compiled into the binary and run in-process — there is no
 /// external/dynamic plugin loading.
-pub fn run(
-    name: &str,
-    workspace: &Path,
-    local_only: bool,
-) -> Result<(PluginGraphs, Vec<StageTime>)> {
+pub fn run(name: &str, workspace: &Path) -> Result<(PluginGraphs, Vec<StageTime>)> {
     match name {
-        "rust" => rust::run(workspace, local_only),
-        "python" => python::run(workspace, local_only),
-        "javascript" | "typescript" | "js" | "ts" => javascript::run(workspace, local_only),
+        "rust" => rust::run(workspace),
+        "python" => python::run(workspace),
+        "javascript" | "typescript" | "js" | "ts" => javascript::run(workspace),
         other => bail!("unknown plugin {other:?}; built-in plugins are: rust, python, javascript"),
     }
 }

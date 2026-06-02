@@ -6,17 +6,13 @@ use std::path::Path;
 
 use crate::logger;
 
-pub fn run(workspace: &Path, local_only: bool) -> Result<(PluginGraphs, Vec<StageTime>)> {
+pub fn run(workspace: &Path) -> Result<(PluginGraphs, Vec<StageTime>)> {
     let mut timings: Vec<StageTime> = Vec::new();
     let mut builder = GraphBuilder::new();
 
     {
         let t = logger::Timer::start("syn: parsing modules and files");
-        if local_only {
-            code_split_syn::analyze_local_only(workspace, &mut builder)?;
-        } else {
-            code_split_syn::analyze(workspace, &mut builder)?;
-        }
+        code_split_syn::analyze(workspace, &mut builder)?;
         let n = builder.node_count();
         let detail = format!("{n} nodes");
         let ms = t.finish_quiet();

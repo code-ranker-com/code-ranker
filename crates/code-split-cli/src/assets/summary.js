@@ -134,7 +134,7 @@ function buildSummary() {
           `<th colspan="3" class="level-header${i > 0 ? ' grp-start' : ''}">${LLABELS[l]}</th>`
         ).join('') + `</tr><tr>` +
         levels.map((_, i) =>
-          `<th class="num${i > 0 ? ' grp-start' : ''}">Before</th><th class="num">After</th><th class="num">Δ</th>`
+          `<th class="num${i > 0 ? ' grp-start' : ''}">Baseline</th><th class="num">Current</th><th class="num">Δ</th>`
         ).join('') + `</tr>`;
     }
   }

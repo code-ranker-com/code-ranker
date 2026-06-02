@@ -332,7 +332,6 @@ mod tests {
             target.into(),
             "rust".into(),
             None,
-            false,
             HashMap::new(),
             HashMap::new(),
             git,

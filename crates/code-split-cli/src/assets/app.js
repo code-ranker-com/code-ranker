@@ -16,10 +16,10 @@ function viewMode() {
   if (!window.BEFORE || !window.AFTER) return 'review';   // only one snapshot loaded
   return window.viewSide === 'after' ? 'after' : 'before';
 }
-// Label suffix for the active side: ' Before' / ' After' in a diff, '' in review.
+// Label suffix for the active side: ' Baseline' / ' Current' in a diff, '' in review.
 function viewModeSuffix() {
   const m = viewMode();
-  return m === 'after' ? ' After' : m === 'before' ? ' Before' : '';
+  return m === 'after' ? ' Current' : m === 'before' ? ' Baseline' : '';
 }
 function activeGraph(level) {
   return activeSnap()?.graphs?.[level] || { nodes: [], edges: [] };
@@ -140,7 +140,7 @@ function updateHeader() {
   document.getElementById('meta-before-name').textContent   = hasBefore ? meta.before.name : '';
   document.getElementById('meta-before-commit').textContent = hasBefore && meta.before.commit ? ` ${meta.before.commit}` : '';
   document.getElementById('meta-before-info').style.display = hasBefore && (meta.before.name || meta.before.commit) ? '' : 'none';
-  document.getElementById('btn-upload-before').textContent   = hasBefore ? '↑ change' : '↑ compare…';
+  document.getElementById('btn-upload-before').textContent   = hasBefore ? '↑ Replace baseline' : '↑ Set baseline';
   document.getElementById('btn-remove-before').style.display = hasBefore ? '' : 'none';
 
   // AFTER = the primary snapshot the report is about: always shown, not removable.
@@ -338,7 +338,7 @@ function setupSnapPopup() {
       clearTimeout(hideTimer);
       const snap = i === 0 ? window.BEFORE : window.AFTER;
       const ref  = i === 1 ? window.BEFORE : null;
-      show(snap, grp, ref, i === 0 ? 'Before' : 'After');
+      show(snap, grp, ref, i === 0 ? 'Baseline' : 'Current');
     });
     grp.addEventListener('mouseleave', scheduleHide);
   });
@@ -363,7 +363,7 @@ function readEmbeddedSnapshot(id) {
 }
 
 // Parse a snapshot from uploaded file text — either a raw JSON snapshot, or a code-split
-// HTML report with the snapshot embedded (prefer `cs-after`, else `cs-before`).
+// HTML report with the snapshot embedded (prefer `cs-current`, else `cs-baseline`).
 function extractSnapshotFromText(text) {
   const s = text.trim();
   if (s.startsWith('{')) return JSON.parse(s);
@@ -372,7 +372,7 @@ function extractSnapshotFromText(text) {
     const t = doc.getElementById(id)?.textContent?.trim();
     return t && t !== 'null' ? JSON.parse(t) : null;
   };
-  return read('cs-after') || read('cs-before');
+  return read('cs-current') || read('cs-baseline');
 }
 
 // Manual snapshot swap: load a different before/after snapshot (.json or .html) into the viewer.
@@ -432,9 +432,9 @@ function setupGlobalControls() {
 document.addEventListener('DOMContentLoaded', async () => {
   window.nodeSizeMode = 'default';
 
-  // Read the snapshots embedded inline in the page (cs-before / cs-after script tags).
-  window.BEFORE = readEmbeddedSnapshot('cs-before');
-  window.AFTER  = readEmbeddedSnapshot('cs-after');
+  // Read the snapshots embedded inline in the page (cs-baseline / cs-current script tags).
+  window.BEFORE = readEmbeddedSnapshot('cs-baseline');
+  window.AFTER  = readEmbeddedSnapshot('cs-current');
 
   const EMPTY = { graphs: {} };
   window.DIFF   = computeDiff(window.BEFORE ?? window.AFTER ?? EMPTY, window.AFTER ?? window.BEFORE ?? EMPTY);

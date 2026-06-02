@@ -51,6 +51,7 @@ fn run_report(lang: &str) -> Value {
     let sample = root.join("samples").join(lang);
     let out_dir = tempfile::tempdir().expect("create temp output dir");
 
+    let out_json = out_dir.path().join("fresh.json");
     let status = Command::new(env!("CARGO_BIN_EXE_code-split"))
         .current_dir(&root)
         .env("CARGO_NET_OFFLINE", "true") // Rust sample resolves crates from cache
@@ -58,12 +59,7 @@ fn run_report(lang: &str) -> Value {
         .arg(&sample)
         .arg("--config")
         .arg(sample.join("code-split.toml"))
-        .arg("--format")
-        .arg("json")
-        .arg("--report-path")
-        .arg(out_dir.path())
-        .arg("--json-name")
-        .arg("fresh.json")
+        .arg(format!("--output.json.path={}", out_json.display()))
         .status()
         .expect("spawn code-split");
     assert!(status.success(), "code-split failed for sample `{lang}`");

@@ -40,7 +40,7 @@ The linter is the `check` command — exits non-zero on any cycle or threshold v
 
 Written in Rust — fast, memory-safe, single static-ish binary with **no runtime dependencies** (no Python, no Node, no JVM, no shared libs to install). One file on PATH, done.
 
-Three commands: `check` (linter — exits non-zero on violations), `report` (snapshot JSON + offline HTML, with optional in-run before/after diff via `--before`), `diff` (HTML or JSON diff between two snapshots, for CI artifacts). No daemon, no language server, no plugin host required at runtime. Full reference: [docs/CLI.md](docs/CLI.md).
+Two commands: `check` (linter — exits non-zero on violations; with `--baseline`, a relative regression gate) and `report` (snapshot JSON + offline HTML; with `--baseline`, a baseline↔current diff). Both accept a directory **or** an existing `.json`/`.html` snapshot as input — analyze once, then run cheap passes over the snapshot. No daemon, no language server, no plugin host required at runtime. Full reference: [docs/CLI.md](docs/CLI.md).
 
 ## HTML report with dynamic diagrams
 
@@ -93,10 +93,10 @@ code-split check ./path/to/project
 # analyze and write a snapshot JSON + offline HTML report
 code-split report
 # → .code-split/{ts}-{git-hash-3}.json + .code-split/{ts}-{git-hash-3}.html
-#   (name templates; override via --json-name / [output] in code-split.toml)
+#   (override paths via --output.<fmt>.path or [output.<fmt>] in code-split.toml)
 
-# before / after refactor comparison of two snapshots
-code-split diff --before .code-split/before.json --after .code-split/after.json
+# before / after refactor comparison: an HTML diff against a baseline snapshot
+code-split report . --baseline .code-split/before.json
 ```
 
 Built-in plugins: `rust` (cargo + syn), `python`, `javascript` (also handles TypeScript) — all compiled into the single binary, nothing to install.

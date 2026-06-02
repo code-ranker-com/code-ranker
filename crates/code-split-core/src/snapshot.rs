@@ -26,8 +26,6 @@ pub struct Snapshot {
     /// Config file used for this analysis, if any was found.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub config_file: Option<String>,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub local_only: bool,
     pub versions: HashMap<String, String>,
     /// Named system roots used to shorten node paths (e.g. `{cargo}`, `{rustup}`).
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -67,7 +65,6 @@ impl Snapshot {
         target: String,
         plugin: String,
         config_file: Option<String>,
-        local_only: bool,
         versions: HashMap<String, String>,
         roots: HashMap<String, String>,
         git: Option<GitInfo>,
@@ -82,7 +79,6 @@ impl Snapshot {
             target,
             plugin,
             config_file,
-            local_only,
             versions,
             roots,
             git,
@@ -399,7 +395,6 @@ mod tests {
             "/work/foo".into(),
             "rust".into(),
             None,
-            false,
             HashMap::new(),
             HashMap::new(),
             None,
@@ -432,8 +427,6 @@ mod tests {
         );
         assert!(!json.contains("config_file"), "None config_file is skipped");
         assert!(!json.contains("timings"), "empty timings is skipped");
-        // local_only == false is skipped via `std::ops::Not::not`.
-        assert!(!json.contains("local_only"));
     }
 
     #[test]

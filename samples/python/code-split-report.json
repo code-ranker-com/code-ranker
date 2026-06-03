@@ -1,5 +1,5 @@
 {
-  "command": "code-split report samples/python --config samples/python/code-split.toml --format json --report-path samples/python --json-name code-split-report.json",
+  "command": "code-split report samples/python --config samples/python/code-split.toml --output.json.path=samples/python/code-split-report.json",
   "config_file": "samples/python/code-split.toml",
   "generated_at": "1970-01-01T00:00:00Z",
   "git": {
@@ -356,7 +356,7 @@
     }
   ],
   "versions": {
-    "code-split": "0.1.1"
+    "code-split": "1.0.0-alpha.3"
   },
   "workspace": "/home/user/code-split"
 }

@@ -21,9 +21,7 @@ for sample in rust python javascript typescript; do
   dir="samples/$sample"
   "$bin" report "$dir" \
     --config "$dir/code-split.toml" \
-    --format json \
-    --report-path "$dir" \
-    --json-name code-split-report.json
+    --output.json.path="$dir/code-split-report.json"
 
   # Normalize the committed golden so regeneration is idempotent: (1) anonymize
   # machine-specific absolute paths (never leak a real home dir); (2) freeze the

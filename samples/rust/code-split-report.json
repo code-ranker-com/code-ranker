@@ -1,5 +1,5 @@
 {
-  "command": "code-split report samples/rust --config samples/rust/code-split.toml --format json --report-path samples/rust --json-name code-split-report.json",
+  "command": "code-split report samples/rust --config samples/rust/code-split.toml --output.json.path=samples/rust/code-split-report.json",
   "config_file": "samples/rust/code-split.toml",
   "generated_at": "1970-01-01T00:00:00Z",
   "git": {
@@ -371,8 +371,7 @@
     }
   ],
   "versions": {
-    "code-split": "0.1.1",
-    "code_split_plugin_rust": "0.1.1",
+    "code-split": "1.0.0-alpha.3",
     "rustc": "1.95.0"
   },
   "workspace": "/home/user/code-split"

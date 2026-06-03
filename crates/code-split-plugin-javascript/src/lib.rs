@@ -436,6 +436,30 @@ fn normalize_path(path: &Path) -> PathBuf {
     out
 }
 
+/// The JavaScript / TypeScript language plugin (registered by the CLI).
+pub struct JavascriptPlugin;
+
+impl code_split_plugin_api::LanguagePlugin for JavascriptPlugin {
+    fn name(&self) -> &'static str {
+        "javascript"
+    }
+    fn aliases(&self) -> &'static [&'static str] {
+        &["typescript", "js", "ts"]
+    }
+    fn markers(&self) -> &'static [&'static str] {
+        &["package.json", "tsconfig.json"]
+    }
+    fn run(
+        &self,
+        workspace: &std::path::Path,
+    ) -> anyhow::Result<(
+        code_split_graph::PluginGraphs,
+        Vec<code_split_graph::StageTime>,
+    )> {
+        run(workspace)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,5 +1,5 @@
 {
-  "command": "code-split report samples/typescript --config samples/typescript/code-split.toml --format json --report-path samples/typescript --json-name code-split-report.json",
+  "command": "code-split report samples/typescript --config samples/typescript/code-split.toml --output.json.path=samples/typescript/code-split-report.json",
   "config_file": "samples/typescript/code-split.toml",
   "generated_at": "1970-01-01T00:00:00Z",
   "git": {
@@ -338,7 +338,7 @@
     }
   ],
   "versions": {
-    "code-split": "0.1.1"
+    "code-split": "1.0.0-alpha.3"
   },
   "workspace": "/home/user/code-split"
 }

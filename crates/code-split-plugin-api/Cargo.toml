@@ -1,0 +1,14 @@
+[package]
+name = "code-split-plugin-api"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Code Split plugin contract: the LanguagePlugin trait every language plugin implements."
+
+[dependencies]
+code-split-graph = { workspace = true }
+anyhow = { workspace = true }

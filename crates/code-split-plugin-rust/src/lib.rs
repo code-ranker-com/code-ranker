@@ -357,3 +357,29 @@ fn offline_metadata_error(manifest: &Path, err: cargo_metadata::Error) -> anyhow
         manifest = manifest.display(),
     )
 }
+
+/// The Rust language plugin (registered by the CLI).
+pub struct RustPlugin;
+
+impl code_split_plugin_api::LanguagePlugin for RustPlugin {
+    fn name(&self) -> &'static str {
+        "rust"
+    }
+    fn markers(&self) -> &'static [&'static str] {
+        &["Cargo.toml"]
+    }
+    fn run(
+        &self,
+        workspace: &std::path::Path,
+    ) -> anyhow::Result<(
+        code_split_graph::PluginGraphs,
+        Vec<code_split_graph::StageTime>,
+    )> {
+        run(workspace)
+    }
+    fn versions(&self, _workspace: &std::path::Path) -> Vec<(String, String)> {
+        version_string()
+            .map(|rv| vec![("rustc".to_string(), rv)])
+            .unwrap_or_default()
+    }
+}

@@ -12,6 +12,7 @@ description = "Code Split JavaScript/TypeScript plugin: tree-sitter module/impor
 [dependencies]
 code-split-graph = { workspace = true }
 code-split-plugin = { workspace = true }
+code-split-plugin-api = { workspace = true }
 anyhow = { workspace = true }
 walkdir = { workspace = true }
 tree-sitter = { workspace = true }

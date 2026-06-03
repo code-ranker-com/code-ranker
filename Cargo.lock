@@ -221,6 +221,7 @@ dependencies = [
  "clap",
  "code-split-graph",
  "code-split-plugin",
+ "code-split-plugin-api",
  "code-split-plugin-javascript",
  "code-split-plugin-python",
  "code-split-plugin-rust",
@@ -256,12 +257,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "code-split-plugin-api"
+version = "1.0.0-alpha.3"
+dependencies = [
+ "anyhow",
+ "code-split-graph",
+]
+
+[[package]]
 name = "code-split-plugin-javascript"
 version = "1.0.0-alpha.3"
 dependencies = [
  "anyhow",
  "code-split-graph",
  "code-split-plugin",
+ "code-split-plugin-api",
  "rust-code-analysis-code-split",
  "tempfile",
  "tree-sitter",
@@ -277,6 +287,7 @@ dependencies = [
  "anyhow",
  "code-split-graph",
  "code-split-plugin",
+ "code-split-plugin-api",
  "rust-code-analysis-code-split",
  "tempfile",
  "tree-sitter",
@@ -292,6 +303,7 @@ dependencies = [
  "cargo_metadata",
  "code-split-graph",
  "code-split-plugin",
+ "code-split-plugin-api",
  "proc-macro2",
  "rust-code-analysis-code-split",
  "syn",

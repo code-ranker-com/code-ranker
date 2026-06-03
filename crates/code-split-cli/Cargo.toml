@@ -16,6 +16,7 @@ path = "src/main.rs"
 [dependencies]
 code-split-graph = { workspace = true }
 code-split-plugin = { workspace = true }
+code-split-plugin-api = { workspace = true }
 code-split-plugin-rust = { workspace = true }
 code-split-plugin-python = { workspace = true }
 code-split-plugin-javascript = { workspace = true }

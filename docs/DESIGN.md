@@ -93,18 +93,21 @@ The three pillars of the design are:
 ```mermaid
 flowchart TD
     subgraph step1["Language plugins (Rust binary)"]
-        cli["code-split-cli<br/>(orchestrator + plugin dispatch)"]
+        cli["code-split-cli<br/>(registry + dispatch via trait)"]
+        api["code-split-plugin-api<br/>(LanguagePlugin trait)"]
         pr["code-split-plugin-rust<br/>(cargo metadata + syn, module→file collapse)"]
         pp["code-split-plugin-python<br/>(tree-sitter)"]
         pj["code-split-plugin-javascript<br/>(tree-sitter)"]
         plug["code-split-plugin<br/>(complexity, finalize, logging)"]
         core["code-split-graph<br/>(graph types + JSON schema)"]
-        cli --> pr
-        cli --> pp
-        cli --> pj
+        cli -->|"dyn LanguagePlugin"| api
+        pr -.implements.-> api
+        pp -.implements.-> api
+        pj -.implements.-> api
         pr --> plug
         pp --> plug
         pj --> plug
+        api --> core
         plug --> core
         pr --> core
         pp --> core
@@ -129,7 +132,8 @@ flowchart TD
 | Plugin — Presentation | Argument parsing, output routing, artifact writing | `clap`, `anyhow` (Rust) |
 | Plugin — Application | Dispatch language plugins, assemble the snapshot | `code-split-cli` (Rust) |
 | Plugin — Domain | Graph types, JSON schema, builder API | `code-split-graph`, `petgraph`, `serde` (Rust) |
-| Plugin — Infrastructure | Per-language analysis (one crate each) on a shared plugin layer (complexity, finalize, logging) | `code-split-plugin-rust`/`-python`/`-javascript`, `code-split-plugin`, `syn`, `tree-sitter`, `rust-code-analysis` (Rust) |
+| Plugin — Contract | The `LanguagePlugin` trait every language plugin implements; the CLI works only against it | `code-split-plugin-api` (Rust) |
+| Plugin — Infrastructure | Per-language analysis (one crate each, behind the trait) on a shared utility layer (complexity, finalize, logging) | `code-split-plugin-rust`/`-python`/`-javascript`, `code-split-plugin`, `syn`, `tree-sitter`, `rust-code-analysis` (Rust) |
 | Check | Analyze (or read) input, evaluate rules and (with `--baseline`) regressions, print diagnostics, exit non-zero on violation | `code-split-cli` (Rust) |
 | Report | Analyze (or read) input, write snapshot JSON + offline HTML viewer (a diff with `--baseline`) | `code-split-cli` + `code-split-viewer` (Rust), Graphviz WASM bundled in binary, assets embedded via `include_str!` |
 
@@ -280,11 +284,29 @@ Modules beyond graph types:
   and sorts the `nodes`/`edges` arrays by a stable key. This guarantees a
   deterministic, byte-stable snapshot for unchanged input.
 
+#### code-split-plugin-api
+
+- [x] `p1` - **ID**: `cpt-code-split-component-plugin-api`
+
+The plugin contract: a single trait, `LanguagePlugin`, that knows nothing about
+any specific language. Each language crate implements it — `name`, `aliases`,
+`markers` (auto-detect files), `run`, `versions` (e.g. `rustc`). Depends only on
+`code-split-graph` (for the `PluginGraphs` / `StageTime` return types); no
+analyzers, no `tree-sitter`, no `cargo_metadata`.
+
+The CLI works **only** against `dyn LanguagePlugin`. The single place that names
+concrete plugins is `code-split-cli`'s `plugin::registry() -> Vec<Box<dyn
+LanguagePlugin>>`; dispatch (`run`), marker-based auto-detection (`detect`), and
+snapshot version metadata (`versions`) all iterate that list. Adding a language
+is: implement the trait in a new crate, add one line to `registry()` — nothing
+else in the codebase changes.
+
 #### code-split-plugin-rust
 
 - [x] `p1` - **ID**: `cpt-code-split-component-syn`
 
-The Rust language plugin (`pub fn run`), dispatched by `code-split-cli`. It
+The Rust language plugin (implements `LanguagePlugin`; analysis in `run`),
+dispatched by `code-split-cli`. It
 produces the Rust module graph via syntactic analysis, annotates complexity
 through the shared `code-split-plugin` crate (passing a `RustParser`), and
 collapses the module graph to a file graph (see §3.7) before returning. Calls
@@ -641,28 +663,36 @@ See [§3.7 Plugin System](#37-plugin-system).
 
 | Consumer | Dependency | Interface |
 |----------|------------|-----------|
-| `code-split-cli` | `code-split-plugin-{rust,python,javascript}` | `run(workspace) -> (PluginGraphs, Vec<StageTime>)` |
+| `code-split-cli` | `code-split-plugin-api` | `LanguagePlugin` trait — the only contract the CLI uses to talk to plugins |
+| `code-split-cli` | `code-split-plugin-{rust,python,javascript}` | one `Box<dyn LanguagePlugin>` each, listed in `plugin::registry()` |
 | `code-split-cli` | `code-split-viewer` | `render_html_viewer()`, `extract_embedded_snapshot()` |
 | `code-split-cli` | `code-split-graph` | `GraphBuilder`, `compare_snapshots()`, `serde_json` serialization |
+| `code-split-plugin-{rust,python,javascript}` | `code-split-plugin-api` | `impl LanguagePlugin` (name/aliases/markers/run/versions) |
 | `code-split-plugin-{rust,python,javascript}` | `code-split-plugin` | `complexity::annotate()`, `finalize::*`, `logger` |
 | `code-split-plugin-{rust,python,javascript}` | `code-split-graph` | `GraphBuilder` write API |
-| `code-split-plugin` | `code-split-graph` | `GraphBuilder` read+write API, `Complexity` struct |
+| `code-split-plugin` / `code-split-plugin-api` | `code-split-graph` | `GraphBuilder`, `Complexity`; `PluginGraphs`/`StageTime` types |
 | `code-split-viewer` | `code-split-graph` | `Snapshot`, `to_canonical_string` |
 | `code-split-cli` (`run_report`) | the analyzed snapshot (+ optional `--baseline`) | top-level metadata + `graphs` object; rendered via `code-split-viewer` |
 | `code-split-cli` (`run_check`) | the analyzed snapshot (+ optional `--baseline`) | `graphs` object; `compare_snapshots` / violation diff for the relative gate |
 
 **Rules**:
 
-- No circular dependencies among the seven Rust crates.
+- No circular dependencies among the eight Rust crates.
+- **The `LanguagePlugin` trait (in `code-split-plugin-api`) is the only contract
+  between the CLI and the language plugins.** The sole place that names concrete
+  plugins is `code-split-cli`'s `plugin::registry()` — a `Vec<Box<dyn LanguagePlugin>>`.
+  Everything else (dispatch, marker-based auto-detect, version metadata) iterates
+  that list and never hardcodes a language. Adding a language = add a crate +
+  one line in `registry()`.
 - Only `code-split-plugin-rust` may depend on `cargo_metadata` and `syn`.
 - Only `code-split-plugin` may depend on `rust-code-analysis`.
-- Language-specific code/names live **only** in the `code-split-plugin-*` crates;
-  `code-split-plugin` and `code-split-graph` are language-agnostic.
+- Language-specific code/names (markers, parsers, `rustc` version) live **only**
+  in the `code-split-plugin-*` crates; `code-split-plugin`, `code-split-plugin-api`
+  and `code-split-graph` are language-agnostic.
 - `code-split-graph` has zero I/O and zero analyzer dependencies.
-- The Rust plugin's module→file collapse lives in
-  `code-split-plugin-rust/src/lib.rs`.
-- `code-split-cli` orchestrates: it dispatches the language plugins and hands the
-  snapshot to `code-split-viewer` for rendering.
+- The Rust plugin's module→file collapse lives in `code-split-plugin-rust/src/lib.rs`.
+- `code-split-cli` orchestrates: it dispatches the language plugins (through the
+  trait) and hands the snapshot to `code-split-viewer` for rendering.
 
 ### 3.5 External Dependencies
 
@@ -1130,12 +1160,13 @@ open .code-split/my-crate-20260522-112233-diff.html   # --baseline names it -dif
 code-split/
   crates/
     code-split-graph/             # Rust — graph types, JSON schema, StageTime, cycles/hk/diff
-    code-split-plugin/            # Rust — shared plugin layer: complexity, finalize, logging
+    code-split-plugin-api/        # Rust — the LanguagePlugin trait (plugin contract)
+    code-split-plugin/            # Rust — shared plugin utils: complexity, finalize, logging
     code-split-plugin-rust/       # Rust — Rust analysis: cargo metadata + syn, module→file collapse
     code-split-plugin-python/     # Rust — Python analysis: tree-sitter
     code-split-plugin-javascript/ # Rust — JS/TS analysis: tree-sitter
     code-split-viewer/            # Rust — HTML viewer: assets + render_html_viewer
-    code-split-cli/               # Rust — orchestrator, plugin dispatch, check linter, report
+    code-split-cli/               # Rust — orchestrator, plugin registry/dispatch, check linter, report
       src/
         plugin/            # Built-in plugins: rust.rs (incl. module→file collapse), python.rs, javascript.rs, finalize.rs (file-graph normalizer for Python/JS), mod.rs
         assets/            # HTML/CSS/JS assets embedded via include_str!

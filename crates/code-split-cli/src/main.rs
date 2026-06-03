@@ -326,14 +326,8 @@ fn analyze_directory(
         "code-split".to_string(),
         env!("CARGO_PKG_VERSION").to_string(),
     );
-    if plugin_name == "rust" {
-        versions.insert(
-            "code_split_plugin_rust".to_string(),
-            env!("CARGO_PKG_VERSION").to_string(),
-        );
-        if let Some(rv) = code_split_plugin_rust::version_string() {
-            versions.insert("rustc".to_string(), rv);
-        }
+    for (k, v) in plugin::versions(&plugin_name, &target) {
+        versions.insert(k, v);
     }
 
     let snapshot = Snapshot::new(
@@ -864,36 +858,7 @@ fn resolve_plugin(arg: Option<&str>, cfg: Option<&str>, workspace: &Path) -> Res
     {
         return Ok(p.to_string());
     }
-    detect_plugin(workspace)
-}
-
-/// Detect the plugin from project markers in the workspace root.
-fn detect_plugin(workspace: &Path) -> Result<String> {
-    let mut found: Vec<&str> = Vec::new();
-    if workspace.join("Cargo.toml").exists() {
-        found.push("rust");
-    }
-    if workspace.join("pyproject.toml").exists()
-        || workspace.join("setup.py").exists()
-        || workspace.join("setup.cfg").exists()
-    {
-        found.push("python");
-    }
-    if workspace.join("package.json").exists() || workspace.join("tsconfig.json").exists() {
-        found.push("javascript");
-    }
-    match found.as_slice() {
-        [one] => Ok((*one).to_string()),
-        [] => anyhow::bail!(
-            "could not auto-detect a plugin in {}: no project marker found — \
-             pass --plugin rust|python|javascript",
-            workspace.display()
-        ),
-        many => anyhow::bail!(
-            "multiple project markers found ({}) — pass --plugin to choose",
-            many.join(", ")
-        ),
-    }
+    plugin::detect(workspace)
 }
 
 fn detect_roots() -> HashMap<String, String> {
@@ -1034,7 +999,7 @@ mod tests {
             let d = tempfile::tempdir().unwrap();
             fs::write(d.path().join(marker), "").unwrap();
             assert_eq!(
-                detect_plugin(d.path()).unwrap(),
+                plugin::detect(d.path()).unwrap(),
                 expected,
                 "marker {marker}"
             );
@@ -1046,11 +1011,11 @@ mod tests {
         let amb = tempfile::tempdir().unwrap();
         fs::write(amb.path().join("Cargo.toml"), "").unwrap();
         fs::write(amb.path().join("package.json"), "").unwrap();
-        let err = format!("{:#}", detect_plugin(amb.path()).unwrap_err());
+        let err = format!("{:#}", plugin::detect(amb.path()).unwrap_err());
         assert!(err.contains("multiple"), "ambiguous error: {err}");
 
         let empty = tempfile::tempdir().unwrap();
-        let err = format!("{:#}", detect_plugin(empty.path()).unwrap_err());
+        let err = format!("{:#}", plugin::detect(empty.path()).unwrap_err());
         assert!(err.contains("no project marker"), "empty error: {err}");
     }
 

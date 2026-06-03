@@ -12,6 +12,7 @@ description = "Code Split Rust plugin: cargo metadata + syn module/crate graph."
 [dependencies]
 code-split-graph = { workspace = true }
 code-split-plugin = { workspace = true }
+code-split-plugin-api = { workspace = true }
 anyhow = { workspace = true }
 cargo_metadata = { workspace = true }
 syn = { workspace = true }

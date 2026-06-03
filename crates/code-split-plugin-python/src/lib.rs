@@ -410,6 +410,27 @@ fn py_visibility(name: &str) -> Visibility {
     }
 }
 
+/// The Python language plugin (registered by the CLI).
+pub struct PythonPlugin;
+
+impl code_split_plugin_api::LanguagePlugin for PythonPlugin {
+    fn name(&self) -> &'static str {
+        "python"
+    }
+    fn markers(&self) -> &'static [&'static str] {
+        &["pyproject.toml", "setup.py", "setup.cfg"]
+    }
+    fn run(
+        &self,
+        workspace: &std::path::Path,
+    ) -> anyhow::Result<(
+        code_split_graph::PluginGraphs,
+        Vec<code_split_graph::StageTime>,
+    )> {
+        run(workspace)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -43,7 +43,7 @@ const CATALOG: &[CatalogEntry] = &[
         "ADP",
         "ADP — Acyclic Dependencies Principle",
         "cycle",
-        &["common", "out"],
+        &["common"],
         "acyclic-dependencies-principle",
         "The dependency graph between modules must form a DAG. When module A depends\n\
          on module B, no chain of dependencies should bring B back to A.\n\n\

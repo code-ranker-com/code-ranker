@@ -269,22 +269,28 @@ snapshot input.
   view with a verdict, named `…-diff.html`.
 
 `report` selects artifacts and their destinations through one flag family,
-`--output.<fmt>.path <path>` (`<fmt>` is `json` or `html`). When no
-`--output.*` flag is given it writes **both** formats with default names
-into `.code-split/`: `{ts}-{git-hash-3}.json` and `{ts}-{git-hash-3}.html`,
-e.g. `.code-split/20260526-114144-a3f.json` (`{ts}` is a local
-`YYYYMMDD-HHMMSS` timestamp, `{git-hash-3}` the first three chars of the
-commit). When one or more `--output.<fmt>.path` are given, **exactly** the
+`--output.<fmt>.path <path>` (`<fmt>` is `json`, `html`, `prompt`, or
+`scorecard`; the last two are the refactoring-guidance formats, see
+`cpt-code-split-fr-ai-prompts`). When no `--output.*` flag is given it writes
+**both** `json` and `html` with default names into `.code-split/`:
+`{ts}-{git-hash-3}.json` and `{ts}-{git-hash-3}.html`, e.g.
+`.code-split/20260526-114144-a3f.json` (`{ts}` is a local `YYYYMMDD-HHMMSS`
+timestamp, `{git-hash-3}` the first three chars of the commit); `prompt` /
+`scorecard` are never in the default set and are emitted only when explicitly
+named. When one or more `--output.<fmt>.path` are given, **exactly** the
 listed formats are written. The `.path` value is a file path (or a name
 template, or `stdout`/`-` to stream the artifact); it supports placeholders
 `{project-dir}` (slugified workspace name), `{ts}`, `{git-hash}` (the
-12-char short commit) and `{git-hash-N}` (its first N chars). The
+12-char short commit), `{git-hash-N}` (its first N chars), and `{preset}` (the
+active principle id, `prompt` / `scorecard` only). The
 destination resolves as **`--output.<fmt>.path` flag › `[output.<fmt>]
 path` in `code-split.toml` › built-in default**, so a project can pin its
 own naming while a flag still wins for named states (e.g., `pr.json`). With
 `--baseline`, the HTML default gains a `-diff` marker
 (`{ts}-{git-hash-3}-diff.html`); the JSON artifact is always the current
-snapshot, never a diff. No additional registry is created.
+snapshot, never a diff. The `scorecard` default is `stdout` and the `prompt`
+default is `.code-split/{ts}-{git-hash-3}-{preset}.md`. No additional registry
+is created.
 
 Each snapshot is a **single self-contained `.json` file** combining
 metadata (command, versions, git state) and the one `files` graph. See
@@ -718,9 +724,33 @@ an LLM, pre-populated with the top-N heaviest nodes and their coupling
 context, asking for refactoring recommendations. The prompt format MUST
 be copyable as plain text for direct paste into any LLM interface.
 
+The **same recommendation engine is exposed on the CLI** as two `report`
+output formats, so the guidance is reachable without opening the HTML
+(driven from the snapshot's calibrated `node_attributes[*].thresholds`
+`info` / `warning` tiers — advisory, never a gate):
+
+- `--output.prompt[.path]` — the LLM prompt for **one** principle, the same
+  Markdown the HTML Prompt Generator produces (intent, summary, principle-doc
+  link, a task checklist, the ranked offending modules, and the principle's
+  connection lists). Defaults to a per-principle file
+  `.code-split/{ts}-{git-hash-3}-{preset}.md` (or `stdout`).
+- `--output.scorecard[.path]` — a console **triage** overview (a per-principle
+  table of `warning` / `info` counts + the worst module, then the worst modules
+  overall, then a hint to the prompt for the worst principle). Defaults to
+  `stdout`.
+
+Both share three flags: `--preset <ID>` (a principle from the snapshot's
+`presets`; **optional** — when omitted the principle with the most violations
+is chosen), `--severity <info|warning|auto>` (the tier; repeatable for the
+scorecard, single for the prompt; `auto` = warning-if-any-else-info), and
+`--top <N>` (how many modules; `--top 1` = the single worst). These flags apply
+only with a `prompt` / `scorecard` format; an explicit `--index` is rejected
+with a hint to use `--top`.
+
 **Rationale**: Connecting structural data to an LLM's reasoning closes
 the loop between measurement and advice without coupling the offline
-tool to a specific LLM provider.
+tool to a specific LLM provider. The CLI surface lets an agent or a CI
+step pull the same prompt/triage non-interactively.
 
 **Actors**: `cpt-code-split-actor-developer`, `cpt-code-split-actor-tech-lead`
 
@@ -987,7 +1017,8 @@ command; every action is an explicit subcommand.
 code-split check  [input] [--plugin <name|auto>] [--threshold ...] [--cycle-rule ...] [--baseline <snapshot>] [--output-format <human|json|github|sarif>] [--exit-zero]
 
 # Steps 1+2 — analyze (or read) the input and write a snapshot and/or HTML viewer
-code-split report [input] [--plugin <name|auto>] [--output.<fmt>.path <path>] [--baseline <snapshot>]
+# (also the AI prompt / console scorecard via --output.prompt / --output.scorecard)
+code-split report [input] [--plugin <name|auto>] [--output.<fmt>.path <path>] [--baseline <snapshot>] [--preset <ID>] [--severity <tier>] [--top <N>]
 ```
 
 The positional `[input]` (default `.`) is polymorphic: a directory is

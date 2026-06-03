@@ -20,7 +20,7 @@ goes through an explicit subcommand, there is no default action. Run
 | Command | What it produces |
 |---|---|
 | [`check`](#check) | A **verdict**: evaluates thresholds, cycle rules, and (with `--baseline`) regressions, prints diagnostics, and **exits non-zero** on violation. Writes no files. |
-| [`report`](#report) | **Artifacts**: an HTML viewer and/or a JSON snapshot. With `--baseline`, the HTML becomes a diff with a verdict. Always exits `0`. |
+| [`report`](#report) | **Artifacts**: an HTML viewer and/or a JSON snapshot. With `--baseline`, the HTML becomes a diff with a verdict. Can also emit a console **scorecard** triage and an AI **prompt** (see [Recommendations](#recommendations-scorecard--prompt)). Always exits `0`. |
 
 There are exactly two commands, split by *what they emit*: `check` produces an exit
 code (a CI gate), `report` produces files (a snapshot and a viewer). Both take the same
@@ -184,8 +184,14 @@ code-split report [input] [options]
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--output.<fmt>.path <path>` | `json` + `html` in `.code-split/` | Which artifacts to emit and where. `<fmt>` is `json` or `html`. Repeatable, one per format. See [Output paths](#output-paths). |
+| `--output.<fmt>.path <path>` | `json` + `html` in `.code-split/` | Which artifacts to emit and where. `<fmt>` is `json`, `html`, `prompt`, or `scorecard`. Repeatable, one per format. See [Output paths](#output-paths). |
 | `--baseline <snapshot>` | — | Baseline snapshot (`.json` or `.html`). Turns the HTML into a diff (baseline vs current) with a verdict, and names it `…-diff.html`. See [`--baseline`](#--baseline-comparison). |
+| `--preset <ID>` | worst-violating | Principle for the `prompt` / `scorecard` formats (`ADP`, `SRP`, `CPX`, …). When omitted, the principle with the most violations is chosen. See [Recommendations](#recommendations-scorecard--prompt). |
+| `--severity <tier>` | `auto` (prompt) · all (scorecard) | Threshold tier: `info`, `warning`, or `auto`. Repeatable for `scorecard` to show several tiers; for `prompt` it sizes the default `--top`. |
+| `--top <N>` | severity-tier size (prompt) · 15 (scorecard) | How many modules the `prompt` includes / rows the `scorecard` shows. `--top 1` = the single worst module. |
+
+`--preset`, `--severity`, and `--top` apply only when a `prompt` or `scorecard` format is
+selected; passing them otherwise is an error.
 
 ```sh
 # default: snapshot + viewer in .code-split/
@@ -199,6 +205,15 @@ code-split report --output.json.path=stdout
 
 # render a diff viewer against a baseline (current = this run)
 code-split report . --baseline .code-split/main.json --output.html.path=diff.html
+
+# console triage overview — what to fix first
+code-split report . --output.scorecard
+
+# AI prompt for the worst-violating principle, to stdout
+code-split report . --output.prompt.path=stdout
+
+# AI prompt for the single worst SRP module
+code-split report . --preset SRP --top 1 --output.prompt.path=stdout
 ```
 
 The HTML is **self-contained**: the snapshot data is embedded inline, so the single file
@@ -207,12 +222,15 @@ opens straight from disk (no server, no extra files). See [HTML viewer](#html-vi
 ## Output paths
 
 `report` selects artifacts and their destinations through one flag family,
-`--output.<fmt>.path`, where `<fmt>` is `json` or `html`.
+`--output.<fmt>.path`, where `<fmt>` is `json`, `html`, `prompt`, or `scorecard`. The
+last two are the recommendation outputs — see
+[Recommendations](#recommendations-scorecard--prompt) for their flags and defaults.
 
 **Which formats are written:**
 
 - No `--output.*` flag → the default set: **both** `json` and `html`, with default
-  names, into `.code-split/`.
+  names, into `.code-split/`. (`prompt` / `scorecard` are never in the default set —
+  they are emitted only when explicitly named.)
 - One or more `--output.<fmt>.path` given → **exactly** the listed formats, nothing else.
 
 **The `.path` value:**
@@ -233,6 +251,10 @@ opens straight from disk (no server, no extra files). See [HTML viewer](#html-vi
 With `--baseline`, the HTML default gains a `-diff` marker:
 `.code-split/{ts}-{git-hash-3}-diff.html`. The JSON artifact is always the snapshot of
 the current input (reusable as a future baseline), never a diff.
+
+The recommendation formats have their own per-format defaults: `scorecard` defaults to
+**`stdout`** (it is a console overview), and `prompt` defaults to the file
+`.code-split/{ts}-{git-hash-3}-{preset}.md`.
 
 To pin destinations project-wide instead of passing flags every time, set them in
 config:
@@ -255,6 +277,7 @@ path = "dist/{project-dir}-{ts}.html"
 | `{ts}` | Local timestamp, `YYYYMMDD-HHMMSS`. | `20260526-114144` |
 | `{git-hash}` | The 12-char short commit hash (zeros if not a git repo). | `a3f9c21b4d5e` |
 | `{git-hash-N}` | The first `N` chars of the commit hash. | `{git-hash-3}` → `a3f` |
+| `{preset}` | The active `--preset` id (`prompt` / `scorecard` only). | `SRP` |
 
 So the default `{ts}-{git-hash-3}.json` yields `20260526-114144-a3f.json`. When `[input]`
 is a **snapshot**, `{git-hash}` / `{ts}` are read from the snapshot's embedded metadata —
@@ -262,6 +285,111 @@ the commit and time of the original analysis — not the current repo or clock.
 
 The destination resolves as **`--output.<fmt>.path` flag › `[output.<fmt>] path` in
 `code-split.toml` › built-in default**.
+
+## Recommendations: `scorecard` & `prompt`
+
+Two `report` output formats turn the snapshot's calibrated metric thresholds into
+refactoring guidance:
+
+- **`scorecard`** — a console triage overview answering *"what do I fix first?"*
+- **`prompt`** — a ready-to-paste AI prompt for one principle, the same one the HTML
+  viewer's Prompt Generator produces.
+
+Both rank modules with the same engine and share three flags: `--preset`, `--severity`,
+and `--top`.
+
+> **Advisory, not a gate.** Unlike [`check`](#check), these never fail the build and carry
+> no exit code. `check` enforces the rules *you* configure; `scorecard` / `prompt` surface
+> the worst hotspots against the snapshot's built-in, language-calibrated thresholds so you
+> know where to start. Both also work from a snapshot input
+> (`report snap.json --output.scorecard`) with no re-analysis.
+
+### Severity tiers
+
+Every ranking metric carries two calibrated thresholds in the snapshot — **`info`** (the
+softer line; ~50 % of projects breach it) and **`warning`** (the harder line; ~10 %
+breach). A module is *in a tier* when its value crosses that threshold. `--severity`
+selects which tier drives the output:
+
+| Value | Meaning |
+|---|---|
+| `warning` | only modules over the warning line |
+| `info` | modules over the info line (a superset of `warning`) |
+| `auto` | warning if any module breaches it, else info — the **`prompt` default** |
+
+For `scorecard`, `--severity` is **repeatable** (`--severity warning --severity info`) to
+show several tiers at once; with none given it shows all tiers.
+
+Cycle-based principles (e.g. `ADP`) have **no numeric threshold** — every module in a
+dependency cycle counts, ranked by HK, and `--severity` is ignored for them.
+
+### Presets (principles)
+
+`--preset <ID>` selects the principle. The catalog comes from the snapshot's `presets`
+(the same set as the HTML viewer's Prompt Generator): `ADP`, `SRP`, `CPX`, `OCP`, `LSP`,
+`ISP`, `DIP`, `DRY`, `KISS`, `LoD`, `MISU`, `CoI`, `YAGNI`. Each preset fixes its own
+ranking metric (ADP → cycles, SRP → SLOC, OCP → cyclomatic, …) and the connection lists
+embedded in its prompt — so there is no separate metric/connection flag to set.
+
+`--preset` is **optional**: when omitted, the principle with the most violations is chosen
+— the one with the largest count of modules over `warning` (tie-break: over `info`), i.e.
+the top row of the scorecard.
+
+### `scorecard` — triage overview
+
+Defaults to **stdout**, so a bare `--output.scorecard` prints to the console. It shows a
+per-principle table (warning / info counts + the worst module) followed by the worst
+modules overall:
+
+```sh
+code-split report . --output.scorecard                     # all tiers, ~15 rows
+code-split report . --output.scorecard --severity warning --top 20
+code-split report . --output.scorecard.path=triage.txt     # to a file instead
+code-split report . --output.scorecard --preset SRP        # narrow to one principle
+```
+
+```text
+scorecard  (rust, 142 files)
+
+PRESET  PRINCIPLE              ⚠  ⓘ   TOP MODULE
+ADP     Acyclic Dependencies   2  2   a.rs ↔ b.rs
+SRP     Single Responsibility  5 18   cli/main.rs (sloc 1832)
+CPX     Reduce Complexity      3 11   cli/main.rs (cog 67)
+
+WORST MODULES
+ 1 ⚠ cli/main.rs     hk 4.2M   +sloc, fan_out, cycle
+ 2 ⚠ snapshot.rs     sloc 1.8K +hk
+ 3 ⓘ plugin/rust.rs  fan_out 14
+
+→ code-split report . --preset SRP --output.prompt.path=…
+```
+
+`--top N` caps the worst-modules list (default ~15); `--preset <ID>` narrows the whole
+report to a single principle.
+
+### `prompt` — AI prompt for one principle
+
+Defaults to the file `.code-split/{ts}-{git-hash-3}-{preset}.md` (use
+`--output.prompt.path=stdout` to pipe it). It emits the same Markdown the HTML viewer's
+Prompt Generator produces: the principle's intent and summary, a link to the full
+principle doc, a task checklist, the ranked list of offending modules (each annotated with
+its metric value), and the relevant connection lists.
+
+```sh
+# worst-violating principle (preset auto-picked), to stdout
+code-split report . --output.prompt.path=stdout
+
+# a specific principle, default module count (the warning-tier size)
+code-split report . --preset ADP --output.prompt.path=adp.md
+
+# just the single worst SRP module
+code-split report . --preset SRP --top 1 --output.prompt.path=stdout
+```
+
+`--top N` sets how many modules go into the prompt; without it the count is the size of
+the active severity tier (matching the viewer's recommended count). There is **no
+`--index`** — `--top 1` already yields the single worst module, so passing `--index` is
+rejected with a hint to use `--top`.
 
 ## `--baseline` (comparison)
 

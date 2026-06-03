@@ -3,6 +3,7 @@ mod git;
 mod logger;
 mod plugin;
 mod presets;
+mod recommend;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
@@ -128,6 +129,43 @@ enum Command {
         /// Placeholders: {project-dir}, {ts}, {git-hash}, {git-hash-N}. Selects HTML.
         #[arg(long = "output.html.path", value_name = "PATH")]
         output_html_path: Option<String>,
+
+        /// Emit the AI prompt for one principle (default to a `…-{preset}.md` file).
+        #[arg(long = "output.prompt")]
+        output_prompt: bool,
+
+        /// Emit the console triage scorecard (default to stdout).
+        #[arg(long = "output.scorecard")]
+        output_scorecard: bool,
+
+        /// AI-prompt destination: a path or name template (extra placeholder
+        /// {preset}), or `stdout`/`-`. Selects the prompt format.
+        #[arg(long = "output.prompt.path", value_name = "PATH")]
+        output_prompt_path: Option<String>,
+
+        /// Scorecard destination: a path or name template, or `stdout`/`-`
+        /// (the default). Selects the scorecard format.
+        #[arg(long = "output.scorecard.path", value_name = "PATH")]
+        output_scorecard_path: Option<String>,
+
+        /// Principle for the prompt/scorecard formats (e.g. ADP, SRP, CPX). When
+        /// omitted, the principle with the most violations is chosen.
+        #[arg(long, value_name = "ID")]
+        preset: Option<String>,
+
+        /// Threshold tier driving the prompt/scorecard: info | warning | auto.
+        /// Repeatable for the scorecard (show several tiers); single for the prompt.
+        #[arg(long = "severity", value_name = "TIER")]
+        severity: Vec<String>,
+
+        /// Modules the prompt includes / rows the scorecard shows (`--top 1` =
+        /// the single worst module). Prompt/scorecard only.
+        #[arg(long)]
+        top: Option<usize>,
+
+        /// Rejected: use `--top N` instead (`--top 1` = the single worst module).
+        #[arg(long, value_name = "K")]
+        index: Option<usize>,
     },
 }
 
@@ -164,13 +202,33 @@ fn main() -> Result<()> {
             output_html,
             output_json_path,
             output_html_path,
+            output_prompt,
+            output_scorecard,
+            output_prompt_path,
+            output_scorecard_path,
+            preset,
+            severity,
+            top,
+            index,
         } => run_report(
             &analyze,
             baseline.as_deref(),
-            output_json,
-            output_html,
-            output_json_path.as_deref(),
-            output_html_path.as_deref(),
+            ReportOutputs {
+                json: output_json,
+                html: output_html,
+                prompt: output_prompt,
+                scorecard: output_scorecard,
+                json_path: output_json_path,
+                html_path: output_html_path,
+                prompt_path: output_prompt_path,
+                scorecard_path: output_scorecard_path,
+            },
+            ReportReco {
+                preset,
+                severity,
+                top,
+                index,
+            },
         ),
     };
     match &res {
@@ -200,6 +258,30 @@ struct Analyzed {
 /// a `--output.<fmt>.path`, nor the `[output.<fmt>]` config section sets one.
 const DEFAULT_JSON_PATH: &str = ".code-split/{ts}-{git-hash-3}.json";
 const DEFAULT_HTML_PATH: &str = ".code-split/{ts}-{git-hash-3}.html";
+/// The prompt defaults to a per-principle Markdown file; the scorecard is a
+/// console overview and defaults to the stdout stream.
+const DEFAULT_PROMPT_PATH: &str = ".code-split/{ts}-{git-hash-3}-{preset}.md";
+const DEFAULT_SCORECARD_PATH: &str = "stdout";
+
+/// Which `report` artifact formats were requested (flags + `.path` selectors).
+struct ReportOutputs {
+    json: bool,
+    html: bool,
+    prompt: bool,
+    scorecard: bool,
+    json_path: Option<String>,
+    html_path: Option<String>,
+    prompt_path: Option<String>,
+    scorecard_path: Option<String>,
+}
+
+/// Recommendation knobs for the `prompt` / `scorecard` formats.
+struct ReportReco {
+    preset: Option<String>,
+    severity: Vec<String>,
+    top: Option<usize>,
+    index: Option<usize>,
+}
 
 /// Does this input path denote a snapshot artifact (read directly) rather than a
 /// source directory to analyze?
@@ -954,25 +1036,51 @@ fn sarif_document(violations: &[config::Violation]) -> String {
 fn run_report(
     args: &AnalyzeArgs,
     baseline: Option<&Path>,
-    output_json: bool,
-    output_html: bool,
-    json_path: Option<&str>,
-    html_path: Option<&str>,
+    out: ReportOutputs,
+    reco: ReportReco,
 ) -> Result<()> {
-    let a = analyze_input(args, &[], &[])?;
-    let snap = &a.snapshot;
-    let target = PathBuf::from(&snap.target);
-    let commit = snap.git.as_ref().map(|g| g.commit.as_str());
+    let json_path = out.json_path.as_deref();
+    let html_path = out.html_path.as_deref();
+    let prompt_path = out.prompt_path.as_deref();
+    let scorecard_path = out.scorecard_path.as_deref();
 
-    // Decide which formats to write. A format is selected by a CLI flag
-    // (`--output.<fmt>` / `--output.<fmt>.path`), or by config (`enabled`, else a
-    // configured `path`). If nothing selects anything, write both by default.
-    let mut want_json = want_format(output_json, json_path, &a.output.json);
-    let mut want_html = want_format(output_html, html_path, &a.output.html);
-    if !want_json && !want_html {
+    // The recommendation formats are flag-only (no `[output.<fmt>]` config) and
+    // are never part of the default set.
+    let want_prompt = out.prompt || prompt_path.is_some();
+    let want_scorecard = out.scorecard || scorecard_path.is_some();
+
+    // Validate the recommendation knobs before any analysis runs. `--index` is
+    // intentionally unsupported — complain with a hint rather than a bare clap
+    // "unknown flag" — and the other knobs only make sense for prompt/scorecard.
+    if reco.index.is_some() {
+        anyhow::bail!(
+            "--index is not supported; use --top N instead (--top 1 = the single worst module)"
+        );
+    }
+    if !want_prompt
+        && !want_scorecard
+        && (reco.preset.is_some() || !reco.severity.is_empty() || reco.top.is_some())
+    {
+        anyhow::bail!(
+            "--preset/--severity/--top apply only with --output.prompt or --output.scorecard"
+        );
+    }
+
+    let a = analyze_input(args, &[], &[])?;
+
+    // A json/html format is selected by a CLI flag (`--output.<fmt>` /
+    // `--output.<fmt>.path`) or by config (`enabled`, else a configured `path`).
+    // If NOTHING is selected across all formats, write json + html by default.
+    let mut want_json = want_format(out.json, json_path, &a.output.json);
+    let mut want_html = want_format(out.html, html_path, &a.output.html);
+    if !want_json && !want_html && !want_prompt && !want_scorecard {
         want_json = true;
         want_html = true;
     }
+
+    let snap = &a.snapshot;
+    let target = PathBuf::from(&snap.target);
+    let commit = snap.git.as_ref().map(|g| g.commit.as_str());
 
     let baseline_snap = match baseline {
         Some(p) => Some(load_snapshot_any(p)?),
@@ -1004,6 +1112,83 @@ fn run_report(
         }
         let html = code_split_viewer::render_html_viewer(baseline_snap.as_ref(), Some(snap));
         write_artifact(&dest, &html, "html")?;
+    }
+
+    if want_prompt || want_scorecard {
+        write_recommendations(
+            snap,
+            &reco,
+            want_prompt,
+            want_scorecard,
+            prompt_path,
+            scorecard_path,
+            &target,
+            commit,
+        )?;
+    }
+
+    Ok(())
+}
+
+/// Write the recommendation artifacts (`prompt` / `scorecard`) for the analyzed
+/// snapshot. Both read the `files` level; the prompt resolves a single principle
+/// (explicit `--preset`, else the worst-violating one), the scorecard spans all.
+#[allow(clippy::too_many_arguments)]
+fn write_recommendations(
+    snap: &Snapshot,
+    reco: &ReportReco,
+    want_prompt: bool,
+    want_scorecard: bool,
+    prompt_path: Option<&str>,
+    scorecard_path: Option<&str>,
+    target: &Path,
+    commit: Option<&str>,
+) -> Result<()> {
+    let level = snap
+        .graphs
+        .get("files")
+        .context("snapshot has no `files` level to build recommendations from")?;
+
+    if want_prompt {
+        let preset_id = match &reco.preset {
+            Some(p) => p.clone(),
+            None => recommend::worst_preset(level, &snap.presets)
+                .context("no presets in the snapshot to recommend from")?,
+        };
+        // The prompt takes a single tier; default `auto`.
+        let sev = match reco.severity.as_slice() {
+            [] => recommend::Severity::Auto,
+            [one] => recommend::parse_severity(one)?,
+            _ => anyhow::bail!(
+                "--output.prompt takes a single --severity (info | warning | auto); the scorecard accepts several"
+            ),
+        };
+        let md = recommend::compose_prompt(level, &snap.presets, &preset_id, sev, reco.top)?;
+        let tpl = prompt_path.unwrap_or(DEFAULT_PROMPT_PATH);
+        let dest = render_name(tpl, target, commit).replace("{preset}", &preset_id);
+        write_artifact(&dest, &md, "prompt")?;
+    }
+
+    if want_scorecard {
+        let severities = if reco.severity.is_empty() {
+            vec![recommend::Severity::Warning, recommend::Severity::Info]
+        } else {
+            reco.severity
+                .iter()
+                .map(|s| recommend::parse_severity(s))
+                .collect::<Result<Vec<_>>>()?
+        };
+        let txt = recommend::render_scorecard(
+            &snap.plugin,
+            level,
+            &snap.presets,
+            &severities,
+            reco.top,
+            reco.preset.as_deref(),
+        )?;
+        let tpl = scorecard_path.unwrap_or(DEFAULT_SCORECARD_PATH);
+        let dest = render_name(tpl, target, commit);
+        write_artifact(&dest, &txt, "scorecard")?;
     }
 
     Ok(())

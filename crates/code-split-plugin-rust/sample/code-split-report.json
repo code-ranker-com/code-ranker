@@ -620,8 +620,7 @@
     },
     {
       "connections": [
-        "common",
-        "out"
+        "common"
       ],
       "doc_url": "https://github.com/ffedoroff/code-split/blob/main/principles/rust/acyclic-dependencies-principle.md",
       "id": "ADP",

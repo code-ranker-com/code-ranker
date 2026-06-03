@@ -222,6 +222,137 @@ fn assert_sample_matches(lang: &str) {
     );
 }
 
+/// Run `report` on a language's `sample/` with extra args, capturing stdout and
+/// stderr (instead of comparing a golden file). Used for the recommendation
+/// formats (`scorecard` / `prompt`), which stream to stdout.
+fn run_report_capture(lang: &str, extra: &[&str]) -> (bool, String, String) {
+    let root = repo_root();
+    let sample = sample_dir(lang);
+    let out = Command::new(env!("CARGO_BIN_EXE_code-split"))
+        .current_dir(&root)
+        .env("CARGO_NET_OFFLINE", "true")
+        .arg("report")
+        .arg(&sample)
+        .arg("--config")
+        .arg(sample.join("code-split.toml"))
+        .args(extra)
+        .output()
+        .expect("spawn code-split");
+    (
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    )
+}
+
+/// The `scorecard` format streams a per-principle table + worst-module list to
+/// stdout. The Rust sample has a mutual cycle (a.rs ↔ b.rs) and no metric
+/// breaches, so ADP is the only principle with violations and tops the table.
+#[test]
+fn rust_sample_scorecard_triage() {
+    let (ok, stdout, stderr) = run_report_capture("rust", &["--output.scorecard"]);
+    assert!(ok, "scorecard run failed: {stderr}");
+    assert!(
+        stdout.contains("scorecard  (rust, 6 files)"),
+        "header with file count: {stdout}"
+    );
+    assert!(
+        stdout.contains("ADP") && stdout.contains("Acyclic Dependencies"),
+        "ADP principle row present: {stdout}"
+    );
+    assert!(stdout.contains("WORST MODULES"), "worst-modules section");
+    assert!(
+        stdout.contains("src/a.rs") && stdout.contains("src/b.rs") && stdout.contains("cycle"),
+        "the two cycle members are listed as cycle breaches: {stdout}"
+    );
+    assert!(
+        stdout.contains("--preset ADP --output.prompt.path"),
+        "next-step hint points at the worst principle: {stdout}"
+    );
+}
+
+/// With no `--preset`, the prompt auto-picks the worst-violating principle (ADP
+/// here) and lists the cycle members + their connections — the same Markdown the
+/// HTML viewer's Prompt Generator emits.
+#[test]
+fn rust_sample_prompt_auto_picks_worst_principle() {
+    let (ok, stdout, stderr) = run_report_capture("rust", &["--output.prompt.path=stdout"]);
+    assert!(ok, "prompt run failed: {stderr}");
+    assert!(
+        stdout.starts_with("# ADP — Acyclic Dependencies Principle"),
+        "auto-picked ADP as the title heading: {stdout}"
+    );
+    assert!(
+        stdout.contains("## Modules in a dependency cycle"),
+        "cycle-modules section"
+    );
+    assert!(
+        stdout.contains("- `src/a.rs`") && stdout.contains("- `src/b.rs`"),
+        "both cycle members listed with cleaned paths: {stdout}"
+    );
+    assert!(
+        stdout.contains("## Connections — common"),
+        "ADP pre-selects the `common` connection set"
+    );
+    assert!(
+        stdout.contains(".code-split/<YYYYMMDD-HHMMSS>-ADP.md"),
+        "save-report instruction carries the preset id: {stdout}"
+    );
+}
+
+/// An explicit metric principle (`SRP`, ranked by SLOC) with `--top 1` yields the
+/// single worst module in an "ordered by" section.
+#[test]
+fn rust_sample_prompt_explicit_preset_top1() {
+    let (ok, stdout, stderr) = run_report_capture(
+        "rust",
+        &[
+            "--preset",
+            "SRP",
+            "--top",
+            "1",
+            "--output.prompt.path=stdout",
+        ],
+    );
+    assert!(ok, "prompt run failed: {stderr}");
+    assert!(
+        stdout.starts_with("# SRP — Single Responsibility Principle"),
+        "explicit preset honoured: {stdout}"
+    );
+    assert!(
+        stdout.contains("## Modules ordered by"),
+        "metric ordering section: {stdout}"
+    );
+    // lib.rs is the largest file in the sample (sloc 50).
+    assert!(
+        stdout.contains("- `src/lib.rs` (SLOC: 50)"),
+        "the single worst SLOC module: {stdout}"
+    );
+}
+
+/// `--index` is rejected with a hint to use `--top`.
+#[test]
+fn rust_sample_report_rejects_index() {
+    let (ok, _stdout, stderr) =
+        run_report_capture("rust", &["--output.prompt.path=stdout", "--index", "0"]);
+    assert!(!ok, "--index must fail");
+    assert!(
+        stderr.contains("--index is not supported") && stderr.contains("--top"),
+        "actionable error: {stderr}"
+    );
+}
+
+/// The recommendation knobs only apply with a `prompt` / `scorecard` format.
+#[test]
+fn rust_sample_report_rejects_stray_reco_flags() {
+    let (ok, _stdout, stderr) = run_report_capture("rust", &["--preset", "ADP"]);
+    assert!(!ok, "--preset without a prompt/scorecard format must fail");
+    assert!(
+        stderr.contains("apply only with --output.prompt or --output.scorecard"),
+        "actionable error: {stderr}"
+    );
+}
+
 #[test]
 fn rust_sample_matches_golden() {
     assert_sample_matches("rust");

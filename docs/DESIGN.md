@@ -51,7 +51,9 @@ At P1 the platform ships three components:
   via `include_str!`. With `--baseline <snapshot>` the HTML becomes a
   baseline↔current diff with a verdict (one shared union layout where the
   Baseline/Current toggle is a CSS visibility flip so common nodes never move),
-  named `…-diff.html`
+  named `…-diff.html`. It also emits two refactoring-guidance formats
+  (`--output.prompt` / `--output.scorecard`) — the console counterpart of the
+  viewer's Prompt Generator, computed by the `recommend` module
 
 The three pillars of the design are:
 
@@ -76,6 +78,7 @@ The three pillars of the design are:
 | `cpt-code-split-fr-file-graph` | All plugins emit a single file graph: `File` nodes with `uses` / `reexports` edges between files, plus `External` library nodes at depth 1 reached by `uses` edges flagged `external: true`. The Rust plugin derives it by collapsing its module graph; Python/JS/TS build it directly from import resolution. |
 | `cpt-code-split-fr-html-report` | Built-in Rust renderer in `code-split-cli`: `report` analyzes (or reads) the input, then renders an HTML template with inline assets alongside the JSON snapshot. |
 | `cpt-code-split-fr-node-sorting` | Node weight (fan-in + fan-out) is computed at render time and embedded in the HTML; client-side JavaScript sorts the table on user interaction. |
+| `cpt-code-split-fr-ai-prompts` | HTML: the viewer's Prompt Generator (`export-popup.js`). CLI: the `recommend` module (`code-split-cli/src/recommend.rs`) drives the `report --output.prompt` (LLM Markdown for one principle) and `--output.scorecard` (console triage) formats from the snapshot's calibrated thresholds — advisory, no exit code. |
 | `cpt-code-split-fr-graph-diff` | Browser-side diff in the HTML viewer (`diff.js` `computeDiff`/`computeCycles`): node/edge set difference on the file graph and `affected` propagation, from the two embedded snapshots. The `check --baseline` regression gate is rule-based (re-evaluates rules on the baseline), not a structured graph diff. |
 | `cpt-code-split-fr-diff-html-report` | With `report --baseline <snapshot>` the viewer becomes a self-contained diff with color-coded baseline/current views and a verdict; all assets inlined; the file is named `…-diff.html`. |
 | `cpt-code-split-fr-diff-text-report` | `check --baseline <snapshot> --output-format json` emits the machine-readable verdict (`improved` / `degraded` / `neutral`) and the list of new violations for CI parsing. |
@@ -581,17 +584,21 @@ the snapshot's `graphs` map under `"files"`.
 - **`report`** (`run_report`): runs the shared analysis core (analyzing the
   directory or reading the snapshot), then writes artifacts. Which formats are
   written, and where, is decided by one flag family, `--output.<fmt>[.path]`
-  (`<fmt>` = `json` / `html`), backed by `want_format`: a `--output.<fmt>`
-  presence flag or a `--output.<fmt>.path` selects that format; the
-  `[output.<fmt>]` config (`enabled`, else a configured `path`) is consulted
-  next; if **nothing** selects anything, **both** are written. Each `.path`
-  is a name template, or `stdout`/`-` to write to the stdout stream
-  (`is_stream` / `write_artifact`). The JSON snapshot records `config_file`
-  when a config was found. Names are templates (`render_name`) with
-  placeholders `{project-dir}`, `{ts}`, `{git-hash}` (12-char short commit)
-  and `{git-hash-N}` (first N chars), resolved as **`--output.<fmt>.path` flag
+  (`<fmt>` = `json` / `html` / `prompt` / `scorecard`), backed by `want_format`:
+  a `--output.<fmt>` presence flag or a `--output.<fmt>.path` selects that
+  format; for `json`/`html` the `[output.<fmt>]` config (`enabled`, else a
+  configured `path`) is consulted next; if **nothing** selects anything across
+  all formats, **both** `json` and `html` are written (`prompt`/`scorecard` are
+  flag-only and never default). Each `.path` is a name template, or `stdout`/`-`
+  to write to the stdout stream (`is_stream` / `write_artifact`). The JSON
+  snapshot records `config_file` when a config was found. Names are templates
+  (`render_name`) with placeholders `{project-dir}`, `{ts}`, `{git-hash}`
+  (12-char short commit) and `{git-hash-N}` (first N chars) — plus `{preset}`
+  for the recommendation formats — resolved as **`--output.<fmt>.path` flag
   › `[output.<fmt>] path` config › built-in default**
-  (`DEFAULT_JSON_PATH` / `DEFAULT_HTML_PATH` = `.code-split/{ts}-{git-hash-3}.{json,html}`).
+  (`DEFAULT_JSON_PATH` / `DEFAULT_HTML_PATH` = `.code-split/{ts}-{git-hash-3}.{json,html}`;
+  `DEFAULT_PROMPT_PATH` = `.code-split/{ts}-{git-hash-3}-{preset}.md`;
+  `DEFAULT_SCORECARD_PATH` = `stdout`).
   The HTML viewer template and all assets (CSS, JS) are embedded in the binary
   via `include_str!` from `crates/code-split-viewer/src/assets/`, and the snapshot
   data is embedded inline in the same file as `cs-baseline` / `cs-current` JSON
@@ -604,10 +611,50 @@ the snapshot's `graphs` map under `"files"`.
   (preferring the `cs-current` tag, falling back to `cs-baseline`). `report`
   always exits `0`. The single `.html` file is fully self-contained — no
   relative-path references, no `fetch`, so it opens straight from `file://`.
+  The **`prompt` / `scorecard`** formats are the refactoring-guidance outputs
+  (`write_recommendations` → the `recommend` module, the console counterpart of
+  the viewer's Prompt Generator): `prompt` emits the LLM Markdown for one
+  principle, `scorecard` a console triage table. They share `--preset`
+  (optional; default = `recommend::worst_preset`), `--severity` (`info` /
+  `warning` / `auto`; repeatable for the scorecard, single for the prompt) and
+  `--top`; these knobs are validated up front (rejected without a
+  prompt/scorecard format, and an explicit `--index` is rejected with a hint to
+  use `--top`). See [§3.2 `code-split-cli` recommendation engine](#code-split-cli-recommendation-engine).
 
 **Responsibility boundary**: holds no domain logic; no analysis, no
 rendering, no rules. Its sole job is argument parsing, plugin
 dispatch, and artifact I/O routing.
+
+#### code-split-cli recommendation engine
+
+- [x] `p2` - **ID**: `cpt-code-split-component-recommend`
+
+`crates/code-split-cli/src/recommend.rs` is the console counterpart of the HTML
+viewer's Prompt Generator (`export-popup.js`) — it derives refactoring guidance
+from the snapshot's calibrated `node_attributes[*].thresholds`. It is pure
+(reads a `LevelGraph` + `presets`, no I/O) and language-agnostic (it hardcodes no
+metric — it reads each preset's `sort_metric` and the metric's thresholds from
+the snapshot). Functions:
+
+- `reco_for(level, metric) -> Reco` — the file nodes ranked worst-first
+  (tie-broken `sloc` → `items`) plus the `warning` / `info` breach counts;
+  mirrors the viewer's `recoFor`. The pseudo-metric `"cycle"` ranks the cycle
+  members (by HK) and both counts equal that set's size.
+- `worst_preset(level, presets)` — the principle with the most violations
+  (`warning` count, tie-broken by `info`, then catalog order), used when
+  `--preset` is omitted.
+- `compose_prompt(level, presets, preset_id, severity, top)` — the same Markdown
+  the viewer emits (`composePrompt` + `buildContent`): intent + summary +
+  principle-doc link + task checklist, then the ranked offending modules, then
+  the preset's connection lists (`common` / `in` / `out`, only those with edges).
+- `render_scorecard(plugin, level, presets, severities, top, narrow)` — the
+  console triage: a per-principle table (`warning` / `info` counts + worst
+  module) and the worst modules overall (`node_breaches` ranks by selected-tier
+  breach count, then HK), with a next-step hint to the worst principle.
+
+`run_report`'s `write_recommendations` resolves the preset/severity/top, then
+calls these. All of it is **advisory** — it never affects an exit code (that is
+`check`'s job).
 
 #### HTML assets (`crates/code-split-viewer/src/assets/`)
 
@@ -1250,6 +1297,8 @@ code-split/
     code-split-cli/               # Rust — orchestrator, plugin registry/dispatch, check linter, report
       src/
         plugin/            # Built-in plugins: rust.rs (incl. module→file collapse), python.rs, javascript.rs, finalize.rs (file-graph normalizer for Python/JS), mod.rs
+        presets.rs         # Generic Prompt-Generator preset catalog (principles)
+        recommend.rs       # Recommendation engine: scorecard + prompt formats (CLI counterpart of the viewer's Prompt Generator)
         assets/            # HTML/CSS/JS assets embedded via include_str!
           index.html       # Shell template (single Files view); cs-baseline / cs-current JSON script tags embedded inline at render time
           index.css        # Node/edge/nav styling (external nodes amber)

@@ -540,8 +540,7 @@
     },
     {
       "connections": [
-        "common",
-        "out"
+        "common"
       ],
       "doc_url": "https://github.com/ffedoroff/code-split/blob/main/principles/typescript/acyclic-dependencies-principle.md",
       "id": "ADP",

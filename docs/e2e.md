@@ -77,7 +77,7 @@ if "git" in d:
                 "dirty_files": 0, "origin": "git@example.com:org/repo.git"}
 for t in d.get("timings", []):
     t["ms"] = 0
-open(path, "w").write(json.dumps(d, indent=2, sort_keys=True) + "\n")
+open(path, "w").write(json.dumps(d, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 PY
 done
 ```

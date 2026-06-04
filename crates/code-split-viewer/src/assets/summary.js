@@ -16,11 +16,11 @@ function buildSummary() {
   const thead = document.getElementById('summary-thead');
   if (!tbody) return;
 
-  // Review = a single snapshot (no baseline). `after` is the primary; in review
+  // Review = a single snapshot (no baseline). `current` is the primary; in review
   // the lone column reads whichever snapshot is present.
-  const isReview = !window.BEFORE || !window.AFTER;
-  const before   = window.BEFORE ?? window.AFTER;
-  const after    = window.AFTER  ?? window.BEFORE;
+  const isReview = !window.BASELINE || !window.CURRENT;
+  const baseline   = window.BASELINE ?? window.CURRENT;
+  const current    = window.CURRENT  ?? window.BASELINE;
 
   const levels   = ['files'];
   const LLABELS  = { files: 'Files' };
@@ -87,8 +87,8 @@ function buildSummary() {
   const statCells = (getNode, lb = false) =>
     levels.map((level, i) => {
       const gs = i > 0 ? ' grp-start' : '';
-      const b = nodePercentiles(before, level, getNode);
-      const a = nodePercentiles(after,  level, getNode);
+      const b = nodePercentiles(baseline, level, getNode);
+      const a = nodePercentiles(current,  level, getNode);
       const bAvg = b ? b.p50 : null;
       const aAvg = a ? a.p50 : null;
       if (isReview) return `<td class="num${gs}"${ttAttr(b)}>${fmtV(bAvg)}</td>`;
@@ -108,29 +108,29 @@ function buildSummary() {
 
   // Node counts
   rows.push(row('Nodes', valueCells(
-    level => countNodes(before, level),
-    level => countNodes(after, level)
+    level => countNodes(baseline, level),
+    level => countNodes(current, level)
   )));
 
   // Cycles
   const anyCycles = levels.some(level => {
     const cy = window.CYCLES?.[level];
-    return cy && (cy.cycleBefore + cy.cycleBoth + cy.cycleAfter) > 0;
+    return cy && (cy.cycleBaseline + cy.cycleBoth + cy.cycleCurrent) > 0;
   });
   if (anyCycles) {
     // Tooltip: how many cycle groups of each kind were found, from the active
     // snapshot's backend-computed `cycles`. Kind labels come from schema.js.
     const level = 'files';
     const kc = {};
-    for (const g of (after?.graphs?.[level]?.cycles || [])) kc[g.kind] = (kc[g.kind] || 0) + 1;
+    for (const g of (current?.graphs?.[level]?.cycles || [])) kc[g.kind] = (kc[g.kind] || 0) + 1;
     const kparts = Object.entries(kc).filter(([, n]) => n > 0)
       .map(([k, n]) => `${cycleKindLabel(level, k)}: ${n}`);
     const cyclesTip = kparts.length
       ? `Nodes in at least one dependency cycle. Cycle groups by type — ${kparts.join(', ')}.`
       : 'Number of nodes that participate in at least one dependency cycle.';
     rows.push(row('Nodes in cycles', cycleCells(
-      level => { const cy = window.CYCLES?.[level]; return cy ? cy.cycleBefore + cy.cycleBoth : 0; },
-      level => { const cy = window.CYCLES?.[level]; return cy ? cy.cycleAfter  + cy.cycleBoth : 0; }
+      level => { const cy = window.CYCLES?.[level]; return cy ? cy.cycleBaseline + cy.cycleBoth : 0; },
+      level => { const cy = window.CYCLES?.[level]; return cy ? cy.cycleCurrent  + cy.cycleBoth : 0; }
     ), cyclesTip));
   }
 
@@ -139,8 +139,8 @@ function buildSummary() {
   for (const level of levels) {
     const summaryKeys = levelUi(level).summary_metrics || [];
     for (const key of summaryKeys) {
-      const hasData = nodePercentiles(before, level, n => nodeAttr(n, key)) !== null ||
-                      nodePercentiles(after,  level, n => nodeAttr(n, key)) !== null;
+      const hasData = nodePercentiles(baseline, level, n => nodeAttr(n, key)) !== null ||
+                      nodePercentiles(current,  level, n => nodeAttr(n, key)) !== null;
       if (!hasData) continue;
       const label   = attrName(level, key);
       const tip     = attrDesc(level, key);

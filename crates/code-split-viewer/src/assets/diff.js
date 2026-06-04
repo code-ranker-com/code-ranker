@@ -28,11 +28,11 @@ function findSCCs(ids, adjList) {
 }
 
 // ── Diff ──────────────────────────────────────────────────────────────────────
-function computeDiff(before, after) {
+function computeDiff(baseline, current) {
   const result = {};
   for (const level of ['files']) {
-    const bg = (before.graphs || {})[level] || { nodes: [], edges: [] };
-    const ag = (after.graphs  || {})[level] || { nodes: [], edges: [] };
+    const bg = (baseline.graphs || {})[level] || { nodes: [], edges: [] };
+    const ag = (current.graphs  || {})[level] || { nodes: [], edges: [] };
 
     const bgMap = new Map(bg.nodes.filter(n => !isExternalNode(n, level)).map(n => [n.id, n]));
     const agMap = new Map(ag.nodes.filter(n => !isExternalNode(n, level)).map(n => [n.id, n]));
@@ -101,11 +101,11 @@ function buildSCCOf(graph, level) {
   return { sccOf, sccCount: sccs.length };
 }
 
-function computeCycles(before, after) {
+function computeCycles(baseline, current) {
   const result = {};
   for (const level of ['files']) {
-    const bg = (before.graphs || {})[level] || { nodes: [], edges: [], cycles: [] };
-    const ag = (after.graphs  || {})[level] || { nodes: [], edges: [], cycles: [] };
+    const bg = (baseline.graphs || {})[level] || { nodes: [], edges: [], cycles: [] };
+    const ag = (current.graphs  || {})[level] || { nodes: [], edges: [], cycles: [] };
 
     const { sccOf: bgSCCOf } = buildSCCOf(bg, level);
     const { sccOf: agSCCOf } = buildSCCOf(ag, level);
@@ -113,38 +113,38 @@ function computeCycles(before, after) {
     const nodeCycleStatus = new Map();
     for (const id of new Set([...bgSCCOf.keys(), ...agSCCOf.keys()])) {
       const b = bgSCCOf.has(id), a = agSCCOf.has(id);
-      nodeCycleStatus.set(id, b && a ? 'both' : b ? 'before-only' : 'after-only');
+      nodeCycleStatus.set(id, b && a ? 'both' : b ? 'baseline-only' : 'current-only');
     }
 
     const edgeCycleStatus = (from, to) => {
       const inB = bgSCCOf.has(from) && bgSCCOf.get(from) === bgSCCOf.get(to);
       const inA = agSCCOf.has(from) && agSCCOf.get(from) === agSCCOf.get(to);
       if (!inB && !inA) return 'none';
-      return inB && inA ? 'both' : inB ? 'before-only' : 'after-only';
+      return inB && inA ? 'both' : inB ? 'baseline-only' : 'current-only';
     };
 
-    let cycleBefore = 0, cycleAfter = 0, cycleBoth = 0;
+    let cycleBaseline = 0, cycleCurrent = 0, cycleBoth = 0;
     for (const cs of nodeCycleStatus.values()) {
-      if (cs === 'before-only') cycleBefore++;
-      else if (cs === 'after-only') cycleAfter++;
+      if (cs === 'baseline-only') cycleBaseline++;
+      else if (cs === 'current-only') cycleCurrent++;
       else cycleBoth++;
     }
 
-    result[level] = { nodeCycleStatus, edgeCycleStatus, cycleBefore, cycleAfter, cycleBoth };
+    result[level] = { nodeCycleStatus, edgeCycleStatus, cycleBaseline, cycleCurrent, cycleBoth };
   }
   return result;
 }
 
 // ── Meta ──────────────────────────────────────────────────────────────────────
-function computeMeta(before, after) {
+function computeMeta(baseline, current) {
   const label  = s => s?.git?.branch || s?.target?.split('/').pop() || 'snapshot';
   const commit = s => s?.git?.commit?.slice(0, 8) || '';
   const date   = s => s?.generated_at || '';
   const meta   = s => ({ name: label(s), commit: commit(s), date: date(s) });
-  const primary = after || before;
+  const primary = current || baseline;
   return {
     target: (primary?.target || primary?.workspace || 'snapshot').split('/').pop(),
-    before: before ? meta(before) : null,
-    after:  after  ? meta(after)  : null,
+    baseline: baseline ? meta(baseline) : null,
+    current:  current  ? meta(current)  : null,
   };
 }

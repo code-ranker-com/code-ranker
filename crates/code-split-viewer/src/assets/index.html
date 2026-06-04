@@ -13,35 +13,24 @@
 <header>
   <div class="header-row">
     <span class="header-brand">CODE SPLIT</span>
-    <span class="header-title" id="title">— diff</span>
+    <span class="header-title" id="title"></span>
     <div class="header-meta">
-      <div class="snap-group" data-snap="before">
-        <span class="mc" id="meta-before-date"></span><span class="meta-info" id="meta-before-info">(<code id="meta-before-name"></code><span class="mc" id="meta-before-commit"></span>)</span>
-        <button class="hbtn" id="btn-upload-before" title="Load a baseline to compare against">↑ Set baseline</button>
-        <button class="hbtn hbtn-x" id="btn-remove-before" title="Remove baseline">✕</button>
+      <!-- Each snapshot control shows its branch + commit. Click → show that side
+           on the map; hover → popup with details and the upload/remove actions. -->
+      <div class="snap-group" data-snap="baseline" title="Click: view baseline · Hover: details & actions">
+        <span class="meta-info" id="meta-baseline-info"><code id="meta-baseline-name"></code><span class="mc" id="meta-baseline-commit"></span></span>
       </div>
-      <span class="ma" id="meta-arrow">→</span>
-      <div class="snap-group" data-snap="after">
-        <span class="mc" id="meta-after-date"></span><span class="meta-info" id="meta-after-info">(<code id="meta-after-name"></code><span class="mc" id="meta-after-commit"></span>)</span>
-        <button class="hbtn" id="btn-upload-after" title="Replace the current snapshot">↑ Replace current</button>
+      <span class="meta-mode" id="meta-mode">diff</span>
+      <div class="snap-group" data-snap="current" title="Click: view current · Hover: details & actions">
+        <span class="meta-info" id="meta-current-info"><code id="meta-current-name"></code><span class="mc" id="meta-current-commit"></span></span>
       </div>
       <span class="custom-indicator" id="custom-indicator"></span>
     </div>
+    <button id="nav-prompt-btn">Prompt Generator <span class="nav-ai-letters">AI</span><span class="nav-warn-count" id="nav-warn-count"></span></button>
   </div>
-  <input type="file" id="input-before" accept=".json,.html" style="display:none">
-  <input type="file" id="input-after"  accept=".json,.html" style="display:none">
+  <input type="file" id="input-baseline" accept=".json,.html" style="display:none">
+  <input type="file" id="input-current"  accept=".json,.html" style="display:none">
 </header>
-
-<nav>
-  <div class="report-switch">
-    <span class="report-switch-label">Files</span>
-    <a data-view="files" href="#" class="selected" style="display:none">Files</a>
-  </div>
-  <div class="nav-separator"></div>
-  <button data-side="before">Baseline</button>
-  <button data-side="after">Current</button>
-  <button id="nav-prompt-btn">Prompt Generator <span class="nav-ai-letters">AI</span><span class="nav-warn-count" id="nav-warn-count"></span></button>
-</nav>
 
 <main>
 

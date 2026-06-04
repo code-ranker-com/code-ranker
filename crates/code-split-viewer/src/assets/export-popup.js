@@ -2,7 +2,7 @@
 // over their `warning` threshold, plus `cycle` as one binary type (any node in
 // a dependency cycle). Shown next to the Prompt-Generator (AI) button.
 function warningTypeCount(level) {
-  // Count over the active side, so the badge tracks Before/After like the rest.
+  // Count over the active side, so the badge tracks Baseline/Current like the rest.
   const nodes = ((typeof activeGraph === 'function' ? activeGraph(level).nodes : window.DIFF?.[level]?.nodes) || [])
     .filter(n => !isExternalNode(n, level));
   const sortMetrics = levelUi(level).sort_metrics || [];
@@ -60,7 +60,7 @@ function epClearUrl() {
 
 function openExportPopup(level, restore) {
   const selectedIds = window._ntSelected?.[level];
-  // Operate on the active side (Before/After), so the generated prompt matches
+  // Operate on the active side (Baseline/Current), so the generated prompt matches
   // the snapshot the user is looking at — same source the map and table use.
   // (Review mode → the single snapshot.) Edges are kept to local↔local pairs,
   // mirroring the diff's edge set: no external links, no cross-side noise.
@@ -212,7 +212,7 @@ function openExportPopup(level, restore) {
 
   // Mirror the current controls into the URL (called from buildContent, so every
   // state change is persisted). `sel` is the FULL selection set across both sides
-  // (before-only + after-only + common), not just the active side's — otherwise
+  // (baseline-only + current-only + common), not just the active side's — otherwise
   // opening the popup on one side would drop the other side's selections on reload.
   const epWriteUrl = () => epWriteUrlState({
     level,
@@ -429,7 +429,7 @@ function openExportPopup(level, restore) {
   colorCount();
   updatePresetBadges(); // count badges on each preset button
   buildContent();       // also mirrors state into the URL
-  // Reflect the active side in the title: Prompt Generator / … Before / … After.
+  // Reflect the active side in the title: Prompt Generator / … Baseline / … Current.
   const titleEl = document.getElementById('export-popup-title');
   if (titleEl) titleEl.textContent = 'Prompt Generator' +
     (typeof viewModeSuffix === 'function' ? viewModeSuffix() : '');

@@ -511,9 +511,14 @@ so an `.html` report is interchangeable with a `.json` snapshot as a comparison 
 | `report` | `{ts}-{git-hash-3}.html` | review (single snapshot) | this run (`cs-current`) |
 | `report --baseline A` | `{ts}-{git-hash-3}-diff.html` | diff + verdict | `A` (`cs-baseline`) and this run (`cs-current`) |
 
-In the viewer, two buttons swap in a different snapshot from disk (each accepts either a
-`.json` snapshot or an `.html` report): **↑ Replace current** changes the evaluated
-snapshot, **↑ Set baseline** loads a reference to diff against.
+In the header, each snapshot is a control showing its branch + commit. **Click a control
+to switch which side the map and tables show** (baseline ↔ current). **Hover a control**
+to open its popup, which holds the snapshot details and the actions that swap in a
+different snapshot from disk (each accepts either a `.json` snapshot or an `.html`
+report): **↑ Replace current** changes the evaluated snapshot, and **↑ Set baseline**
+(or **↑ Replace baseline** / **✕ Remove baseline**) loads or drops the reference to diff
+against. The big word between the controls reads **diff**, or **view** after the single
+control when there is no baseline.
 
 In a diff, each node is coloured by its state — **added** (in current, not in baseline),
 **removed** (in baseline, gone from current), **affected** (in both, unchanged itself but

@@ -2,8 +2,11 @@ function buildDiagramSVG(node, level) {
   // Nodes that are selected on the main map get the same yellow highlight here.
   const selectedIds = window._ntSelected?.[level];
   const diff      = window.DIFF?.[level];
-  // Use raw snapshot edges so external nodes (filtered from DIFF) are still shown
-  const rawGraph  = (window.AFTER ?? window.BEFORE)?.graphs?.[level] || { nodes: [], edges: [] };
+  // Use the ACTIVE side's raw snapshot (externals included, unlike DIFF). Tying
+  // this to the shown side keeps the popup in-status: viewing the baseline shows
+  // only baseline neighbours (no added/current-only nodes), and viewing current
+  // shows only current neighbours (no removed/baseline-only nodes).
+  const rawGraph  = activeGraph(level);
   const allEdges  = rawGraph.edges;
   // nodeMap: DIFF nodes (have status/cycle data) + raw external nodes as fallback
   const nodeMap   = new Map([
@@ -190,9 +193,9 @@ function buildDiagramSVG(node, level) {
     const cs = cycleNodes?.get(id);
     if (cs == null || cs === 'none') return false;
     if (cs === 'both') return true;
-    return (typeof viewMode === 'function' && viewMode() === 'after')
-      ? cs === 'after-only'
-      : cs === 'before-only';   // before, or review (single snapshot)
+    return (typeof viewMode === 'function' && viewMode() === 'current')
+      ? cs === 'current-only'
+      : cs === 'baseline-only';   // baseline, or review (single snapshot)
   };
 
   // Fit to the panel WIDTH (never upscale past natural size); height follows the
@@ -626,9 +629,9 @@ function buildModalContent(node, level) {
   if (vis && vis !== 'public') row('visibility', vis);
   if (node.items != null) row('items', n3(node.items));
   // node.cycle is the cycle kind (mutual/chain/…); cs is the diff-side status
-  // (both/before-only/after-only) computed at runtime from window.CYCLES.
+  // (both/baseline-only/current-only) computed at runtime from window.CYCLES.
   if (node.cycle != null) row('cycle', node.cycle);
-  if (cs && cs !== 'none') rawRow('Cycle status', cs, 'Cycle status', 'Whether this cycle exists on the before side, after side, or both.');
+  if (cs && cs !== 'none') rawRow('Cycle status', cs, 'Cycle status', 'Whether this cycle exists on the baseline side, current side, or both.');
   if (!document.body.classList.contains('mode-review')) row('status', node.status);
 
   // ── Numeric metric sections, driven by numericAttrKeys + attribute_groups ─
@@ -781,8 +784,8 @@ window.kbdHintsHtml = kbdHintsHtml;
 function setupTooltips(svgFrame, level) {
   svgFrame.querySelectorAll('g.edge title, g.cluster title').forEach(t => t.remove());
 
-  // The SVG is the union (before+after) layout, so map EVERY union node — not just
-  // the active side's — or before-only (removed) / after-only (added) nodes would
+  // The SVG is the union (baseline+current) layout, so map EVERY union node — not just
+  // the active side's — or baseline-only (removed) / current-only (added) nodes would
   // lack click handlers and a `_gNodeMap` entry on the side where they're visible.
   const nodeMap  = new Map(unionGraph(level).nodes.map(n => [n.id, n]));
   const section  = svgFrame.closest('.view');

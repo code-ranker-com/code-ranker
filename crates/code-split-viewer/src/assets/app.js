@@ -1,25 +1,25 @@
-// Which snapshot the diagrams / tables / modal show: 'before' or 'after'.
-// In review mode (no after snapshot) it is always 'before'.
-// `after` is the primary snapshot (the report's current state, normally always
-// present); `before` is the optional baseline. activeSnap returns whichever the
+// Which snapshot the diagrams / tables / modal show: 'baseline' or 'current'.
+// In review mode (no baseline) it is always 'baseline'.
+// `current` is the primary snapshot (the report's current state, normally always
+// present); `baseline` is the optional baseline. activeSnap returns whichever the
 // shown side has, falling back to the other so a single-snapshot report works.
 function activeSnap() {
-  return window.viewSide === 'before'
-    ? (window.BEFORE ?? window.AFTER)
-    : (window.AFTER ?? window.BEFORE);
+  return window.viewSide === 'baseline'
+    ? (window.BASELINE ?? window.CURRENT)
+    : (window.CURRENT ?? window.BASELINE);
 }
 
-// The three view modes: 'review' (no after snapshot → single "view"), or, in a
-// diff, 'before' / 'after' depending on which side the user is looking at. This
+// The three view modes: 'review' (no baseline → single "view"), or, in a
+// diff, 'baseline' / 'current' depending on which side the user is looking at. This
 // is the single source of truth for the labels/headers/URL across the viewer.
 function viewMode() {
-  if (!window.BEFORE || !window.AFTER) return 'review';   // only one snapshot loaded
-  return window.viewSide === 'after' ? 'after' : 'before';
+  if (!window.BASELINE || !window.CURRENT) return 'review';   // only one snapshot loaded
+  return window.viewSide === 'current' ? 'current' : 'baseline';
 }
 // Label suffix for the active side: ' Baseline' / ' Current' in a diff, '' in review.
 function viewModeSuffix() {
   const m = viewMode();
-  return m === 'after' ? ' Current' : m === 'before' ? ' Baseline' : '';
+  return m === 'current' ? ' Current' : m === 'baseline' ? ' Baseline' : '';
 }
 function activeGraph(level) {
   return activeSnap()?.graphs?.[level] || { nodes: [], edges: [] };
@@ -36,37 +36,37 @@ function activeLocalGraph(level) {
   return { nodes, edges };
 }
 
-// The graph the main map is *laid out* from: the union of before+after (the diff
+// The graph the main map is *laid out* from: the union of baseline+current (the diff
 // graph), which is already external-free and carries a per-element `status`
 // (added / removed / unchanged / affected). Laying out the union ONCE — then
 // merely hiding the other side's added/removed elements via CSS — keeps every
-// node that exists on both sides pinned in place: toggling Before/After no longer
+// node that exists on both sides pinned in place: toggling Baseline/Current no longer
 // reflows the graph, only the genuinely added/removed parts appear or disappear.
-// (In review mode the diff is before-vs-before, so everything is `unchanged`.)
+// (In review mode the diff is baseline-vs-baseline, so everything is `unchanged`.)
 function unionGraph(level) {
   return window.DIFF?.[level] || { nodes: [], edges: [] };
 }
 
 // Flip which side's exclusive elements are visible on a frame, without relayout.
-// `before` hides after-only (added) elements; `after` hides before-only (removed)
+// `baseline` hides current-only (added) elements; `current` hides baseline-only (removed)
 // ones; review keeps the lot. Drives the `.hide-{nodes,edges}-{added,removed}`
 // CSS rules already defined for the frame.
 function applySideVisibility(frame) {
   if (!frame) return;
   frame.classList.remove('hide-nodes-added', 'hide-edges-added',
                          'hide-nodes-removed', 'hide-edges-removed',
-                         'side-before', 'side-after');
+                         'side-baseline', 'side-current');
   const m = viewMode();
-  if (m === 'before')     frame.classList.add('hide-nodes-added', 'hide-edges-added');
-  else if (m === 'after') frame.classList.add('hide-nodes-removed', 'hide-edges-removed');
-  // The `side-*` marker gates cycle highlighting (a `before-only` cycle is red
-  // only on Before, `after-only` only on After, `both` on either) and follows the
+  if (m === 'baseline')     frame.classList.add('hide-nodes-added', 'hide-edges-added');
+  else if (m === 'current') frame.classList.add('hide-nodes-removed', 'hide-edges-removed');
+  // The `side-*` marker gates cycle highlighting (a `baseline-only` cycle is red
+  // only on Baseline, `current-only` only on Current, `both` on either) and follows the
   // side actually shown — in review the single snapshot's cycles are all `both`.
-  frame.classList.add(window.viewSide === 'after' ? 'side-after' : 'side-before');
+  frame.classList.add(window.viewSide === 'current' ? 'side-current' : 'side-baseline');
 }
 
 // In the metric size modes (loc/hk), resize each circle to the *active side's*
-// value while keeping the union-layout centre — so toggling Before/After changes
+// value while keeping the union-layout centre — so toggling Baseline/Current changes
 // sizes (a file that grew/shrank) without ever moving a node. Default mode draws
 // fixed boxes, identical on both sides, so it needs no per-side resize.
 function applySideSizing(frame, level) {
@@ -96,17 +96,18 @@ function applySideSizing(frame, level) {
   });
 }
 
-// Toggle Before/After. The map is a single shared (union) layout, so switching
+// Toggle Baseline/Current. The map is a single shared (union) layout, so switching
 // sides is just a visibility flip — no relayout, no pan/zoom reset, and nodes
 // present on both sides never move. Only the tables (active side) and the
 // warning count are refreshed.
 function setViewSide(side) {
   if (side === window.viewSide
-      || (side === 'after'  && !window.AFTER)
-      || (side === 'before' && !window.BEFORE)) return;
+      || (side === 'current'  && !window.CURRENT)
+      || (side === 'baseline' && !window.BASELINE)) return;
   window.viewSide = side;
   window.navSetSide?.();
-  document.querySelectorAll('[data-side]').forEach(b => b.classList.toggle('active', b.dataset.side === side));
+  // Active-side feedback is the highlighted control (snap-active); the old
+  // Baseline/Current nav buttons are gone.
   document.querySelectorAll('.view').forEach(sec => {
     const frame = sec.querySelector('.svg-frame');
     applySideVisibility(frame);
@@ -128,35 +129,37 @@ function updateWarnCount() {
 
 function updateHeader() {
   const meta      = window.META;
-  const hasBefore = meta.before !== null;   // an optional baseline is loaded
-  const hasAfter  = meta.after  !== null;   // the primary snapshot (normally always present)
-  const isReview  = !hasBefore;             // no baseline → single-snapshot "review"
+  const hasBaseline = meta.baseline !== null;   // an optional baseline is loaded
+  const hasCurrent  = meta.current  !== null;   // the primary snapshot (normally always present)
+  const isReview  = !hasBaseline;               // no baseline → single-snapshot "review"
 
   document.body.classList.toggle('mode-review', isReview);
-  document.getElementById('title').textContent = `${meta.target} — ${isReview ? 'review' : 'diff'}`;
+  // The mode word moved into the meta area, so the title is just the project.
+  // Capped to an ellipsis in CSS; the full value stays reachable via `title`.
+  const titleEl = document.getElementById('title');
+  titleEl.textContent = meta.target;
+  titleEl.title = meta.target;
+  // Big mode word: "diff" between the two controls, "view" after the single one
+  // in review (placement handled by flex `order` in CSS).
+  document.getElementById('meta-mode').textContent = isReview ? 'view' : 'diff';
 
-  // BEFORE = optional baseline: left, editable, removable; empty in review.
-  document.getElementById('meta-before-date').textContent   = hasBefore && meta.before.date ? fmtDate(meta.before.date) + ' ' : '';
-  document.getElementById('meta-before-name').textContent   = hasBefore ? meta.before.name : '';
-  document.getElementById('meta-before-commit').textContent = hasBefore && meta.before.commit ? ` ${meta.before.commit}` : '';
-  document.getElementById('meta-before-info').style.display = hasBefore && (meta.before.name || meta.before.commit) ? '' : 'none';
-  document.getElementById('btn-upload-before').textContent   = hasBefore ? '↑ Replace baseline' : '↑ Set baseline';
-  document.getElementById('btn-remove-before').style.display = hasBefore ? '' : 'none';
+  // BASELINE = optional baseline control (branch + commit). Hidden entirely in
+  // review — its "Set baseline" action lives in the current control's popup.
+  document.querySelector('.snap-group[data-snap="baseline"]').style.display = hasBaseline ? '' : 'none';
+  const baselineName = document.getElementById('meta-baseline-name');
+  baselineName.textContent = hasBaseline ? meta.baseline.name : '';
+  baselineName.title       = hasBaseline ? meta.baseline.name : '';
+  document.getElementById('meta-baseline-commit').textContent = hasBaseline && meta.baseline.commit ? ` ${meta.baseline.commit}` : '';
 
-  // AFTER = the primary snapshot the report is about: always shown, not removable.
-  document.getElementById('meta-after-date').textContent    = hasAfter && meta.after.date ? fmtDate(meta.after.date) + ' ' : '';
-  document.getElementById('meta-after-name').textContent    = hasAfter ? meta.after.name : '';
-  document.getElementById('meta-after-commit').textContent  = hasAfter && meta.after.commit ? ` ${meta.after.commit}` : '';
-  document.getElementById('meta-after-info').style.display  = hasAfter && (meta.after.name || meta.after.commit) ? '' : 'none';
-  document.getElementById('meta-arrow').style.display       = '';   // (before slot) → after, always
+  // CURRENT = the primary snapshot the report is about: always shown.
+  const currentName = document.getElementById('meta-current-name');
+  currentName.textContent = hasCurrent ? meta.current.name : '';
+  currentName.title       = hasCurrent ? meta.current.name : '';
+  document.getElementById('meta-current-commit').textContent  = hasCurrent && meta.current.commit ? ` ${meta.current.commit}` : '';
 
-  // Before/After toggle only when both sides exist; review shows the single
-  // (after) snapshot.
-  if (isReview) window.viewSide = 'after';
-  document.querySelectorAll('[data-side]').forEach(b => {
-    b.style.display = hasBefore ? '' : 'none';
-    b.classList.toggle('active', b.dataset.side === window.viewSide);
-  });
+  // Review shows the single (current) snapshot; the active side is reflected on
+  // the control itself (snap-active), since the Baseline/Current nav buttons are gone.
+  if (isReview) window.viewSide = 'current';
   updateActiveSnapGroup();
 }
 
@@ -167,13 +170,13 @@ function updateFilesTab() {}
 // Recompute everything after the user swaps a snapshot via the upload controls.
 function recomputeAll() {
   const EMPTY = { graphs: {} };
-  const before = window.BEFORE;
-  const after  = window.AFTER;
+  const baseline = window.BASELINE;
+  const current  = window.CURRENT;
   // Either side may be absent (review). Fall back the missing side to the present
   // one so the diff is against itself (everything "unchanged"), never against empty.
-  window.DIFF   = computeDiff(before ?? after ?? EMPTY, after ?? before ?? EMPTY);
-  window.CYCLES = computeCycles(before ?? after ?? EMPTY, after ?? before ?? EMPTY);
-  window.META   = computeMeta(before, after);
+  window.DIFF   = computeDiff(baseline ?? current ?? EMPTY, current ?? baseline ?? EMPTY);
+  window.CYCLES = computeCycles(baseline ?? current ?? EMPTY, current ?? baseline ?? EMPTY);
+  window.META   = computeMeta(baseline, current);
 
   buildSummary();
   updateFilesTab();
@@ -196,7 +199,7 @@ function renderView(section, opts = {}) {
   // Plain count of distinct warning types next to the Prompt-Generator (AI) button.
   updateWarnCount();
 
-  // Preserve pan/zoom across a re-render (a size-mode switch — Before/After no
+  // Preserve pan/zoom across a re-render (a size-mode switch — Baseline/Current no
   // longer relayouts). Size modes have different coordinate extents, so we carry
   // the view as *relative* zoom + fractional centre (vs each layout's fit-all
   // viewBox) rather than absolute coords — otherwise the framing drifts.
@@ -246,7 +249,7 @@ function buildSnapPopupHTML(snap, refSnap, sideLabel) {
   if (!snap) return '';
   const sections = [];
 
-  // Which snapshot this is (Before / After) and whether it is the one currently
+  // Which snapshot this is (Baseline / Current) and whether it is the one currently
   // shown on the map / tables.
   if (sideLabel) {
     const shown = sideLabel.toLowerCase() === window.viewSide;
@@ -287,6 +290,20 @@ function buildSnapPopupHTML(snap, refSnap, sideLabel) {
     sections.push(`<div class="sp-section-label">Duration</div>${trows}`);
   }
 
+  // Actions — moved out of the header. Wired in `show()`. The baseline control
+  // offers replace + remove; the current control offers replace, plus "Set
+  // baseline" in review (where there is no separate baseline control).
+  const acts = [];
+  if (sideLabel === 'Baseline') {
+    acts.push('<button class="sp-action" data-act="upload-baseline">↑ Replace baseline</button>');
+    acts.push('<button class="sp-action sp-action-x" data-act="remove-baseline">✕ Remove baseline</button>');
+  } else if (sideLabel === 'Current') {
+    acts.push('<button class="sp-action" data-act="upload-current">↑ Replace current</button>');
+    if (!window.BASELINE) acts.push('<button class="sp-action" data-act="upload-baseline">↑ Set baseline</button>');
+  }
+  if (acts.length)
+    sections.push(`<div class="sp-section-label">Actions</div><div class="sp-actions">${acts.join('')}</div>`);
+
   return sections.join('');
 }
 
@@ -321,6 +338,17 @@ function setupSnapPopup() {
         });
       });
     });
+    // Upload / remove actions (moved here from the header).
+    p.querySelectorAll('.sp-action').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const act = btn.dataset.act;
+        if (act === 'upload-baseline')      document.getElementById('input-baseline').click();
+        else if (act === 'upload-current')  document.getElementById('input-current').click();
+        else if (act === 'remove-baseline') { window.BASELINE = null; recomputeAll(); }
+        p.style.display = 'none';
+      });
+    });
     p.style.display = 'block';
     requestAnimationFrame(() => {
       const r  = anchor.getBoundingClientRect();
@@ -336,11 +364,14 @@ function setupSnapPopup() {
   document.querySelectorAll('.snap-group').forEach((grp, i) => {
     grp.addEventListener('mouseenter', () => {
       clearTimeout(hideTimer);
-      const snap = i === 0 ? window.BEFORE : window.AFTER;
-      const ref  = i === 1 ? window.BEFORE : null;
+      const snap = i === 0 ? window.BASELINE : window.CURRENT;
+      const ref  = i === 1 ? window.BASELINE : null;
       show(snap, grp, ref, i === 0 ? 'Baseline' : 'Current');
     });
     grp.addEventListener('mouseleave', scheduleHide);
+    // Clicking the control switches which side is shown on the map (replaces the
+    // removed Baseline/Current nav buttons).
+    grp.addEventListener('click', () => setViewSide(i === 0 ? 'baseline' : 'current'));
   });
 }
 
@@ -348,7 +379,7 @@ function setupSnapPopup() {
 // currently shown, so the active input is visually distinguished. Hidden in
 // review mode (a single snapshot — nothing to distinguish).
 function updateActiveSnapGroup() {
-  const active = window.AFTER ? window.viewSide : null;
+  const active = window.CURRENT ? window.viewSide : null;
   document.querySelectorAll('.snap-group[data-snap]').forEach(grp => {
     grp.classList.toggle('snap-active', grp.dataset.snap === active);
   });
@@ -375,57 +406,36 @@ function extractSnapshotFromText(text) {
   return read('cs-current') || read('cs-baseline');
 }
 
-// Manual snapshot swap: load a different before/after snapshot (.json or .html) into the viewer.
+// Manual snapshot swap: load a different baseline/current snapshot (.json or .html) into the viewer.
 function setupFileControls() {
-  const inputBefore = document.getElementById('input-before');
-  const inputAfter  = document.getElementById('input-after');
+  const inputBaseline = document.getElementById('input-baseline');
+  const inputCurrent  = document.getElementById('input-current');
 
-  document.getElementById('btn-upload-before').addEventListener('click', () => inputBefore.click());
-  document.getElementById('btn-upload-after').addEventListener('click',  () => inputAfter.click());
+  // The upload / remove buttons now live in the snapshot popup (see `show`),
+  // which clicks these hidden inputs. Here we only handle the chosen file.
 
-  // Removing the baseline (before) drops back to single-snapshot review; the
-  // after (primary) snapshot has no remove control.
-  document.getElementById('btn-remove-before').addEventListener('click', () => {
-    window.BEFORE = null;
-    recomputeAll();
-  });
-
-  inputBefore.addEventListener('change', () => {
-    const file = inputBefore.files[0];
+  inputBaseline.addEventListener('change', () => {
+    const file = inputBaseline.files[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = e => {
-      try { window.BEFORE = extractSnapshotFromText(e.target.result); } catch { alert('Invalid snapshot file'); return; }
+      try { window.BASELINE = extractSnapshotFromText(e.target.result); } catch { alert('Invalid snapshot file'); return; }
       recomputeAll();
     };
     reader.readAsText(file);
-    inputBefore.value = '';
+    inputBaseline.value = '';
   });
 
-  inputAfter.addEventListener('change', () => {
-    const file = inputAfter.files[0];
+  inputCurrent.addEventListener('change', () => {
+    const file = inputCurrent.files[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = e => {
-      try { window.AFTER = extractSnapshotFromText(e.target.result); } catch { alert('Invalid snapshot file'); return; }
+      try { window.CURRENT = extractSnapshotFromText(e.target.result); } catch { alert('Invalid snapshot file'); return; }
       recomputeAll();
     };
     reader.readAsText(file);
-    inputAfter.value = '';
-  });
-}
-
-function setupGlobalControls() {
-  document.querySelectorAll('[data-side]').forEach(btn => {
-    btn.addEventListener('click', () => setViewSide(btn.dataset.side));
-  });
-
-  document.querySelectorAll('.report-switch a[data-view]').forEach(a => {
-    a.addEventListener('click', e => {
-      e.preventDefault();
-      switchToLevel(a.dataset.view);
-      window.navPush(a.dataset.view, null);
-    });
+    inputCurrent.value = '';
   });
 }
 
@@ -433,20 +443,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.nodeSizeMode = 'default';
 
   // Read the snapshots embedded inline in the page (cs-baseline / cs-current script tags).
-  window.BEFORE = readEmbeddedSnapshot('cs-baseline');
-  window.AFTER  = readEmbeddedSnapshot('cs-current');
+  window.BASELINE = readEmbeddedSnapshot('cs-baseline');
+  window.CURRENT  = readEmbeddedSnapshot('cs-current');
 
   const EMPTY = { graphs: {} };
-  window.DIFF   = computeDiff(window.BEFORE ?? window.AFTER ?? EMPTY, window.AFTER ?? window.BEFORE ?? EMPTY);
-  window.CYCLES = computeCycles(window.BEFORE ?? window.AFTER ?? EMPTY, window.AFTER ?? window.BEFORE ?? EMPTY);
-  window.META   = computeMeta(window.BEFORE, window.AFTER);
+  window.DIFF   = computeDiff(window.BASELINE ?? window.CURRENT ?? EMPTY, window.CURRENT ?? window.BASELINE ?? EMPTY);
+  window.CYCLES = computeCycles(window.BASELINE ?? window.CURRENT ?? EMPTY, window.CURRENT ?? window.BASELINE ?? EMPTY);
+  window.META   = computeMeta(window.BASELINE, window.CURRENT);
 
-  // Restore the active side from the URL (`side=before/after`); default to the
-  // after (primary) snapshot. `before` is only honoured when a baseline exists.
+  // Restore the active side from the URL (`side=baseline/current`); default to the
+  // current (primary) snapshot. `baseline` is only honoured when a baseline exists.
   const urlSide = getNavParams().side;
-  window.viewSide = (urlSide === 'before' && window.BEFORE) ? 'before'
-                  : window.AFTER ? 'after'
-                  : 'before';
+  window.viewSide = (urlSide === 'baseline' && window.BASELINE) ? 'baseline'
+                  : window.CURRENT ? 'current'
+                  : 'baseline';
   // If the Prompt Generator was open (state in the URL), restore its selected
   // nodes before the tables render so those rows come up already selected.
   const epState = (typeof epReadUrl === 'function') ? epReadUrl() : null;
@@ -455,7 +465,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     window._ntSelected[epState.level] = new Set(epState.sel);
   }
   document.querySelectorAll('.view').forEach(sec => setupNodeTable(sec, sec.dataset.view));
-  setupGlobalControls();
   setupSnapPopup();
   setupFileControls();
   setupTooltip();
@@ -497,7 +506,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const lvl  = st.level;
     const nid  = st.node;
     const side = st.side;
-    if (window.AFTER && (side === 'before' || side === 'after')) setViewSide(side);
+    if (window.CURRENT && (side === 'baseline' || side === 'current')) setViewSide(side);
     if (lvl && lvl !== currentLevel()) switchToLevel(lvl);
     if (nid) {
       openModalForNode(nid, lvl ?? currentLevel());

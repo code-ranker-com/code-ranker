@@ -40,7 +40,7 @@ function setupNodeTable(section, level) {
   const ui = levelUi(level);
 
   // Build column descriptors at setup time; re-read on each render in case the
-  // active side switches (before/after).
+  // active side switches (baseline/current).
   function buildCols() {
     const uiCols = levelUi(level).columns || [];
     const cols = [{ id: 'name', label: 'Name', isNum: false }];
@@ -156,7 +156,7 @@ function setupNodeTable(section, level) {
   searchInput.addEventListener('input', () => { searchQuery = searchInput.value.trim().toLowerCase(); renderRows(); });
 
   function buildHeaders() {
-    // Refresh cols in case active side (before/after) switched.
+    // Refresh cols in case active side (baseline/current) switched.
     cols = buildCols();
     thead.innerHTML = '';
     const tr = document.createElement('tr');
@@ -211,14 +211,14 @@ function setupNodeTable(section, level) {
 
   // ── Visibility filter ─────────────────────────────────────────────────────
   function getVisible() {
-    // Show every non-external node of the active snapshot. Before/After picks
+    // Show every non-external node of the active snapshot. Baseline/Current picks
     // which snapshot; there is no per-status chip filtering anymore.
     return activeGraph(level).nodes.filter(n => !isExternalNode(n, level));
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
   function renderRows() {
-    // Reflect the active side in the title: Details / Details Before / Details After.
+    // Reflect the active side in the title: Details / Details Baseline / Details Current.
     hdrTitle.textContent = 'Details' + (typeof viewModeSuffix === 'function' ? viewModeSuffix() : '');
     // Refresh cols in case active side changed.
     cols = buildCols();
@@ -477,24 +477,30 @@ function setupTooltip() {
 
   document.addEventListener('mouseover', e => {
     const r = contentFor(e);
-    if (!r || r.el === current) return;     // nothing to show, or already showing it
+    if (!r || r.el === current) return;     // nothing to show, or already anchored to it
     cancelShow();
+    current = r.el;                          // anchor immediately (pending or shown)
     showTimer = setTimeout(() => {
       showTimer = null;
       tt.innerHTML = r.html;
       tt.removeAttribute('hidden');
-      current = r.el;
       position();
     }, SHOW_DELAY);
   });
 
+  // Hide (or cancel a still-pending show) the moment the pointer leaves the
+  // anchored element — whatever kind it is. We check against `current` itself,
+  // not a hardcoded selector list: an SVG map node (`g.node`) is shown by
+  // `contentFor` but was absent from the old list, so leaving it never hid the
+  // tooltip and `mousemove` kept dragging it across the map.
   document.addEventListener('mouseout', e => {
-    const cell = e.target.closest('[data-tt]') || e.target.closest('[data-tip]') || e.target.closest('td[data-col]');
-    if (!cell) return;
-    // Ignore moves that stay inside the same element (into a child node).
-    if (e.relatedTarget && cell.contains(e.relatedTarget)) return;
-    cancelShow();
-    if (cell === current) { tt.setAttribute('hidden', ''); current = null; }
+    if (!current) return;
+    // Only react to leaving the anchored element (its inner SVG/HTML children
+    // count as inside it).
+    if (e.target !== current && !current.contains(e.target)) return;
+    // A move into one of its own children is not a leave.
+    if (e.relatedTarget && current.contains(e.relatedTarget)) return;
+    hide();
   });
 
   document.addEventListener('mousemove', e => {

@@ -38,11 +38,11 @@ function buildDOT(nodes, edges, level) {
   const cycles = window.CYCLES?.[level];
   const mode = window.nodeSizeMode || 'default';
 
-  const beforeById = new Map((window.BEFORE?.graphs?.[level]?.nodes || []).map(n => [n.id, n]));
-  const afterById  = new Map((window.AFTER?.graphs?.[level]?.nodes  || []).map(n => [n.id, n]));
+  const baselineById = new Map((window.BASELINE?.graphs?.[level]?.nodes || []).map(n => [n.id, n]));
+  const currentById  = new Map((window.CURRENT?.graphs?.[level]?.nodes  || []).map(n => [n.id, n]));
   const layoutDiam = n => {
-    const db = beforeById.has(n.id) ? metricNodeDiam(beforeById.get(n.id), mode) : 0;
-    const da = afterById.has(n.id)  ? metricNodeDiam(afterById.get(n.id),  mode) : 0;
+    const db = baselineById.has(n.id) ? metricNodeDiam(baselineById.get(n.id), mode) : 0;
+    const da = currentById.has(n.id)  ? metricNodeDiam(currentById.get(n.id),  mode) : 0;
     return Math.max(db, da) || metricNodeDiam(n, mode);
   };
 

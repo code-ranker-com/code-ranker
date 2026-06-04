@@ -2,10 +2,10 @@ function getNavParams() {
   const p = new URLSearchParams(location.search);
   return { level: p.get('level'), node: p.get('node'), side: p.get('side') };
 }
-// The active diff side carried in the URL — only in diff mode (an after snapshot
+// The active diff side carried in the URL — only in diff mode (a current snapshot
 // exists); review mode has a single view and omits the param.
 function navSide() {
-  return window.AFTER && window.viewSide ? window.viewSide : null;
+  return window.CURRENT && window.viewSide ? window.viewSide : null;
 }
 window.navPush = function(level, nodeId) {
   const p = new URLSearchParams();
@@ -16,7 +16,7 @@ window.navPush = function(level, nodeId) {
   const url = p.toString() ? '?' + p : location.pathname;
   history.pushState({ level: level ?? null, node: nodeId ?? null, side }, '', url);
 };
-// Update only the `side` param in place (Before/After toggle), preserving the
+// Update only the `side` param in place (Baseline/Current toggle), preserving the
 // level / node / Prompt-Generator params already in the URL.
 window.navSetSide = function() {
   const p = new URLSearchParams(location.search);

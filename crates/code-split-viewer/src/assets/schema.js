@@ -10,9 +10,9 @@
 // authority for how to render. Falls back to the other side so a single-snapshot
 // report works.
 function specSnap() {
-  return (window.viewSide === 'before')
-    ? (window.BEFORE ?? window.AFTER)
-    : (window.AFTER ?? window.BEFORE);
+  return (window.viewSide === 'baseline')
+    ? (window.BASELINE ?? window.CURRENT)
+    : (window.CURRENT ?? window.BASELINE);
 }
 function levelSpec(level) {
   return specSnap()?.graphs?.[level] || {};

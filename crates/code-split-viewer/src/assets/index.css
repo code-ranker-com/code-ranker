@@ -5,48 +5,48 @@ header { background: #2c3e50; color: #fff; padding: 8px 24px; }
 .header-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; min-height: 32px; }
 .header-brand { font-size: 15px; font-weight: 800; letter-spacing: .12em;
                 color: #1abc9c; text-transform: uppercase; white-space: nowrap; margin-right: 4px; }
-.header-title { font-size: 18px; font-weight: 500; white-space: nowrap; }
-.header-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 5px;
+/* Project title: capped width with an ellipsis (full value in the `title` attr). */
+.header-title { font-size: 18px; font-weight: 500; white-space: nowrap; color: #d7e0ea;
+                display: inline-block; max-width: 340px; overflow: hidden;
+                text-overflow: ellipsis; vertical-align: middle; }
+.header-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
                font-size: 13px; color: #b8c5d2; }
 header code { color: #1abc9c; }
+/* Branch name inside a control: capped with an ellipsis (full value in `title`). */
+.meta-info code { display: inline-block; max-width: 200px; overflow: hidden;
+                  text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 .ml { color: #b8c5d2; }
 .mc { color: #8ba6c0; font-size: 12px; }
-.ma { color: #7a92a8; margin: 0 2px; }
 .meta-info { color: #8ba6c0; font-size: 12px; }
-.snap-group { display: inline-flex; align-items: center; gap: 5px;
+/* Big mode word — "diff" between the two controls, "view" after the single one in
+   review. Sized to match the header title. Flex `order` reseats it per mode. */
+.meta-mode { font-size: 18px; font-weight: 500; color: #fff; white-space: nowrap;
+             text-transform: lowercase; margin: 0 4px; order: 2; }
+.snap-group[data-snap="baseline"] { order: 1; }
+.snap-group[data-snap="current"]  { order: 3; }
+body.mode-review #meta-mode { order: 4; }   /* review: place "view" after the control */
+/* Snapshot controls (branch + commit): click switches the shown side; hover opens
+   the detail popup (which also holds the upload / remove actions). */
+.snap-group { display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
               border: 1px solid rgba(255,255,255,.18); border-radius: 6px; padding: 3px 8px;
               transition: background .15s, border-color .15s, box-shadow .15s; }
-/* The snapshot input currently shown on the map / tables (active Before/After side). */
+.snap-group:hover { background: rgba(255,255,255,.10); border-color: rgba(255,255,255,.35); }
+/* The snapshot input currently shown on the map / tables (active Baseline/Current side). */
 .snap-group.snap-active { border-color: #1abc9c; background: rgba(26,188,156,.20);
                           box-shadow: 0 0 0 1px rgba(26,188,156,.5) inset; }
-.hbtn { background: rgba(255,255,255,.12); color: #ecf0f1; border: 0;
-        padding: 2px 7px; font-size: 11px; cursor: pointer; border-radius: 3px;
-        line-height: 1.5; white-space: nowrap; }
-.hbtn:hover { background: rgba(255,255,255,.22); }
-.hbtn-x { background: rgba(220,80,60,.3); }
-.hbtn-x:hover { background: rgba(220,80,60,.55); }
 
-nav { background: #34495e; padding: 8px 24px; display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
-.report-switch { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
-                 color: #b8c5d2; display: inline-flex; align-items: center; margin-right: 8px; }
-.report-switch-label { margin-right: 4px; }
-.report-switch a { color: #b8c5d2; text-decoration: none; padding: 0 4px; cursor: pointer; }
-.report-switch a:hover { color: #fff; }
-.report-switch a.selected { color: #1abc9c; font-weight: 600; pointer-events: none; }
-.nav-separator { width: 1px; height: 22px; background: #455a73; margin: 0 8px; }
-nav button { background: #455a73; color: #ecf0f1; border: 0; padding: 6px 14px;
-             font-size: 13px; cursor: pointer; border-radius: 4px; }
-nav button:hover { background: #5d7593; }
-nav button.active { background: #1abc9c; color: #fff; }
-nav button.disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
-#nav-prompt-btn { margin-left: 8px; }
+/* Prompt Generator — moved into the header, pinned to the right edge. */
+#nav-prompt-btn { margin-left: auto; background: #455a73; color: #ecf0f1; border: 0;
+                  padding: 6px 14px; font-size: 13px; cursor: pointer; border-radius: 4px;
+                  white-space: nowrap; }
+#nav-prompt-btn:hover { background: #5d7593; }
 .nav-ai-letters { color: #fff; font-weight: 700; display: inline-block;
                   animation: ai-pulse 2s ease-in-out infinite; }
 @keyframes ai-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.35); } }
 /* Warning-node count next to the AI button — plain text, no highlight. */
 .nav-warn-count { margin-left: 6px; font-weight: 400; }
 .nav-warn-count:empty { display: none; }
-.custom-indicator { color: #f39c12; font-size: 12px; font-style: italic; }
+.custom-indicator { color: #f39c12; font-size: 12px; font-style: italic; order: 5; }
 
 main { padding: 16px 24px 40px; }
 
@@ -88,8 +88,8 @@ main { padding: 16px 24px 40px; }
 .chip[data-status="removed"].active   { background: #b45309; border-color: #78350f; }
 .chip[data-status="unchanged"].active { background: #4d6f9c; border-color: #2c4768; }
 .chip[data-status="affected"].active  { background: #6b7280; border-color: #4b5563; }
-.chip[data-cycle="before-only"].active { background: #e57373; border-color: #b35454; }
-.chip[data-cycle="after-only"].active  { background: #c00;    border-color: #900; }
+.chip[data-cycle="baseline-only"].active { background: #e57373; border-color: #b35454; }
+.chip[data-cycle="current-only"].active  { background: #c00;    border-color: #900; }
 .chip[data-cycle="both"].active        { background: #7a0000; border-color: #500000; }
 
 /* ── SVG frame ──────────────────────────────────────────────────────────────── */
@@ -496,6 +496,13 @@ text.sn-hint, tspan.sn-hint, g.sn-hint { cursor: inherit; }
                     letter-spacing: .07em; color: #aaa; margin: 10px 0 4px; }
 .sp-section-label:first-child { margin-top: 0; }
 .sp-gen-diff { color: #888; font-size: 11px; }
+/* Snapshot actions, moved out of the header into the popup. */
+.sp-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.sp-action { background: #2c3e50; color: #fff; border: 0; border-radius: 4px;
+             padding: 4px 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.sp-action:hover { background: #1abc9c; }
+.sp-action-x { background: #fdecea; color: #c0392b; }
+.sp-action-x:hover { background: #c0392b; color: #fff; }
 
 /* ── Review mode ────────────────────────────────────────────────────────────── */
 [data-review] { display: none; }
@@ -504,15 +511,15 @@ body.mode-review [data-review].active  { background: #1abc9c; color: #fff; }
 body.mode-review [data-review="cycles"].has-cycles.active  { background: #c0392b; color: #fff; }
 body.mode-review [data-review="cycles"]:not(.has-cycles)   { opacity: 0.4; pointer-events: none; }
 
-body.mode-review [data-preset="before"],
-body.mode-review [data-preset="after"],
+body.mode-review [data-preset="baseline"],
+body.mode-review [data-preset="current"],
 body.mode-review [data-preset="diff"],
 body.mode-review [data-preset="cycles"] { display: none; }
 body.mode-review .control-panel        { display: none; }
 body.mode-review [data-col="status"]   { display: none; }
-/* Review (single snapshot) lives in the AFTER slot; the BEFORE slot is an empty,
+/* Review (single snapshot) lives in the CURRENT slot; the BASELINE slot is an empty,
    editable baseline placeholder. Header element visibility is driven by JS
-   (updateHeader), so no mode-review hiding of the arrow / after metadata here. */
+   (updateHeader), so no mode-review hiding of the arrow / current metadata here. */
 
 /* ── Graphviz nodes / edges ──────────────────────────────────────────────────── */
 g.node polygon, g.node ellipse { stroke-width: 1; }
@@ -528,32 +535,32 @@ g.node polygon, g.node ellipse { stroke-width: 1; }
 .hide-edges-unchanged g.edge.status-unchanged { display: none; }
 /* ── Cycle visibility override (specificity 0,4,1 > hide rules 0,2,1) ──────── */
 /* When a cycle chip is active alongside any hide-* chip, cycle elements win */
-:is(.hide-nodes-added,.hide-nodes-removed,.hide-nodes-affected,.hide-nodes-unchanged).show-cycle-before
-  g.node:is(.status-added,.status-removed,.status-affected,.status-unchanged):is(.cycle-status-before-only,.cycle-status-both) { display: block; }
-:is(.hide-nodes-added,.hide-nodes-removed,.hide-nodes-affected,.hide-nodes-unchanged).show-cycle-after
-  g.node:is(.status-added,.status-removed,.status-affected,.status-unchanged):is(.cycle-status-after-only,.cycle-status-both)  { display: block; }
-:is(.hide-edges-added,.hide-edges-removed,.hide-edges-affected,.hide-edges-unchanged).show-cycle-before
-  g.edge:is(.status-added,.status-removed,.status-affected,.status-unchanged):is(.cycle-status-before-only,.cycle-status-both) { display: block; }
-:is(.hide-edges-added,.hide-edges-removed,.hide-edges-affected,.hide-edges-unchanged).show-cycle-after
-  g.edge:is(.status-added,.status-removed,.status-affected,.status-unchanged):is(.cycle-status-after-only,.cycle-status-both)  { display: block; }
+:is(.hide-nodes-added,.hide-nodes-removed,.hide-nodes-affected,.hide-nodes-unchanged).show-cycle-baseline
+  g.node:is(.status-added,.status-removed,.status-affected,.status-unchanged):is(.cycle-status-baseline-only,.cycle-status-both) { display: block; }
+:is(.hide-nodes-added,.hide-nodes-removed,.hide-nodes-affected,.hide-nodes-unchanged).show-cycle-current
+  g.node:is(.status-added,.status-removed,.status-affected,.status-unchanged):is(.cycle-status-current-only,.cycle-status-both)  { display: block; }
+:is(.hide-edges-added,.hide-edges-removed,.hide-edges-affected,.hide-edges-unchanged).show-cycle-baseline
+  g.edge:is(.status-added,.status-removed,.status-affected,.status-unchanged):is(.cycle-status-baseline-only,.cycle-status-both) { display: block; }
+:is(.hide-edges-added,.hide-edges-removed,.hide-edges-affected,.hide-edges-unchanged).show-cycle-current
+  g.edge:is(.status-added,.status-removed,.status-affected,.status-unchanged):is(.cycle-status-current-only,.cycle-status-both)  { display: block; }
 
 /* ── Cycle highlights: members of a dependency cycle are red — but only for the
-   side currently shown. `both` cycles are red on either side; `before-only` /
-   `after-only` only on their own side (`.side-before` / `.side-after` on the
-   frame), so a cycle that was removed in the after snapshot stops being red
-   when you switch to After. ───────────────────────────────────────────────── */
-.svg-frame.side-before g.node:is(.cycle-status-before-only,.cycle-status-both) > polygon,
-.svg-frame.side-before g.node:is(.cycle-status-before-only,.cycle-status-both) > ellipse,
-.svg-frame.side-after  g.node:is(.cycle-status-after-only,.cycle-status-both)  > polygon,
-.svg-frame.side-after  g.node:is(.cycle-status-after-only,.cycle-status-both)  > ellipse {
+   side currently shown. `both` cycles are red on either side; `baseline-only` /
+   `current-only` only on their own side (`.side-baseline` / `.side-current` on the
+   frame), so a cycle that was removed in the current snapshot stops being red
+   when you switch to Current. ───────────────────────────────────────────────── */
+.svg-frame.side-baseline g.node:is(.cycle-status-baseline-only,.cycle-status-both) > polygon,
+.svg-frame.side-baseline g.node:is(.cycle-status-baseline-only,.cycle-status-both) > ellipse,
+.svg-frame.side-current  g.node:is(.cycle-status-current-only,.cycle-status-both)  > polygon,
+.svg-frame.side-current  g.node:is(.cycle-status-current-only,.cycle-status-both)  > ellipse {
   stroke: #c00 !important; stroke-width: 3 !important;
 }
-.svg-frame.side-before g.edge:is(.cycle-status-before-only,.cycle-status-both) > path,
-.svg-frame.side-after  g.edge:is(.cycle-status-after-only,.cycle-status-both)  > path {
+.svg-frame.side-baseline g.edge:is(.cycle-status-baseline-only,.cycle-status-both) > path,
+.svg-frame.side-current  g.edge:is(.cycle-status-current-only,.cycle-status-both)  > path {
   stroke: #c00 !important; stroke-width: 2.5 !important;
 }
-.svg-frame.side-before g.edge:is(.cycle-status-before-only,.cycle-status-both) > polygon,
-.svg-frame.side-after  g.edge:is(.cycle-status-after-only,.cycle-status-both)  > polygon {
+.svg-frame.side-baseline g.edge:is(.cycle-status-baseline-only,.cycle-status-both) > polygon,
+.svg-frame.side-current  g.edge:is(.cycle-status-current-only,.cycle-status-both)  > polygon {
   stroke: #c00 !important; fill: #c00 !important;
 }
 
@@ -617,10 +624,10 @@ g.node.node-selected > ellipse { fill: #fffde7 !important; stroke: #f9a825 !impo
 /* The cycle stroke wins over selection: a selected node that is also in a cycle
    on the shown side keeps its red outline (the yellow fill still marks it
    selected). Side-gated, mirroring the cycle-highlight rules above. */
-.svg-frame.side-before g.node.node-selected:is(.cycle-status-before-only,.cycle-status-both) > polygon,
-.svg-frame.side-before g.node.node-selected:is(.cycle-status-before-only,.cycle-status-both) > ellipse,
-.svg-frame.side-after  g.node.node-selected:is(.cycle-status-after-only,.cycle-status-both)  > polygon,
-.svg-frame.side-after  g.node.node-selected:is(.cycle-status-after-only,.cycle-status-both)  > ellipse {
+.svg-frame.side-baseline g.node.node-selected:is(.cycle-status-baseline-only,.cycle-status-both) > polygon,
+.svg-frame.side-baseline g.node.node-selected:is(.cycle-status-baseline-only,.cycle-status-both) > ellipse,
+.svg-frame.side-current  g.node.node-selected:is(.cycle-status-current-only,.cycle-status-both)  > polygon,
+.svg-frame.side-current  g.node.node-selected:is(.cycle-status-current-only,.cycle-status-both)  > ellipse {
   stroke: #c00 !important; stroke-width: 3 !important;
 }
 /* Same selection highlight inside the per-node popup diagram (side + main cards). */

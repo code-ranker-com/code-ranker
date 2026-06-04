@@ -144,19 +144,35 @@ jobs:
           echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
           who=$(npm whoami) || { echo "npm token rejected"; exit 1; }
           echo "npm token OK (user: $who)"
-      - name: PyPI token present and well-formed
+      - name: PyPI token is valid
         env:
           TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: |
           case "$TOKEN" in
-            pypi-*) echo "PyPI token present and well-formed" ;;
+            pypi-*) ;;
             "")     echo "PYPI_TOKEN is empty"; exit 1 ;;
             *)      echo "PYPI_TOKEN does not look like an API token (expected 'pypi-…')"; exit 1 ;;
           esac
-      - name: Docker Hub credentials present
+          # PyPI has no read-only validate endpoint, so probe the upload endpoint
+          # with an empty multipart body: a revoked/invalid token → 403; an
+          # accepted token → 400 (missing metadata — nothing is uploaded without
+          # a file). Heuristic on warehouse's auth-before-validation order, not a
+          # documented contract; the real fix is Trusted Publishing (OIDC).
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -u "__token__:$TOKEN" \
+            -F ":action=file_upload" https://upload.pypi.org/legacy/)
+          [ "$code" = 403 ] && { echo "PyPI token rejected (HTTP 403)"; exit 1; }
+          echo "PyPI token accepted (HTTP $code)"
+      - name: Docker Hub token is valid
         env:
           USER: ${{ secrets.DOCKERHUB_USERNAME }}
           TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           [ -n "$USER" ] && [ -n "$TOKEN" ] || { echo "DOCKERHUB_USERNAME/DOCKERHUB_TOKEN missing"; exit 1; }
-          echo "Docker Hub credentials present (login is exercised in docker-dry-run)"
+          # Exchange the PAT for a JWT — 200 proves the credential is live. jq
+          # builds the JSON body so a token with shell-special chars is safe.
+          body=$(jq -nc --arg u "$USER" --arg p "$TOKEN" '{username:$u,password:$p}')
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+            -H 'Content-Type: application/json' -d "$body" \
+            https://hub.docker.com/v2/users/login)
+          [ "$code" = 200 ] || { echo "Docker Hub token rejected (HTTP $code)"; exit 1; }
+          echo "Docker Hub token OK"

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use code_split_plugin_api::{attrs::{AttrValue, ValueType}, edge::Edge, graph::Graph, level::{AttributeSpec, EdgeKindSpec, Grouping, Level, Thresholds}, node::Node, plugin::{LanguagePlugin, PluginInput}, default_cycle_kinds, default_node_kinds};
+use code_split_plugin_api::{attrs::{AttrValue, ValueType}, edge::Edge, graph::Graph, level::{AttributeSpec, EdgeKindSpec, Grouping, Level, Thresholds}, log, node::Node, plugin::{LanguagePlugin, PluginInput}, default_cycle_kinds, default_node_kinds};
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
@@ -165,11 +165,13 @@ fn syn_analyze(workspace: &Path, builder: &mut GraphBuilder) -> Result<()> {
     // comment in the original lib.rs for the research notes on --offline vs
     // --no-deps vs full. Short version: --offline keeps external/cross-crate
     // edges AND never goes to the network; the cache must be warm.
-    let metadata = MetadataCommand::new()
-        .manifest_path(&manifest)
-        .other_options(vec!["--offline".to_string()])
-        .exec()
-        .map_err(|err| offline_metadata_error(&manifest, err))?;
+    let metadata = log::timed("cargo metadata --offline", || {
+        MetadataCommand::new()
+            .manifest_path(&manifest)
+            .other_options(vec!["--offline".to_string()])
+            .exec()
+    })
+    .map_err(|err| offline_metadata_error(&manifest, err))?;
 
     crate_graph::contribute(&metadata, builder);
     module_graph::contribute(&metadata, builder)?;
@@ -194,10 +196,10 @@ fn offline_metadata_error(manifest: &Path, err: cargo_metadata::Error) -> anyhow
 
 fn version_string() -> Option<String> {
     which::which("rustc").ok()?;
-    let out = std::process::Command::new("rustc")
-        .arg("--version")
-        .output()
-        .ok()?;
+    let out = log::timed("rustc --version", || {
+        std::process::Command::new("rustc").arg("--version").output()
+    })
+    .ok()?;
     if out.status.success() {
         Some(
             String::from_utf8_lossy(&out.stdout)

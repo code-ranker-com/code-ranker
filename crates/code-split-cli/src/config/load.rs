@@ -3,6 +3,7 @@
 
 use super::model::{Config, CycleRule, MetricThresholds, parse_number};
 use anyhow::{Context, Result};
+use code_split_plugin_api::log;
 use std::path::Path;
 
 pub struct LoadedConfig {
@@ -29,6 +30,10 @@ pub fn load(
     let explicit = files.first().copied().map(Path::new);
 
     let (mut config, source_file) = load_file(workspace, explicit)?;
+    match &source_file {
+        Some(p) => log::line(&format!("config: {p}")),
+        None => log::line("config: built-in defaults (no config file found)"),
+    }
     apply_inline_overrides(&mut config, &inline)?;
     apply_cli_overrides(&mut config, ignore_paths, cycle_rules, thresholds)?;
     Ok(LoadedConfig {

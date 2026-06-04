@@ -17,10 +17,15 @@ use cli::{Cli, Command};
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let t = logger::Timer::start(&format!(
+    let cmd = format!(
         "code-split {}",
         std::env::args().skip(1).collect::<Vec<_>>().join(" ")
-    ));
+    );
+    // Startup line: the exact command this run was invoked with. The config it
+    // resolved is logged next, by `config::load`. The matching `✓ … — <time>`
+    // finish line is emitted by this timer.
+    logger::info(&format!("▶ {cmd}"));
+    let t = logger::Timer::start(&cmd);
     let res = match cli.command {
         Command::Check {
             analyze,

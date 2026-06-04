@@ -3,7 +3,7 @@
 
 use super::model::IgnoreConfig;
 use anyhow::{Context, Result};
-use code_split_plugin_api::{attrs::AttrValue, graph::Graph, node::Node};
+use code_split_plugin_api::{attrs::AttrValue, graph::Graph, log, node::Node};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::Path;
@@ -53,12 +53,14 @@ fn looks_like_test(name: &str, path: &str) -> bool {
 }
 
 fn collect_dev_only_crates(target: &Path) -> HashSet<String> {
-    let out = std::process::Command::new("cargo")
-        .args(["metadata", "--format-version", "1"])
-        .current_dir(target)
-        .stderr(std::process::Stdio::null())
-        .output()
-        .expect("cargo metadata failed — is cargo installed?");
+    let out = log::timed("cargo metadata (dev-only crates)", || {
+        std::process::Command::new("cargo")
+            .args(["metadata", "--format-version", "1"])
+            .current_dir(target)
+            .stderr(std::process::Stdio::null())
+            .output()
+            .expect("cargo metadata failed — is cargo installed?")
+    });
     assert!(
         out.status.success(),
         "cargo metadata exited with {}",

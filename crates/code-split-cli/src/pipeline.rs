@@ -411,10 +411,11 @@ fn detect_roots() -> BTreeMap<String, String> {
     if !rustup.is_empty() {
         // Add rust-src root: sysroot/lib/rustlib/src/rust/library
         // This shortens stdlib paths from {rustup}/toolchains/.../library/... to {rust-src}/...
-        if let Ok(out) = std::process::Command::new("rustc")
-            .args(["--print", "sysroot"])
-            .output()
-            && out.status.success()
+        if let Ok(out) = logger::timed("rustc --print sysroot", || {
+            std::process::Command::new("rustc")
+                .args(["--print", "sysroot"])
+                .output()
+        }) && out.status.success()
         {
             let sysroot = String::from_utf8_lossy(&out.stdout).trim().to_string();
             let rust_lib = format!("{sysroot}/lib/rustlib/src/rust/library");

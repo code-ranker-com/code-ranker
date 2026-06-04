@@ -1,4 +1,5 @@
 use code_split_graph::snapshot::GitInfo;
+use code_split_plugin_api::log;
 use std::path::Path;
 use std::process::Command;
 
@@ -60,11 +61,13 @@ pub fn collect(workspace: &Path, ov: &GitOverride) -> Option<GitInfo> {
 }
 
 fn run_git(workspace: &Path, args: &[&str]) -> Option<String> {
-    let out = Command::new("git")
-        .args(args)
-        .current_dir(workspace)
-        .output()
-        .ok()?;
+    let out = log::timed(&format!("git {}", args.join(" ")), || {
+        Command::new("git")
+            .args(args)
+            .current_dir(workspace)
+            .output()
+    })
+    .ok()?;
     if out.status.success() {
         Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
     } else {
@@ -73,10 +76,12 @@ fn run_git(workspace: &Path, args: &[&str]) -> Option<String> {
 }
 
 fn count_dirty(workspace: &Path) -> u32 {
-    let out = Command::new("git")
-        .args(["status", "--porcelain"])
-        .current_dir(workspace)
-        .output();
+    let out = log::timed("git status --porcelain", || {
+        Command::new("git")
+            .args(["status", "--porcelain"])
+            .current_dir(workspace)
+            .output()
+    });
     match out {
         Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout)
             .lines()

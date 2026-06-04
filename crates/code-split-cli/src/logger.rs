@@ -1,12 +1,12 @@
-use chrono::Local;
+use code_split_plugin_api::log;
 use std::time::Instant;
 
-fn ts() -> String {
-    Local::now().format("%H:%M:%S%.3f").to_string()
-}
+/// Re-export the shared timed sub-command helper so call sites in this crate
+/// (git / cargo / rustc shell-outs) log through the one common formatter.
+pub use code_split_plugin_api::log::timed;
 
 pub fn info(msg: &str) {
-    eprintln!("[{}] {}", ts(), msg);
+    log::line(msg);
 }
 
 pub struct Timer {
@@ -23,19 +23,18 @@ impl Timer {
     }
 
     pub fn finish_with(self, extra: &str) -> u64 {
-        let ms = self.start.elapsed().as_millis() as u64;
-        eprintln!(
-            "[{}] ✓ {} — {:.1}s{}",
-            ts(),
+        let elapsed = self.start.elapsed();
+        log::line(&format!(
+            "✓ {} — {}{}",
             self.label,
-            ms as f64 / 1000.0,
+            log::secs(elapsed),
             if extra.is_empty() {
                 String::new()
             } else {
                 format!(" ({})", extra)
             }
-        );
-        ms
+        ));
+        elapsed.as_millis() as u64
     }
 
     pub fn finish(self) -> u64 {

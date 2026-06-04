@@ -36,6 +36,7 @@ pub mod attrs;
 pub mod edge;
 pub mod graph;
 pub mod level;
+pub mod log;
 pub mod node;
 pub mod plugin;
 

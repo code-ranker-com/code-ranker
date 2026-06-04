@@ -35,9 +35,14 @@ input and share the same vocabulary below.
 | `-h, --help` | Print help — top-level, or per-command with `code-split <cmd> --help`. |
 | `-V, --version` | Print the version. |
 
-Progress and timing lines are written to **stderr** (`[HH:MM:SS] …`); diagnostics and
-machine output go to **stdout** or files, so the two streams never mix. All other flags
-are per-command and must follow the command name.
+Progress and timing lines are written to **stderr**, each stamped `[HH:MM:SS.mmm]`;
+diagnostics and machine output go to **stdout** or files, so the two streams never mix.
+A run opens with a `▶ <command>` startup line and the resolved `config:` path, logs
+every external tool it shells out to with its duration to millisecond precision
+(`↳ cargo metadata --offline — 28.500s`, `↳ git status --porcelain — 0.017s`,
+`rustc …`), and closes with a `✓ <command> — <time>` line. The sub-command lines make
+the cost of a cold cargo cache visible at a glance. All other flags are per-command and
+must follow the command name.
 
 ## Input: code or snapshot
 

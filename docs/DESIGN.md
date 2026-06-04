@@ -880,6 +880,12 @@ See [§3.7 Plugin System](#37-plugin-system).
   in the `code-split-plugin-*` crates; `code-split-complexity`,
   `code-split-plugin-api` and `code-split-graph` are language-agnostic.
 - `code-split-graph` has zero I/O and zero analyzer dependencies.
+- The stderr progress/timing log (`code-split-plugin-api::log`) lives in the
+  foundation crate so both the CLI's stage timers and the plugins' sub-command
+  shell-outs (`cargo metadata`, `rustc`) emit one consistent `[HH:MM:SS.mmm]`
+  format. `log::timed(label, f)` wraps every external invocation and prints its
+  duration to millisecond precision; `code-split-cli`'s `logger` delegates its
+  formatting here.
 - The Rust plugin's module→file collapse lives in `code-split-plugin-rust/src/lib.rs`.
 - `code-split-cli` orchestrates: it dispatches the language plugins (through the
   trait) and hands the snapshot to `code-split-viewer` for rendering.

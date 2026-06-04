@@ -13,4 +13,5 @@ description = "Code Split plugin contract: the generic entity/relation model + t
 # code-split crate, and it re-exports nothing — everyone else depends on it.
 [dependencies]
 anyhow = { workspace = true }
+chrono = { workspace = true }
 serde = { workspace = true }

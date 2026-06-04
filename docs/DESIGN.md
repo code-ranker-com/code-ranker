@@ -831,7 +831,7 @@ dictionaries with the structural graph and the computed cycles/stats:
   "workspace":      "/Users/alice/projects/code-split",
   "target":         "/Users/alice/projects/axum-api",
   "plugin":         "rust",
-  "versions": { "code-split": "1.0.0-alpha.3", "rustc": "1.78.0" },
+  "versions": { "code-split": "1.0.0-alpha.4", "rustc": "1.78.0" },
   "roots": {
     "registry": "/Users/alice/.cargo/registry/src/index.crates.io-abc123",
     "target":   "/Users/alice/projects/axum-api"

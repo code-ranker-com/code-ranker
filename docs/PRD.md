@@ -267,7 +267,7 @@ bundles its semantics dictionaries with the structural graph and computed data
   "target":    "/Users/alice/projects/axum-api",
   "plugin": "rust",
   "config_file": "/Users/alice/projects/axum-api/code-split.toml",
-  "versions": { "code-split": "1.0.0-alpha.3", "rustc": "1.78.0" },
+  "versions": { "code-split": "1.0.0-alpha.4", "rustc": "1.78.0" },
   "roots": {
     "registry": "/Users/alice/.cargo/registry/src/index.crates.io-abc123",
     "target":   "/Users/alice/projects/axum-api"
@@ -665,7 +665,7 @@ can render any language/metric set without hardcoding names.
   "workspace":      "<absolute-path>",
   "target":         "<absolute-path>",
   "plugin":         "<plugin-id>",
-  "versions":       { "code-split": "1.0.0-alpha.3", "rustc": "1.78.0" },
+  "versions":       { "code-split": "1.0.0-alpha.4", "rustc": "1.78.0" },
   "roots":          { "target": "<abs>", "registry": "<abs>" },
   "git":            { "branch": "main", "commit": "a3f9c21b4d5e", "dirty_files": 0, "origin": "git@…:team/proj.git" },
   "timings":        [ { "stage": "rust", "ms": 0, "detail": "…" }, … ],

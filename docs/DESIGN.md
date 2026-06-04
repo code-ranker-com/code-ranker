@@ -361,16 +361,25 @@ classifies crates as local vs. external; walks local source trees with `syn` to
 extract the module hierarchy and `use` / `pub use` statements, emitting internal
 crate / module / trait nodes and `contains` / `uses` / `reexports` edges. It also runs a `syn::visit`
 path collector over each file to capture **bare qualified paths** in
-expressions/types (≥ 2 segments, no `use`), resolved through the same
-full resolver as `use` statements: this captures both cross-crate
-(`other_crate::item` → the extern crate) and intra-crate paths
-(`commands::run()` → the local `commands` module, `crate::a::Alpha` →
-its module), while `std`/`core`/keyword-only paths are ignored. External
-crates are added as `Crate` nodes with
-`external = true`; their source is never read. A `visited_files`
-`HashSet<PathBuf>` guard in `process_package` prevents double-walking
-source files when a workspace has both `lib` and `bin` targets declaring
-the same modules.
+expressions/types (≥ 2 segments, no `use`) **and qualified paths inside
+`#[derive(...)]`** (e.g. `serde::Serialize`), resolved through the same
+full resolver as `use` statements.
+
+Resolution runs in **two phases** so cross-crate edges can be submodule-precise:
+phase A walks every workspace crate, building all module nodes and a per-crate
+library module index; phase B then resolves the collected `use` / bare-path
+references against (1) the owning crate's index (intra-crate / `crate` / `self`
+/ `super`), (2) the **workspace library indexes** — a cross-crate
+`other_crate::sub::Item` walks the dependency crate's index to the file that
+owns `Item` (→ its `sub.rs`), falling back to the crate root when the path stops
+at a root item — and (3) the extern-crate map (registry deps → one crate-root /
+`External` node). `std`/`core`/keyword-only paths are ignored; external crates
+are added as `Crate` nodes with `external = true` and their source is never
+read. A per-package `visited_files` `HashSet<PathBuf>` guard prevents
+double-walking source files when a workspace has both `lib` and `bin` targets
+declaring the same modules. A `mod` with `#[path = "…"]` is resolved via that
+attribute (relative to the declaring file's directory) before the default
+`name.rs` / `name/mod.rs` lookup.
 
 These module-level nodes are **internal**: the Rust plugin's collapse
 pass (see §3.7) folds them down to file nodes (`kind == "file"`, id = the
@@ -380,18 +389,19 @@ before returning. The orchestrator then relativizes the absolute file ids to
 `{target}/…` and the external `path` to `{registry}/…`.
 
 **Edge sources & remaining blind spots**: file→file / file→library edges
-come from two sources — (1) `use` / `pub use` statements; (2) bare
+come from three sources — (1) `use` / `pub use` statements; (2) bare
 qualified paths in expressions/types (`commands::run()`, `other_crate::item`,
-`crate::a::Alpha`), captured by the path visitor and resolved the same way
-as `use`. A `mod foo;` declaration emits a `Contains` edge that is kept in
-the JSON but treated as structural ownership only — not drawn, not counted
-in fan_in / HK / cycles. What remains uncaptured: a bare reference whose
-target is a re-export reached through the crate root resolves to the
-**crate-root file** (e.g. `crate::Edge` → `lib.rs`) rather than the module
-that defines it, and any `use` hidden inside a macro body (macros are never
-expanded). A file reached only via `Contains` (e.g. a module declared with
-`mod foo;` but never referenced by path or `use`) has `fan_in` 0 and can
-appear isolated on the map.
+`crate::a::Alpha`); (3) qualified paths inside `#[derive(...)]`
+(`serde::Serialize`) — all resolved the same way as `use`. A `mod foo;`
+declaration emits a `Contains` edge that is kept in the JSON but treated as
+structural ownership only — not drawn, not counted in fan_in / HK / cycles.
+What remains uncaptured: any path **inside a macro body** (the macro's own path
+is recorded, e.g. `anyhow::bail!`, but the tokens it wraps are not — macros are
+never expanded), an old-style `extern crate foo;` (no path), and a cross-crate
+reference into a registry dependency (no local module index) which still
+collapses onto the single `External` node. A file reached only via `Contains`
+(e.g. a module declared with `mod foo;` but never referenced by path or `use`)
+has `fan_in` 0 and can appear isolated on the map.
 
 #### code-split-complexity
 
@@ -1152,11 +1162,13 @@ code-split report /path/to/my-crate --plugin rust
       its cargo-cache `path` (the crate's `Cargo.toml` directory, e.g.
       `{registry}/tokio-1.49.0`), later relativized to a `{registry}`/`{cargo}`
       root.
-   d. A **local** workspace crate maps to its crate-root file (`lib.rs` /
-      `main.rs`), so a cross-crate `use other_crate::…` (or captured
-      bare-path reference) becomes a file→file edge to that crate's root.
-      Crate→crate dependency edges (from `cargo metadata`) are dropped as
-      crate-level meta.
+   d. Cross-crate references are **submodule-precise**: `use
+      other_crate::sub::Item` resolves (in the module-graph stage) to the
+      module node for `sub`, which collapses to a file→file edge to that
+      crate's `sub.rs`. A path that stops at a crate-root item resolves to the
+      crate node, which maps to the crate-root file (`lib.rs` / `main.rs`) — so
+      root-level items still produce a file→file edge to the root. Crate→crate
+      dependency edges (from `cargo metadata`) are dropped as crate-level meta.
 6. Runs `annotate_all_cycles` (SCC → `CycleKind`) and `annotate_hk`
    (internal `fan_in`/`fan_out`/`hk`; `fan_out_external` separately) on
    the file graph, then `annotate_stats`. Named roots that did not shorten

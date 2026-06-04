@@ -81,7 +81,10 @@ fn write_metrics(node: &mut code_split_plugin_api::node::Node, s: &FuncSpace) {
     put("mi", m.mi.mi_original());
     put("mi_sei", m.mi.mi_sei());
 
-    let sloc = m.loc.sloc();
+    // `sloc` here means *physical lines of code* — lines with real code, excluding
+    // blanks and comment-only lines (see this key's spec). rust-code-analysis names
+    // that `ploc()`; its `sloc()` is the total line count (already exposed as `loc`).
+    let sloc = m.loc.ploc();
     if sloc > 0.0 {
         put("sloc", sloc);
         put("lloc", m.loc.lloc());

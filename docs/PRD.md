@@ -449,12 +449,21 @@ workspaces. The plugin MUST:
   `External` library nodes (`ext:<name>`) recorded at depth 1, never
   expanded; edges into them are flagged `external: true`. Each `External`
   node carries the resolved `version` and its cargo-cache `path` (from
-  `cargo metadata`). A dependency on another **local workspace crate**
-  becomes a file→file edge to that crate's root file (`lib.rs` / `main.rs`)
+  `cargo metadata`). A dependency on another **local workspace crate** is
+  resolved **submodule-precise**: `other_crate::sub::Item` walks that crate's
+  library module index to the file that owns `Item` (→ its `sub.rs`); a path
+  that stops at a crate-root item falls back to the root file (`lib.rs` /
+  `main.rs`). A registry crate (no local library index) collapses to its
+  `External` node
 - Capture **bare qualified paths** in expressions/types (`commands::run()`,
   `other_crate::item`, `crate::a::Alpha` with no `use`), resolved the same
   way as `use`, so both intra-crate and cross-crate dependencies referenced
   only by qualified path are not lost
+- Capture **qualified paths inside `#[derive(...)]`** (e.g.
+  `#[derive(serde::Serialize)]` with no `use serde`) so a crate used only
+  through a derive still gets an edge, and honour **`#[path = "…"]`** on a
+  `mod` (resolved relative to the declaring file's directory) so a module whose
+  backing file sits at a non-default location is walked and its edges captured
 - NOT emit a function-level call graph (no `Calls` edges, no
   rust-analyzer / `ra_ap_*` dependency); analysis runs in seconds
 - Emit **structure only** (file + external nodes, `uses`/`contains`/`reexports`

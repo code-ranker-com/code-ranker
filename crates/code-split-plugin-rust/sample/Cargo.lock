@@ -3,6 +3,10 @@
 version = 4
 
 [[package]]
+name = "helper"
+version = "0.1.0"
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -30,6 +34,7 @@ dependencies = [
 name = "rust-sample"
 version = "0.1.0"
 dependencies = [
+ "helper",
  "once_cell",
  "serde",
 ]

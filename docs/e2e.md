@@ -92,10 +92,30 @@ dependency, and a test file.
 Detected: `use crate::`, groups `{}`, glob `*`, `as` rename, `super::`, inline
 modules, `pub use` → `Reexports` edge, external crate via `use serde::` →
 `External` node, and **bare qualified paths** in expressions/types with no
-`use` — both cross-crate (`once_cell::sync::Lazy` → the crate's `External` node,
-and across workspace members a file→file edge to that crate's root) and
-intra-crate (`foo::run()` → a `Uses` edge `lib.rs → foo.rs`). A `std::`/`core::`
-path is recognized but is NOT emitted as an External node.
+`use` — both cross-crate (`once_cell::sync::Lazy` → the crate's `External` node)
+and intra-crate (`foo::run()` → a `Uses` edge `lib.rs → foo.rs`). A
+`std::`/`core::` path is recognized but is NOT emitted as an External node.
+
+**Cross-crate, submodule-precise** (the `helper` workspace member): a
+`use helper::widget::{Widget, make}` resolves through `helper`'s library module
+index to the **owning submodule file** — `cross.rs → helper/src/widget.rs` and
+`→ helper/src/gadget.rs`, not a single edge to `helper`'s crate root. A path
+that stops at a crate-root item (`use helper::TOP`) has no deeper submodule to
+match and falls back to the root (`→ helper/src/lib.rs`). Registry crates with
+no local library index still collapse to one `External` node.
+
+**Qualified derive macros** (`derives.rs`): `#[derive(serde::Serialize)]` names
+a crate by a fully-qualified path *inside* the derive list. Derive arguments are
+an opaque token stream, but the analyzer parses qualified derive paths, so this
+yields `derives.rs → serde` even with no `use serde` in the file. (A bare
+single-segment derive like `#[derive(Serialize)]` still relies on the `use` for
+its edge.)
+
+**`#[path = "..."]` modules** (`relocated/custom.rs`): a module whose backing
+file is at a non-default location is resolved via its `#[path]` attribute
+(relative to the declaring file's directory), walked, and its edges captured
+(`custom.rs → c.rs`). Without `#[path]` support the file and its edges would be
+silently dropped.
 
 Each `mod foo;` becomes a `File` node and emits a `Contains` edge
 (parent → child). `Contains` is kept in the JSON snapshot as structural

@@ -72,6 +72,16 @@
       },
       "edges": [
         {
+          "kind": "contains",
+          "source": "{target}/helper/src/lib.rs",
+          "target": "{target}/helper/src/gadget.rs"
+        },
+        {
+          "kind": "contains",
+          "source": "{target}/helper/src/lib.rs",
+          "target": "{target}/helper/src/widget.rs"
+        },
+        {
           "kind": "uses",
           "source": "{target}/src/a.rs",
           "target": "ext:serde"
@@ -95,6 +105,26 @@
           "kind": "uses",
           "source": "{target}/src/b.rs",
           "target": "{target}/src/a.rs"
+        },
+        {
+          "kind": "uses",
+          "source": "{target}/src/cross.rs",
+          "target": "{target}/helper/src/gadget.rs"
+        },
+        {
+          "kind": "uses",
+          "source": "{target}/src/cross.rs",
+          "target": "{target}/helper/src/lib.rs"
+        },
+        {
+          "kind": "uses",
+          "source": "{target}/src/cross.rs",
+          "target": "{target}/helper/src/widget.rs"
+        },
+        {
+          "kind": "uses",
+          "source": "{target}/src/derives.rs",
+          "target": "ext:serde"
         },
         {
           "kind": "uses",
@@ -135,6 +165,16 @@
         {
           "kind": "contains",
           "source": "{target}/src/lib.rs",
+          "target": "{target}/src/cross.rs"
+        },
+        {
+          "kind": "contains",
+          "source": "{target}/src/lib.rs",
+          "target": "{target}/src/derives.rs"
+        },
+        {
+          "kind": "contains",
+          "source": "{target}/src/lib.rs",
           "target": "{target}/src/foo.rs"
         },
         {
@@ -146,6 +186,16 @@
           "kind": "contains",
           "source": "{target}/src/lib.rs",
           "target": "{target}/src/macros.rs"
+        },
+        {
+          "kind": "contains",
+          "source": "{target}/src/lib.rs",
+          "target": "{target}/src/relocated/custom.rs"
+        },
+        {
+          "kind": "uses",
+          "source": "{target}/src/relocated/custom.rs",
+          "target": "{target}/src/c.rs"
         }
       ],
       "node_attributes": {
@@ -394,6 +444,69 @@
           "version": "1.0.228"
         },
         {
+          "blank": 1,
+          "bugs": 0.00447,
+          "cloc": 2,
+          "cyclomatic": 1,
+          "effort": 49.128,
+          "fan_in": 1,
+          "id": "{target}/helper/src/gadget.rs",
+          "items": 1,
+          "kind": "file",
+          "length": 7,
+          "loc": 6,
+          "mi": 126.027,
+          "mi_sei": 145.313,
+          "name": "gadget.rs",
+          "sloc": 3,
+          "time": 2.729,
+          "visibility": "public",
+          "vocabulary": 7,
+          "volume": 19.651
+        },
+        {
+          "blank": 2,
+          "bugs": 0.00376,
+          "cloc": 7,
+          "cyclomatic": 1,
+          "effort": 37.899,
+          "fan_in": 1,
+          "id": "{target}/helper/src/lib.rs",
+          "items": 3,
+          "kind": "file",
+          "length": 9,
+          "loc": 12,
+          "mi": 113.721,
+          "mi_sei": 134.757,
+          "name": "lib.rs",
+          "sloc": 3,
+          "time": 2.105,
+          "visibility": "public",
+          "vocabulary": 7,
+          "volume": 25.266
+        },
+        {
+          "blank": 2,
+          "bugs": 0.00447,
+          "cloc": 2,
+          "cyclomatic": 1,
+          "effort": 49.128,
+          "fan_in": 1,
+          "id": "{target}/helper/src/widget.rs",
+          "items": 2,
+          "kind": "file",
+          "length": 7,
+          "loc": 8,
+          "mi": 121.366,
+          "mi_sei": 134.569,
+          "name": "widget.rs",
+          "sloc": 4,
+          "time": 2.729,
+          "visibility": "public",
+          "vocabulary": 7,
+          "volume": 19.651
+        },
+        {
           "blank": 5,
           "bugs": 0.0896,
           "cloc": 11,
@@ -403,7 +516,7 @@
           "fan_in": 2,
           "fan_out": 2,
           "fan_out_external": 1,
-          "hk": 480,
+          "hk": 224,
           "id": "{target}/src/a.rs",
           "items": 2,
           "kind": "file",
@@ -413,7 +526,7 @@
           "mi": 85.054,
           "mi_sei": 87.531,
           "name": "a.rs",
-          "sloc": 30,
+          "sloc": 14,
           "time": 245.22,
           "visibility": "public",
           "vocabulary": 32,
@@ -429,7 +542,7 @@
           "fan_in": 3,
           "fan_out": 1,
           "fan_out_external": 1,
-          "hk": 225,
+          "hk": 81,
           "id": "{target}/src/b.rs",
           "items": 2,
           "kind": "file",
@@ -439,7 +552,7 @@
           "mi": 90.031,
           "mi_sei": 98.534,
           "name": "b.rs",
-          "sloc": 25,
+          "sloc": 9,
           "time": 108.813,
           "visibility": "public",
           "vocabulary": 27,
@@ -451,7 +564,7 @@
           "cloc": 4,
           "cyclomatic": 1,
           "effort": 132.877,
-          "fan_in": 1,
+          "fan_in": 2,
           "id": "{target}/src/c.rs",
           "items": 2,
           "kind": "file",
@@ -460,11 +573,54 @@
           "mi": 106.896,
           "mi_sei": 115.656,
           "name": "c.rs",
-          "sloc": 14,
+          "sloc": 8,
           "time": 7.382,
           "visibility": "public",
           "vocabulary": 10,
           "volume": 53.15
+        },
+        {
+          "blank": 2,
+          "bugs": 0.0331,
+          "cloc": 11,
+          "cyclomatic": 1,
+          "effort": 991.183,
+          "fan_out": 3,
+          "id": "{target}/src/cross.rs",
+          "items": 1,
+          "kind": "file",
+          "length": 30,
+          "lloc": 1,
+          "loc": 20,
+          "mi": 96.801,
+          "mi_sei": 109.773,
+          "name": "cross.rs",
+          "sloc": 7,
+          "time": 55.065,
+          "visibility": "public",
+          "vocabulary": 19,
+          "volume": 127.437
+        },
+        {
+          "blank": 1,
+          "bugs": 0.0051,
+          "cloc": 6,
+          "cyclomatic": 1,
+          "effort": 60,
+          "fan_out_external": 1,
+          "id": "{target}/src/derives.rs",
+          "items": 1,
+          "kind": "file",
+          "length": 8,
+          "loc": 11,
+          "mi": 115.398,
+          "mi_sei": 136.403,
+          "name": "derives.rs",
+          "sloc": 4,
+          "time": 3.333,
+          "visibility": "public",
+          "vocabulary": 8,
+          "volume": 24
         },
         {
           "blank": 2,
@@ -474,7 +630,7 @@
           "effort": 196.755,
           "fan_in": 1,
           "fan_out": 1,
-          "hk": 15,
+          "hk": 4,
           "id": "{target}/src/foo.rs",
           "items": 1,
           "kind": "file",
@@ -483,33 +639,33 @@
           "mi": 106.878,
           "mi_sei": 125.297,
           "name": "foo.rs",
-          "sloc": 15,
+          "sloc": 4,
           "time": 10.93,
           "visibility": "private",
           "vocabulary": 11,
           "volume": 44.972
         },
         {
-          "blank": 7,
-          "bugs": 0.0522,
-          "cloc": 22,
+          "blank": 8,
+          "bugs": 0.0616,
+          "cloc": 28,
           "cyclomatic": 1,
-          "effort": 1961.09,
+          "effort": 2514.31,
           "fan_out": 3,
           "id": "{target}/src/lib.rs",
-          "items": 8,
+          "items": 11,
           "kind": "file",
-          "length": 59,
+          "length": 69,
           "lloc": 2,
-          "loc": 50,
-          "mi": 77.512,
-          "mi_sei": 79.235,
+          "loc": 61,
+          "mi": 73.194,
+          "mi_sei": 73.563,
           "name": "lib.rs",
-          "sloc": 50,
-          "time": 108.949,
+          "sloc": 25,
+          "time": 139.683,
           "visibility": "public",
-          "vocabulary": 29,
-          "volume": 286.62
+          "vocabulary": 35,
+          "volume": 353.92
         },
         {
           "blank": 2,
@@ -525,29 +681,50 @@
           "mi": 97.153,
           "mi_sei": 102.903,
           "name": "macros.rs",
-          "sloc": 22,
+          "sloc": 13,
           "time": 20.986,
           "visibility": "private",
           "vocabulary": 13,
           "volume": 92.51
+        },
+        {
+          "blank": 2,
+          "bugs": 0.0112,
+          "cloc": 5,
+          "cyclomatic": 1,
+          "effort": 196.755,
+          "fan_out": 1,
+          "id": "{target}/src/relocated/custom.rs",
+          "items": 1,
+          "kind": "file",
+          "length": 13,
+          "loc": 11,
+          "mi": 111.902,
+          "mi_sei": 129.176,
+          "name": "custom.rs",
+          "sloc": 4,
+          "time": 10.93,
+          "visibility": "private",
+          "vocabulary": 11,
+          "volume": 44.972
         }
       ],
       "stats": {
-        "blank": 3.666,
-        "bugs": 0.0385,
-        "cloc": 10.833,
+        "blank": 2.75,
+        "bugs": 0.0252,
+        "cloc": 8.666,
         "cyclomatic": 1,
-        "effort": 1506.848,
-        "fan_in": 1.75,
-        "fan_out": 1.75,
-        "hk": 240,
-        "length": 37.833,
-        "mi": 93.92,
-        "mi_sei": 101.526,
-        "sloc": 26,
-        "time": 83.713,
-        "vocabulary": 20.333,
-        "volume": 172.703
+        "effort": 914.867,
+        "fan_in": 1.571,
+        "fan_out": 1.833,
+        "hk": 103,
+        "length": 25.916,
+        "mi": 103.701,
+        "mi_sei": 116.122,
+        "sloc": 8.166,
+        "time": 50.825,
+        "vocabulary": 15.583,
+        "volume": 113.708
       },
       "ui": {
         "card_metrics": [
@@ -747,17 +924,17 @@
   "target": "/home/user/code-split/crates/code-split-plugin-rust/sample",
   "timings": [
     {
-      "detail": "8 nodes from 6 files",
+      "detail": "14 nodes from 12 files",
       "ms": 0,
       "stage": "rust"
     },
     {
-      "detail": "6 nodes annotated",
+      "detail": "12 nodes annotated",
       "ms": 0,
       "stage": "complexity"
     },
     {
-      "detail": "nodes=8 edges=15",
+      "detail": "nodes=14 edges=25",
       "ms": 0,
       "stage": "projection"
     }

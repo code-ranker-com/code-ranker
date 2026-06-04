@@ -9,16 +9,110 @@ use syn::{Item, ItemMod, UseTree, Visibility as SynVis};
 
 pub(crate) fn contribute(metadata: &Metadata, builder: &mut GraphBuilder) -> Result<()> {
     let local: HashSet<&PackageId> = metadata.workspace_members.iter().collect();
+
+    // Phase A — build every crate/module node and per-target module index, and
+    // collect all pending `use` / bare-path references. Nothing is resolved yet:
+    // cross-crate resolution needs the *other* crates' module indexes, so every
+    // node must already exist.
+    let mut works: Vec<TargetWork> = Vec::new();
+    // Each local crate's library module index, keyed by its package repr, so a
+    // `use other_crate::sub::Item` can resolve to the submodule file that owns
+    // `Item` instead of collapsing onto the crate root.
+    let mut lib_index: HashMap<String, HashMap<Vec<String>, NodeId>> = HashMap::new();
+
     for pkg in &metadata.packages {
         if !local.contains(&pkg.id) {
             continue;
         }
-        let extern_crates = build_extern_crate_map(pkg, metadata);
-        process_package(pkg, &extern_crates, builder)
+        let (extern_crates, dep_pkg_by_name) = build_dep_maps(pkg, metadata);
+        let crate_id = crate_node_id(&pkg.id.repr);
+        let mut visited_files: HashSet<PathBuf> = HashSet::new();
+
+        for target in &pkg.targets {
+            if !is_supported_target(target) {
+                continue;
+            }
+            let root_mod_id = module_node_id(&pkg.id.repr, &target.name, &[]);
+            let root_label = format!("{} ({})", target.name, target_kind_label(target));
+            builder.add_node(Node {
+                id: root_mod_id.clone(),
+                kind: NodeKind::Module,
+                name: root_label,
+                path: target.src_path.to_string(),
+                parent: Some(crate_id.clone()),
+                external: None,
+                version: None,
+                visibility: Some(Visibility::Public),
+                loc: None,
+                line: None,
+                item_count: None,
+            });
+            builder.add_edge(Edge {
+                from: crate_id.clone(),
+                to: root_mod_id.clone(),
+                kind: EdgeKind::Contains,
+                visibility: None,
+            });
+
+            let mut module_index: HashMap<Vec<String>, NodeId> = HashMap::new();
+            module_index.insert(vec![], root_mod_id.clone());
+            let mut pending_uses: Vec<PendingUse> = Vec::new();
+
+            let src = target.src_path.clone().into_std_path_buf();
+            walk_file(
+                &src,
+                &root_mod_id,
+                &[],
+                pkg,
+                target,
+                &mut module_index,
+                &mut pending_uses,
+                builder,
+                &mut visited_files,
+            )
             .with_context(|| format!("processing package {}", pkg.name))?;
+
+            // The importable target (lib / proc-macro) is what `use <crate>::…`
+            // from another crate resolves into; a bin target is not addressable
+            // by name, so only libs feed the workspace index.
+            if is_lib_target(target) {
+                lib_index.insert(pkg.id.repr.clone(), module_index.clone());
+            }
+            works.push(TargetWork {
+                extern_crates: extern_crates.clone(),
+                dep_pkg_by_name: dep_pkg_by_name.clone(),
+                module_index,
+                pending_uses,
+            });
+        }
     }
+
+    // Phase B — resolve every pending use against (1) the owning crate's module
+    // index (intra-crate / crate / self / super), (2) the workspace library
+    // indexes (cross-crate, submodule-precise), and (3) the extern-crate map
+    // (registry deps → crate root).
+    for w in &works {
+        emit_uses(
+            &w.pending_uses,
+            &w.module_index,
+            &w.extern_crates,
+            &w.dep_pkg_by_name,
+            &lib_index,
+            builder,
+        );
+    }
+
     aggregate_crate_loc(builder);
     Ok(())
+}
+
+/// Per-target work carried from Phase A (node building) to Phase B (use
+/// resolution), so cross-crate resolution can see every crate's module index.
+struct TargetWork {
+    extern_crates: HashMap<String, NodeId>,
+    dep_pkg_by_name: HashMap<String, String>,
+    module_index: HashMap<Vec<String>, NodeId>,
+    pending_uses: Vec<PendingUse>,
 }
 
 /// Sum module LOC into each crate node.
@@ -52,77 +146,39 @@ fn aggregate_crate_loc(builder: &mut GraphBuilder) {
     }
 }
 
-fn build_extern_crate_map(pkg: &Package, metadata: &Metadata) -> HashMap<String, NodeId> {
-    let mut map = HashMap::new();
+/// Build, from the resolve graph, both dependency maps for `pkg`: the direct
+/// dependency's *code* name (the `extern crate` name, hyphens normalized to
+/// underscores) → its crate-root node id (registry fallback) and → its package
+/// repr (to locate a local crate's library module index). Renamed deps map by
+/// the rename, matching how `use <name>::…` refers to them.
+fn build_dep_maps(
+    pkg: &Package,
+    metadata: &Metadata,
+) -> (HashMap<String, NodeId>, HashMap<String, String>) {
+    let mut extern_map = HashMap::new();
+    let mut pkg_map = HashMap::new();
     let Some(resolve) = &metadata.resolve else {
-        return map;
+        return (extern_map, pkg_map);
     };
     let Some(node) = resolve.nodes.iter().find(|n| n.id == pkg.id) else {
-        return map;
+        return (extern_map, pkg_map);
     };
     for dep in &node.deps {
-        map.insert(dep.name.clone(), crate_node_id(&dep.pkg.repr));
+        extern_map.insert(dep.name.clone(), crate_node_id(&dep.pkg.repr));
+        pkg_map.insert(dep.name.clone(), dep.pkg.repr.clone());
     }
-    map
+    (extern_map, pkg_map)
 }
 
-fn process_package(
-    pkg: &Package,
-    extern_crates: &HashMap<String, NodeId>,
-    builder: &mut GraphBuilder,
-) -> Result<()> {
-    let crate_id = crate_node_id(&pkg.id.repr);
-    let mut visited_files: HashSet<PathBuf> = HashSet::new();
-
-    for target in &pkg.targets {
-        if !is_supported_target(target) {
-            continue;
-        }
-        let root_mod_id = module_node_id(&pkg.id.repr, &target.name, &[]);
-        let root_label = format!("{} ({})", target.name, target_kind_label(target));
-
-        builder.add_node(Node {
-            id: root_mod_id.clone(),
-            kind: NodeKind::Module,
-            name: root_label,
-            path: target.src_path.to_string(),
-            parent: Some(crate_id.clone()),
-            external: None,
-            version: None,
-            visibility: Some(Visibility::Public),
-            loc: None,
-            line: None,
-            item_count: None,
-        });
-        builder.add_edge(Edge {
-            from: crate_id.clone(),
-            to: root_mod_id.clone(),
-            kind: EdgeKind::Contains,
-            visibility: None,
-        });
-
-        let mut module_index: HashMap<Vec<String>, NodeId> = HashMap::new();
-        module_index.insert(vec![], root_mod_id.clone());
-
-        let mut pending_uses: Vec<PendingUse> = Vec::new();
-
-        let src = target.src_path.clone().into_std_path_buf();
-        walk_file(
-            &src,
-            &root_mod_id,
-            &[],
-            pkg,
-            target,
-            &mut module_index,
-            &mut pending_uses,
-            builder,
-            &mut visited_files,
-        )?;
-
-        emit_uses(&pending_uses, &module_index, extern_crates, builder);
-    }
-
-    Ok(())
+/// A target addressable by name from another crate (lib / proc-macro), as
+/// opposed to a `bin` (which cannot be `use`d by name).
+fn is_lib_target(target: &Target) -> bool {
+    target.kind.iter().any(|k| {
+        matches!(
+            k.as_str(),
+            "lib" | "rlib" | "dylib" | "cdylib" | "proc-macro"
+        )
+    })
 }
 
 #[derive(Debug)]
@@ -149,6 +205,30 @@ impl<'ast> syn::visit::Visit<'ast> for CratePathCollector {
                 .insert(path.segments.iter().map(|s| s.ident.to_string()).collect());
         }
         syn::visit::visit_path(self, path);
+    }
+
+    fn visit_attribute(&mut self, attr: &'ast syn::Attribute) {
+        // `#[derive(...)]` arguments are an opaque token stream that the default
+        // traversal never parses into paths, so a crate used *only* via a
+        // qualified derive (e.g. `#[derive(serde::Serialize)]` with no `use
+        // serde`) would otherwise produce no edge. Parse the derive list as a
+        // comma-separated path list and record each qualified path.
+        if attr.path().is_ident("derive")
+            && let Ok(paths) = attr.parse_args_with(
+                syn::punctuated::Punctuated::<syn::Path, syn::Token![,]>::parse_terminated,
+            )
+        {
+            for p in &paths {
+                if p.segments.len() >= 2 {
+                    self.paths
+                        .insert(p.segments.iter().map(|s| s.ident.to_string()).collect());
+                }
+            }
+        }
+        // Other attributes (`#[tokio::main]`, `#[serde(...)]`, …) keep the
+        // default visit, which already routes the attribute's own path through
+        // `visit_path`.
+        syn::visit::visit_attribute(self, attr);
     }
 }
 
@@ -347,7 +427,7 @@ fn process_mod(
             builder,
             visited_files,
         )?;
-    } else if let Some(sub_file) = resolve_submodule_path(enclosing_file, &sub_name) {
+    } else if let Some(sub_file) = mod_file_path(m, enclosing_file, &sub_name) {
         walk_file(
             &sub_file,
             &sub_mod_id,
@@ -397,13 +477,20 @@ fn emit_uses(
     pending: &[PendingUse],
     module_index: &HashMap<Vec<String>, NodeId>,
     extern_crates: &HashMap<String, NodeId>,
+    dep_pkg_by_name: &HashMap<String, String>,
+    lib_index: &HashMap<String, HashMap<Vec<String>, NodeId>>,
     builder: &mut GraphBuilder,
 ) {
     let mut seen: HashSet<(NodeId, NodeId, String)> = HashSet::new();
     for pu in pending {
-        let Some(target_id) =
-            resolve_use_path(&pu.use_path, &pu.current_path, module_index, extern_crates)
-        else {
+        let Some(target_id) = resolve_use_path(
+            &pu.use_path,
+            &pu.current_path,
+            module_index,
+            extern_crates,
+            dep_pkg_by_name,
+            lib_index,
+        ) else {
             continue;
         };
         if target_id == pu.from_mod_id {
@@ -436,6 +523,8 @@ fn resolve_use_path(
     current_path: &[String],
     module_index: &HashMap<Vec<String>, NodeId>,
     extern_crates: &HashMap<String, NodeId>,
+    dep_pkg_by_name: &HashMap<String, String>,
+    lib_index: &HashMap<String, HashMap<Vec<String>, NodeId>>,
 ) -> Option<NodeId> {
     if use_path.is_empty() {
         return None;
@@ -463,6 +552,17 @@ fn resolve_use_path(
             if module_index.contains_key(&probe) {
                 return walk_module_index(current_path, use_path, module_index);
             }
+            // Cross-crate into another local workspace crate: walk the rest of
+            // the path through that crate's library module index, so the edge
+            // lands on the submodule file that owns the item (falling back to
+            // the crate root when the path stops at a non-module item).
+            if let Some(dep_repr) = dep_pkg_by_name.get(other)
+                && let Some(foreign) = lib_index.get(dep_repr)
+            {
+                return walk_module_index(&[], rest, foreign);
+            }
+            // Registry dependency (or a local crate with no library target):
+            // collapse onto the crate root node.
             extern_crates.get(other).cloned()
         }
     }
@@ -487,6 +587,36 @@ fn walk_module_index(
     } else {
         None
     }
+}
+
+/// Resolve the file backing `mod <name>;`. Honours an explicit
+/// `#[path = "rel/or/abs.rs"]` attribute (relative to the directory of the file
+/// containing the declaration) before falling back to the default
+/// `name.rs` / `name/mod.rs` lookup. Without this, a `#[path]` module — and
+/// every edge inside it — would be silently dropped.
+fn mod_file_path(m: &ItemMod, enclosing_file: &Path, sub_name: &str) -> Option<PathBuf> {
+    if let Some(rel) = mod_path_attr(m) {
+        let base = enclosing_file.parent().unwrap_or_else(|| Path::new(""));
+        let candidate = base.join(&rel);
+        return candidate.exists().then_some(candidate);
+    }
+    resolve_submodule_path(enclosing_file, sub_name)
+}
+
+/// Read the string value of a `#[path = "..."]` attribute on a module, if present.
+fn mod_path_attr(m: &ItemMod) -> Option<String> {
+    for attr in &m.attrs {
+        if attr.path().is_ident("path")
+            && let syn::Meta::NameValue(nv) = &attr.meta
+            && let syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Str(s),
+                ..
+            }) = &nv.value
+        {
+            return Some(s.value());
+        }
+    }
+    None
 }
 
 fn resolve_submodule_path(parent_file: &Path, mod_name: &str) -> Option<PathBuf> {
@@ -607,6 +737,8 @@ mod tests {
             &[],
             &idx,
             &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
         );
         assert_eq!(r.as_deref(), Some("AB"));
     }
@@ -623,6 +755,8 @@ mod tests {
             &["a".into(), "b".into()],
             &idx,
             &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
         );
         assert_eq!(r.as_deref(), Some("X"));
     }
@@ -636,6 +770,8 @@ mod tests {
             &[],
             &HashMap::new(),
             &externs,
+            &HashMap::new(),
+            &HashMap::new(),
         );
         assert_eq!(r.as_deref(), Some("crate:serde"));
     }
@@ -645,6 +781,8 @@ mod tests {
         let r = resolve_use_path(
             &["std".into(), "collections".into()],
             &[],
+            &HashMap::new(),
+            &HashMap::new(),
             &HashMap::new(),
             &HashMap::new(),
         );
@@ -657,16 +795,76 @@ mod tests {
         index.insert(vec![], "mod:crate".into());
         index.insert(vec!["commands".into()], "mod:commands".into());
         let externs: HashMap<String, NodeId> = HashMap::new();
+        let no_deps: HashMap<String, String> = HashMap::new();
+        let no_libs: HashMap<String, HashMap<Vec<String>, NodeId>> = HashMap::new();
         assert_eq!(
-            resolve_use_path(&["commands".into(), "run".into()], &[], &index, &externs).as_deref(),
+            resolve_use_path(
+                &["commands".into(), "run".into()],
+                &[],
+                &index,
+                &externs,
+                &no_deps,
+                &no_libs,
+            )
+            .as_deref(),
             Some("mod:commands")
         );
         let mut externs2: HashMap<String, NodeId> = HashMap::new();
         externs2.insert("once_cell".into(), "crate:once_cell".into());
         assert_eq!(
-            resolve_use_path(&["once_cell".into(), "sync".into()], &[], &index, &externs2)
-                .as_deref(),
+            resolve_use_path(
+                &["once_cell".into(), "sync".into()],
+                &[],
+                &index,
+                &externs2,
+                &no_deps,
+                &no_libs,
+            )
+            .as_deref(),
             Some("crate:once_cell")
+        );
+    }
+
+    #[test]
+    fn resolves_cross_crate_use_to_submodule_file() {
+        // The foreign crate's library module index: root + a `node` submodule.
+        let mut foreign: HashMap<Vec<String>, NodeId> = HashMap::new();
+        foreign.insert(vec![], "mod:api::lib".into());
+        foreign.insert(vec!["node".into()], "mod:api::lib::node".into());
+        let mut lib_index: HashMap<String, HashMap<Vec<String>, NodeId>> = HashMap::new();
+        lib_index.insert("api 1.0".into(), foreign);
+
+        let mut dep_pkg_by_name: HashMap<String, String> = HashMap::new();
+        dep_pkg_by_name.insert("api".into(), "api 1.0".into());
+        // Fallback crate-root node, used only when the path stops above any submodule.
+        let mut externs: HashMap<String, NodeId> = HashMap::new();
+        externs.insert("api".into(), "crate:api".into());
+
+        // `use api::node::Node` lands on the `node` submodule (not the crate root).
+        assert_eq!(
+            resolve_use_path(
+                &["api".into(), "node".into(), "Node".into()],
+                &[],
+                &HashMap::new(),
+                &externs,
+                &dep_pkg_by_name,
+                &lib_index,
+            )
+            .as_deref(),
+            Some("mod:api::lib::node")
+        );
+        // `use api::TopItem` (no matching submodule) falls back to the crate root.
+        assert_eq!(
+            resolve_use_path(
+                &["api".into(), "TopItem".into()],
+                &[],
+                &HashMap::new(),
+                &externs,
+                &dep_pkg_by_name,
+                &lib_index,
+            )
+            .as_deref(),
+            Some("mod:api::lib")
         );
     }
 
@@ -696,6 +894,33 @@ mod tests {
         assert!(
             !c.paths.iter().any(|p| p == &vec!["plain".to_string()]),
             "single-segment call ignored"
+        );
+    }
+
+    #[test]
+    fn collector_captures_qualified_derive_paths() {
+        // A crate referenced only through a qualified derive (no `use`) must
+        // still produce a path — the derive arguments are otherwise opaque tokens.
+        let f = syn::parse_file(
+            "#[derive(Debug, serde::Serialize, thiserror::Error)] struct S;",
+        )
+        .unwrap();
+        let mut c = CratePathCollector::default();
+        syn::visit::Visit::visit_file(&mut c, &f);
+        assert!(
+            c.paths.contains(&vec!["serde".into(), "Serialize".into()]),
+            "got {:?}",
+            c.paths
+        );
+        assert!(
+            c.paths.contains(&vec!["thiserror".into(), "Error".into()]),
+            "got {:?}",
+            c.paths
+        );
+        // The bare `Debug` derive (single segment, std prelude) is not an edge.
+        assert!(
+            !c.paths.iter().any(|p| p == &vec!["Debug".to_string()]),
+            "single-segment derive ignored"
         );
     }
 }

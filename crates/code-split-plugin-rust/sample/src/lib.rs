@@ -15,7 +15,18 @@ mod macros;
 pub mod a;
 pub mod b;
 pub mod c;
+// `cross` depends on the `helper` workspace member by SUBMODULE path; `derives`
+// depends on serde only through a qualified derive (see those files).
+pub mod cross;
+pub mod derives;
 mod foo;
+
+// `#[path = "..."]` module — its backing file lives at a non-default location
+// (`src/relocated/custom.rs`). DETECTED: the analyzer honours `#[path]`, walks
+// the file, and captures its edges (`custom.rs → c.rs`). Without `#[path]`
+// support the whole file and its edges would be silently dropped.
+#[path = "relocated/custom.rs"]
+mod relocated;
 
 // `pub use` re-export — DETECTED as a `Reexports` edge (lib.rs → a.rs).
 pub use crate::a::Alpha;

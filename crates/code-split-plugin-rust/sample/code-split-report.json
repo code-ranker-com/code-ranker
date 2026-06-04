@@ -828,6 +828,7 @@
           "hk",
           "sloc",
           "fan_out",
+          "fan_in",
           "cyclomatic",
           "items",
           "cycle"
@@ -982,6 +983,48 @@
       "prompt": "Build for the problem you have now, not one you imagine you might have later.\nDon't add an abstraction, a generic parameter, or a public API for a hypothetical\nfuture use.\n\nIdentify abstractions, generics, or public APIs in the modules below that were\nadded speculatively. For each, assess whether multiple real callers use it today,\nand propose simplification if not.",
       "sort_metric": "sloc",
       "title": "YAGNI — You Aren't Gonna Need It"
+    },
+    {
+      "connections": [
+        "in",
+        "out"
+      ],
+      "doc_url": "https://github.com/ffedoroff/code-split/blob/main/principles/rust/henry-kafura-coupling.md",
+      "id": "HK",
+      "label": "HK",
+      "prompt": "These modules carry heavy Henry-Kafura coupling — HK = sloc × (fan_in × fan_out)²,\nwhere sloc is the module's source lines of code (real code lines, excluding blanks\nand comment-only lines), fan_in is how many modules depend on it, and fan_out is how\nmany it depends on.\nA high score is a large module sitting on a busy crossroads of incoming and outgoing\ndependencies, so any change here ripples widely.\n\nFor each module below, lower the factor that dominates its HK: shrink the module by\nextracting cohesive pieces, or cut fan-in/fan-out by narrowing its public surface and\ndepending on fewer collaborators (introduce an abstraction, move a responsibility).\nKeep existing API contracts intact.",
+      "sort_metric": "hk",
+      "title": "HK — Henry-Kafura Coupling"
+    },
+    {
+      "doc_url": "https://github.com/ffedoroff/code-split/blob/main/principles/rust/module-size.md",
+      "id": "SLOC",
+      "label": "SLOC",
+      "prompt": "These are the largest modules by source lines of code. Size alone is not a defect, but\noversized files usually bundle several responsibilities and are hard to read, test and\nreview.\n\nFor each module below, identify the distinct responsibilities it holds and propose how\nto split it into smaller, cohesive modules — each with a single clear purpose — without\nchanging external behaviour.",
+      "sort_metric": "sloc",
+      "title": "SLOC — Module Size"
+    },
+    {
+      "connections": [
+        "in"
+      ],
+      "doc_url": "https://github.com/ffedoroff/code-split/blob/main/principles/rust/fan-in-afferent-coupling.md",
+      "id": "FANIN",
+      "label": "FANIN",
+      "prompt": "These modules have high fan-in: many other modules depend on them. They are\nload-bearing — a change here forces changes (or re-review) across every dependant, and\na bug here is widely felt.\n\nFor each module below, confirm its public surface is a stable, minimal contract. Narrow\nthe API to what callers actually need, split it if different callers use disjoint parts\n(see Interface Segregation), and stabilise the abstractions the rest of the codebase\nleans on.",
+      "sort_metric": "fan_in",
+      "title": "Fan-in — Afferent Coupling"
+    },
+    {
+      "connections": [
+        "out"
+      ],
+      "doc_url": "https://github.com/ffedoroff/code-split/blob/main/principles/rust/fan-out-efferent-coupling.md",
+      "id": "FANOUT",
+      "label": "FANOUT",
+      "prompt": "These modules have high fan-out: they depend on many other modules. High efferent\ncoupling makes a module fragile (it breaks when any dependency changes) and hard to\ntest or reuse in isolation.\n\nFor each module below, reduce its direct dependencies: depend on abstractions rather\nthan concretes (see Dependency Inversion), collapse several fine-grained collaborators\nbehind one focused interface, and move logic that pulls in unrelated dependencies into\na more appropriate module.",
+      "sort_metric": "fan_out",
+      "title": "Fan-out — Efferent Coupling"
     }
   ],
   "roots": {

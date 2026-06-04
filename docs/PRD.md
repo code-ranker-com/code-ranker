@@ -431,7 +431,11 @@ workspaces. The plugin MUST:
   Henry-Kafura (`HK = sloc × (fan_in × fan_out)²`) — all written into the node's
   flat `attrs`. Edges to external nodes are excluded from `fan_in`/`fan_out`/`hk`
   and counted in `fan_out_external` instead. The Rust plugin additionally
-  supplies language-calibrated `thresholds()` for `hk`/`sloc`/`fan_out`/`items`
+  supplies language-calibrated `thresholds()` for `hk`/`sloc`/`fan_out`/`items`,
+  and extends the Prompt-Generator catalog via its `presets()` hook with four
+  metric-lens presets — `HK`, `SLOC`, `FANIN`, `FANOUT` — that rank modules by a
+  single coupling/size metric (`hk`/`sloc`/`fan_in`/`fan_out`) rather than a
+  design principle, documented under `principles/rust/`
 
 **Rationale**: Rust is the primary use-case for the initial release.
 The `code-split-plugin-rust` crate (cargo metadata + `syn`, including the

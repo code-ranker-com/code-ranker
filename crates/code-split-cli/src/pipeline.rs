@@ -350,6 +350,7 @@ const UI_SORT: &[&str] = &[
     "hk",
     "sloc",
     "fan_out",
+    "fan_in",
     "cyclomatic",
     "cognitive",
     "items",

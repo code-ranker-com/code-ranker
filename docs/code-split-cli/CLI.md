@@ -385,6 +385,15 @@ dependency cycle counts, ranked by HK, and `--severity` is ignored for them.
 ranking metric (ADP → cycles, SRP → SLOC, OCP → cyclomatic, …) and the connection lists
 embedded in its prompt — so there is no separate metric/connection flag to set.
 
+The **Rust** plugin adds four metric-lens presets that rank by a single
+coupling/size metric rather than a design principle: `HK` (Henry-Kafura
+coupling → `hk`), `SLOC` (module size → `sloc`), `FANIN` (afferent coupling →
+`fan_in`), `FANOUT` (efferent coupling → `fan_out`). They appear in
+`snapshot.presets` for Rust targets and as buttons in the viewer, and their
+prompt docs live under `principles/rust/`. Because the catalog is data-driven,
+any preset id in `snapshot.presets` is valid for `--preset`; an unknown id
+errors with the list of known ids.
+
 `--preset` is **optional**: when omitted, the principle with the most violations is chosen
 — the one with the largest count of modules over `warning` (tie-break: over `info`), i.e.
 the top row of the scorecard.
@@ -503,9 +512,10 @@ when `[input]` is a directory):
 ## HTML viewer
 
 The HTML report is **self-contained**: the viewer app (Dagre graph layout, pan/zoom,
-a sortable node table for the single Files view, and the prompt-generator panel with
-ADP / SRP / OCP / LSP / ISP / DIP / DRY / KISS / LoD / MISU / CoI / YAGNI presets plus
-*Reduce Complexity* and *Split Components*) **and the snapshot data** are all embedded in
+a sortable node table for the single Files view, and the prompt-generator panel whose
+preset buttons are read from `snapshot.presets` — ADP / SRP / OCP / LSP / ISP / DIP / DRY /
+KISS / LoD / MISU / CoI / YAGNI / CPX, plus the Rust plugin's HK / SLOC / FANIN / FANOUT
+metric lenses) **and the snapshot data** are all embedded in
 the one file. External library nodes render in a distinct amber colour with dashed
 edges. No network, no telemetry — `open` it straight from disk.
 

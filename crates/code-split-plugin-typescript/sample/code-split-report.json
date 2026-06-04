@@ -513,6 +513,7 @@
           "hk",
           "sloc",
           "fan_out",
+          "fan_in",
           "cyclomatic",
           "cycle"
         ],

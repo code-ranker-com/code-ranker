@@ -330,6 +330,32 @@ fn rust_sample_prompt_explicit_preset_top1() {
     );
 }
 
+#[test]
+fn rust_sample_prompt_metric_lens_preset() {
+    // Rust-only metric-lens preset (HK ranks by Henry-Kafura coupling). Added by
+    // the Rust plugin's `presets()` hook, so it must be a valid `--preset` id and
+    // rank modules by `hk`.
+    let (ok, stdout, stderr) = run_report_capture(
+        "rust",
+        &[
+            "--preset",
+            "HK",
+            "--top",
+            "1",
+            "--output.prompt.path=stdout",
+        ],
+    );
+    assert!(ok, "HK prompt run failed: {stderr}");
+    assert!(
+        stdout.starts_with("# HK — Henry-Kafura Coupling"),
+        "metric-lens preset honoured: {stdout}"
+    );
+    assert!(
+        stdout.contains("## Modules ordered by") && stdout.contains("(HK:"),
+        "modules ranked by HK: {stdout}"
+    );
+}
+
 /// `--index` is rejected with a hint to use `--top`.
 #[test]
 fn rust_sample_report_rejects_index() {

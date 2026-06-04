@@ -29,7 +29,8 @@ Facts an agent must keep straight:
 - Default artifact dir is `.code-split/`. **Keep old runs** — they are baselines;
   don't delete them when regenerating.
 - Presets (refactoring principles): `ADP` (cycles), `SRP`, `CPX`, `OCP`, `LSP`,
-  `ISP`, `DIP`, `DRY`, `KISS`, `LoD`, `MISU`, `CoI`, `YAGNI`.
+  `ISP`, `DIP`, `DRY`, `KISS`, `LoD`, `MISU`, `CoI`, `YAGNI`. The Rust plugin adds
+  four metric lenses: `HK`, `SLOC`, `FANIN`, `FANOUT`.
 
 Cheat sheet:
 

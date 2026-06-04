@@ -7,7 +7,7 @@ use code_split_plugin_api::{
     level::{AttributeSpec, EdgeKindSpec, Grouping, Level, Thresholds},
     log,
     node::Node,
-    plugin::{LanguagePlugin, PluginInput},
+    plugin::{LanguagePlugin, Preset, PluginInput},
 };
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -23,6 +23,81 @@ mod module_graph;
 use internal::{EdgeKind, GraphBuilder, InternalGraph, NodeKind};
 
 pub struct RustPlugin;
+
+/// One Rust-only metric-lens preset: (id, title, sort_metric, connections,
+/// doc_slug, prompt body). Same shape as the generic catalog in
+/// `code-split-cli/src/presets.rs`, but these rank modules by a single
+/// coupling/size metric rather than a design principle. Slugs resolve to
+/// `principles/rust/<slug>.md`.
+type MetricPreset = (
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static [&'static str],
+    &'static str,
+    &'static str,
+);
+
+const RUST_METRIC_PRESETS: &[MetricPreset] = &[
+    (
+        "HK",
+        "HK — Henry-Kafura Coupling",
+        "hk",
+        &["in", "out"],
+        "henry-kafura-coupling",
+        "These modules carry heavy Henry-Kafura coupling — HK = sloc × (fan_in × fan_out)²,\n\
+         where sloc is the module's source lines of code (real code lines, excluding blanks\n\
+         and comment-only lines), fan_in is how many modules depend on it, and fan_out is how\n\
+         many it depends on.\n\
+         A high score is a large module sitting on a busy crossroads of incoming and outgoing\n\
+         dependencies, so any change here ripples widely.\n\n\
+         For each module below, lower the factor that dominates its HK: shrink the module by\n\
+         extracting cohesive pieces, or cut fan-in/fan-out by narrowing its public surface and\n\
+         depending on fewer collaborators (introduce an abstraction, move a responsibility).\n\
+         Keep existing API contracts intact.",
+    ),
+    (
+        "SLOC",
+        "SLOC — Module Size",
+        "sloc",
+        &[],
+        "module-size",
+        "These are the largest modules by source lines of code. Size alone is not a defect, but\n\
+         oversized files usually bundle several responsibilities and are hard to read, test and\n\
+         review.\n\n\
+         For each module below, identify the distinct responsibilities it holds and propose how\n\
+         to split it into smaller, cohesive modules — each with a single clear purpose — without\n\
+         changing external behaviour.",
+    ),
+    (
+        "FANIN",
+        "Fan-in — Afferent Coupling",
+        "fan_in",
+        &["in"],
+        "fan-in-afferent-coupling",
+        "These modules have high fan-in: many other modules depend on them. They are\n\
+         load-bearing — a change here forces changes (or re-review) across every dependant, and\n\
+         a bug here is widely felt.\n\n\
+         For each module below, confirm its public surface is a stable, minimal contract. Narrow\n\
+         the API to what callers actually need, split it if different callers use disjoint parts\n\
+         (see Interface Segregation), and stabilise the abstractions the rest of the codebase\n\
+         leans on.",
+    ),
+    (
+        "FANOUT",
+        "Fan-out — Efferent Coupling",
+        "fan_out",
+        &["out"],
+        "fan-out-efferent-coupling",
+        "These modules have high fan-out: they depend on many other modules. High efferent\n\
+         coupling makes a module fragile (it breaks when any dependency changes) and hard to\n\
+         test or reuse in isolation.\n\n\
+         For each module below, reduce its direct dependencies: depend on abstractions rather\n\
+         than concretes (see Dependency Inversion), collapse several fine-grained collaborators\n\
+         behind one focused interface, and move logic that pulls in unrelated dependencies into\n\
+         a more appropriate module.",
+    ),
+];
 
 impl LanguagePlugin for RustPlugin {
     fn name(&self) -> &str {
@@ -167,6 +242,29 @@ impl LanguagePlugin for RustPlugin {
                 },
             ),
         ])
+    }
+
+    fn presets(&self, mut defaults: Vec<Preset>, _input: &PluginInput) -> Vec<Preset> {
+        // Append Rust-only metric lenses to the generic catalog. Their doc links
+        // reuse the principles base directory derived from an existing default's
+        // `doc_url`, so they resolve to `principles/rust/<slug>.md` without
+        // duplicating the host/base constant that lives in the CLI crate.
+        let base_dir = defaults
+            .iter()
+            .find_map(|p| p.doc_url.as_deref())
+            .and_then(|u| u.rsplit_once('/').map(|(dir, _)| dir.to_string()));
+        for &(id, title, sort_metric, connections, slug, prompt) in RUST_METRIC_PRESETS {
+            defaults.push(Preset {
+                id: id.to_string(),
+                label: id.to_string(),
+                title: title.to_string(),
+                prompt: prompt.to_string(),
+                doc_url: base_dir.as_ref().map(|d| format!("{d}/{slug}.md")),
+                sort_metric: sort_metric.to_string(),
+                connections: connections.iter().map(|s| (*s).to_string()).collect(),
+            });
+        }
+        defaults
     }
 
     fn analyze(&self, workspace: &Path, _level: &str, _input: &PluginInput) -> Result<Graph> {

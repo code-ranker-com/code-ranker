@@ -142,6 +142,7 @@ mod tests {
             source: "/p/src/a.rs".into(),
             target: "ext:serde".into(),
             kind: "uses".into(),
+            line: None,
             attrs: Default::default(),
         });
         level.cycles.push(CycleGroup {

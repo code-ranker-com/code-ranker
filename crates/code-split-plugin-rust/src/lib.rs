@@ -399,6 +399,7 @@ fn collapse_to_files(full: InternalGraph) -> Graph {
             source: from.clone(),
             target: to.clone(),
             kind: kind_str.to_string(),
+            line: e.line,
             attrs,
         });
     }

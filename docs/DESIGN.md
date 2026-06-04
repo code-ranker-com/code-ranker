@@ -851,7 +851,7 @@ dictionaries with the structural graph and the computed cycles/stats:
         { "id": "{target}/src/a.rs", "kind": "file", "name": "a.rs", "sloc": 30, "cyclomatic": 1, "hk": 480, "cycle": "mutual", "visibility": "public", … },
         { "id": "ext:serde", "kind": "external", "name": "serde", "external": true, "version": "1.0.228", "path": "{registry}/serde-1.0.228" }
       ],
-      "edges": [ { "source": "{target}/src/a.rs", "kind": "uses", "target": "ext:serde" }, … ],
+      "edges": [ { "source": "{target}/src/a.rs", "kind": "uses", "target": "ext:serde", "line": 15 }, … ],
       "cycles": [ { "kind": "mutual", "nodes": ["{target}/src/a.rs", "{target}/src/b.rs"] } ],
       "stats": { "cyclomatic": 1, "hk": 240, "sloc": 26, … }
     }

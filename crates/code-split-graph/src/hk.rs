@@ -102,6 +102,7 @@ mod tests {
             source: from.into(),
             target: to.into(),
             kind: "uses".into(),
+            line: None,
             attrs: Default::default(),
         }
     }

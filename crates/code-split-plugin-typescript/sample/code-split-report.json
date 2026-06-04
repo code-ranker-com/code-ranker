@@ -58,46 +58,55 @@
       "edges": [
         {
           "kind": "uses",
+          "line": 3,
           "source": "{target}/src/a.test.ts",
           "target": "{target}/src/a.ts"
         },
         {
           "kind": "uses",
+          "line": 20,
           "source": "{target}/src/a.ts",
           "target": "ext:@scope/util"
         },
         {
           "kind": "uses",
+          "line": 18,
           "source": "{target}/src/a.ts",
           "target": "ext:axios"
         },
         {
           "kind": "uses",
+          "line": 16,
           "source": "{target}/src/a.ts",
           "target": "ext:~utils"
         },
         {
           "kind": "uses",
+          "line": 6,
           "source": "{target}/src/a.ts",
           "target": "{target}/src/b.ts"
         },
         {
           "kind": "uses",
+          "line": 8,
           "source": "{target}/src/a.ts",
           "target": "{target}/src/types.ts"
         },
         {
           "kind": "uses",
+          "line": 12,
           "source": "{target}/src/a.ts",
           "target": "{target}/src/util.ts"
         },
         {
           "kind": "uses",
+          "line": 4,
           "source": "{target}/src/b.ts",
           "target": "{target}/src/a.ts"
         },
         {
           "kind": "uses",
+          "line": 6,
           "source": "{target}/src/b.ts",
           "target": "{target}/src/types.ts"
         }

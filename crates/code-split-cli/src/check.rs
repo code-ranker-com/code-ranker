@@ -123,9 +123,12 @@ fn emit_diagnostics(
         }
         OutputFormat::Github => {
             for v in violations {
-                // GitHub Actions workflow-command annotation (rule id in the title).
+                // GitHub Actions workflow-command annotation (rule id in the
+                // title). `file=`/`line=` pin it to a spot when the violation
+                // carries a path; otherwise it stays a general annotation.
+                let loc = annotation_location(&v.location, v.line);
                 println!(
-                    "::error title=code-split {} ({})::{}",
+                    "::error {loc}title=code-split {} ({})::{}",
                     v.rule,
                     v.graph,
                     v.summary()
@@ -133,6 +136,27 @@ fn emit_diagnostics(
             }
         }
         OutputFormat::Sarif => println!("{}", sarif_document(violations)),
+    }
+}
+
+/// The repo-relative path inside a violation `location` (`{target}/rel` →
+/// `rel`), or `None` when it has no file path (e.g. a cycle whose breaking edge
+/// couldn't be placed). Assumes `check` ran from the repo root, so a
+/// target-relative path is also repo-relative — what both GitHub annotations
+/// and SARIF `artifactLocation` expect.
+fn violation_rel_path(location: &str) -> Option<&str> {
+    location
+        .strip_prefix("{target}/")
+        .filter(|rel| !rel.is_empty())
+}
+
+/// GitHub workflow-command location params (`file=rel,line=N,`) for a violation,
+/// or an empty string when it has no file path. Whole-file metrics have no line
+/// (`None`) → default to line 1; cycles carry the breaking edge's line.
+fn annotation_location(location: &str, line: Option<u32>) -> String {
+    match violation_rel_path(location) {
+        Some(rel) => format!("file={rel},line={},", line.unwrap_or(1)),
+        None => String::new(),
     }
 }
 
@@ -340,12 +364,23 @@ fn sarif_document(violations: &[config::Violation]) -> String {
     let results: Vec<serde_json::Value> = violations
         .iter()
         .map(|v| {
-            serde_json::json!({
+            let mut result = serde_json::json!({
                 "ruleId": v.rule,
                 "level": "error",
                 "message": { "text": v.summary() },
                 "properties": { "group": v.group, "graph": v.graph, "weight": v.weight },
-            })
+            });
+            // A physical location lets GitHub code scanning render the result
+            // inline on the file/line. Whole-file metrics have no line → line 1.
+            if let Some(rel) = violation_rel_path(&v.location) {
+                result["locations"] = serde_json::json!([{
+                    "physicalLocation": {
+                        "artifactLocation": { "uri": rel },
+                        "region": { "startLine": v.line.unwrap_or(1) },
+                    }
+                }]);
+            }
+            result
         })
         .collect();
     let doc = serde_json::json!({
@@ -362,4 +397,62 @@ fn sarif_document(violations: &[config::Violation]) -> String {
         }],
     });
     serde_json::to_string_pretty(&doc).unwrap_or_else(|_| "{}".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn viol(location: &str, line: Option<u32>) -> config::Violation {
+        config::Violation {
+            rule: "threshold.file.loc".into(),
+            group: "SIZ",
+            graph: "files",
+            location: location.into(),
+            line,
+            message: "source loc 1318 exceeds limit 150".into(),
+            weight: 8.78,
+        }
+    }
+
+    #[test]
+    fn annotation_location_maps_target_path_with_line() {
+        assert_eq!(
+            annotation_location("{target}/crates/a/src/x.rs", Some(42)),
+            "file=crates/a/src/x.rs,line=42,"
+        );
+    }
+
+    #[test]
+    fn annotation_location_defaults_missing_line_to_one() {
+        // Whole-file metrics carry no line → annotation pins to line 1.
+        assert_eq!(
+            annotation_location("{target}/src/x.rs", None),
+            "file=src/x.rs,line=1,"
+        );
+    }
+
+    #[test]
+    fn annotation_location_empty_without_a_file_path() {
+        // Locationless (cycle fallback) and non-`{target}` ids stay general.
+        assert_eq!(annotation_location("", Some(5)), "");
+        assert_eq!(annotation_location("ext:serde", None), "");
+        assert_eq!(annotation_location("{target}/", Some(1)), "");
+    }
+
+    #[test]
+    fn sarif_attaches_physical_location_from_violation() {
+        let doc = sarif_document(&[viol("{target}/src/x.rs", Some(7))]);
+        let v: serde_json::Value = serde_json::from_str(&doc).unwrap();
+        let loc = &v["runs"][0]["results"][0]["locations"][0]["physicalLocation"];
+        assert_eq!(loc["artifactLocation"]["uri"], "src/x.rs");
+        assert_eq!(loc["region"]["startLine"], 7);
+    }
+
+    #[test]
+    fn sarif_omits_location_when_no_path() {
+        let doc = sarif_document(&[viol("", None)]);
+        let v: serde_json::Value = serde_json::from_str(&doc).unwrap();
+        assert!(v["runs"][0]["results"][0].get("locations").is_none());
+    }
 }

@@ -68,6 +68,9 @@ pub(crate) struct Edge {
     pub to: NodeId,
     pub kind: EdgeKind,
     pub visibility: Option<Visibility>,
+    /// 1-based line of the `use` statement this edge came from; `None` for
+    /// structural (`contains`) or bare-path edges.
+    pub line: Option<u32>,
 }
 
 #[derive(Debug, Default)]

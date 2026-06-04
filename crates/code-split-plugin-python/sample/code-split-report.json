@@ -58,71 +58,85 @@
       "edges": [
         {
           "kind": "uses",
+          "line": 21,
           "source": "{target}/pkg/a.py",
           "target": "ext:base64"
         },
         {
           "kind": "uses",
+          "line": 6,
           "source": "{target}/pkg/a.py",
           "target": "ext:json"
         },
         {
           "kind": "uses",
+          "line": 4,
           "source": "{target}/pkg/a.py",
           "target": "ext:os"
         },
         {
           "kind": "uses",
+          "line": 8,
           "source": "{target}/pkg/a.py",
           "target": "{target}/pkg/__init__.py"
         },
         {
           "kind": "uses",
+          "line": 8,
           "source": "{target}/pkg/a.py",
           "target": "{target}/pkg/b.py"
         },
         {
           "kind": "uses",
+          "line": 9,
           "source": "{target}/pkg/a.py",
           "target": "{target}/pkg/c.py"
         },
         {
           "kind": "uses",
+          "line": 4,
           "source": "{target}/pkg/b.py",
           "target": "ext:importlib"
         },
         {
           "kind": "uses",
+          "line": 6,
           "source": "{target}/pkg/b.py",
           "target": "{target}/pkg/__init__.py"
         },
         {
           "kind": "uses",
+          "line": 6,
           "source": "{target}/pkg/b.py",
           "target": "{target}/pkg/a.py"
         },
         {
           "kind": "uses",
+          "line": 7,
           "source": "{target}/pkg/b.py",
           "target": "{target}/pkg/c.py"
         },
         {
           "kind": "uses",
+          "line": 4,
           "source": "{target}/pkg/c.py",
           "target": "ext:requests"
         },
         {
           "kind": "uses",
+          "line": 4,
           "source": "{target}/tests/test_pkg.py",
           "target": "{target}/pkg/__init__.py"
         },
         {
           "kind": "uses",
+          "line": 4,
           "source": "{target}/tests/test_pkg.py",
           "target": "{target}/pkg/a.py"
         },
         {
           "kind": "uses",
+          "line": 4,
           "source": "{target}/tests/test_pkg.py",
           "target": "{target}/pkg/b.py"
         }

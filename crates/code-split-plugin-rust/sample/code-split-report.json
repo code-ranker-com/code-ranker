@@ -1,12 +1,12 @@
 {
-  "command": "code-split report crates/code-split-plugin-rust/sample --config crates/code-split-plugin-rust/sample/code-split.toml --output.json.path crates/code-split-plugin-rust/sample/code-split-report.json",
+  "command": "code-split report crates/code-split-plugin-rust/sample --config crates/code-split-plugin-rust/sample/code-split.toml --output.json.path=crates/code-split-plugin-rust/sample/code-split-report.json",
   "config_file": "crates/code-split-plugin-rust/sample/code-split.toml",
-  "generated_at": "2026-06-04T14:27:38.165680Z",
+  "generated_at": "1970-01-01T00:00:00Z",
   "git": {
-    "branch": "refactor/generic-model-cli",
-    "commit": "b86a7e92d189",
-    "dirty_files": 5,
-    "origin": "git@github.com:ffedoroff/code-split.git"
+    "branch": "main",
+    "commit": "000000000000",
+    "dirty_files": 0,
+    "origin": "git@example.com:org/repo.git"
   },
   "graphs": {
     "files": {
@@ -83,16 +83,19 @@
         },
         {
           "kind": "uses",
+          "line": 15,
           "source": "{target}/src/a.rs",
           "target": "ext:serde"
         },
         {
           "kind": "uses",
+          "line": 4,
           "source": "{target}/src/a.rs",
           "target": "{target}/src/b.rs"
         },
         {
           "kind": "uses",
+          "line": 6,
           "source": "{target}/src/a.rs",
           "target": "{target}/src/c.rs"
         },
@@ -103,21 +106,25 @@
         },
         {
           "kind": "uses",
+          "line": 5,
           "source": "{target}/src/b.rs",
           "target": "{target}/src/a.rs"
         },
         {
           "kind": "uses",
+          "line": 13,
           "source": "{target}/src/cross.rs",
           "target": "{target}/helper/src/gadget.rs"
         },
         {
           "kind": "uses",
+          "line": 15,
           "source": "{target}/src/cross.rs",
           "target": "{target}/helper/src/lib.rs"
         },
         {
           "kind": "uses",
+          "line": 11,
           "source": "{target}/src/cross.rs",
           "target": "{target}/helper/src/widget.rs"
         },
@@ -128,6 +135,7 @@
         },
         {
           "kind": "uses",
+          "line": 10,
           "source": "{target}/src/foo.rs",
           "target": "{target}/src/b.rs"
         },
@@ -138,12 +146,14 @@
         },
         {
           "kind": "reexports",
+          "line": 32,
           "source": "{target}/src/lib.rs",
           "target": "{target}/src/a.rs",
           "visibility": "public"
         },
         {
           "kind": "uses",
+          "line": 54,
           "source": "{target}/src/lib.rs",
           "target": "{target}/src/a.rs"
         },
@@ -154,6 +164,7 @@
         },
         {
           "kind": "uses",
+          "line": 55,
           "source": "{target}/src/lib.rs",
           "target": "{target}/src/b.rs"
         },
@@ -194,6 +205,7 @@
         },
         {
           "kind": "uses",
+          "line": 7,
           "source": "{target}/src/relocated/custom.rs",
           "target": "{target}/src/c.rs"
         }
@@ -936,25 +948,25 @@
     }
   ],
   "roots": {
-    "registry": "/Users/roman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f",
-    "target": "/Users/roman/work/code-split/crates/code-split-plugin-rust/sample"
+    "registry": "/home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f",
+    "target": "/home/user/code-split/crates/code-split-plugin-rust/sample"
   },
   "schema_version": "2",
-  "target": "/Users/roman/work/code-split/crates/code-split-plugin-rust/sample",
+  "target": "/home/user/code-split/crates/code-split-plugin-rust/sample",
   "timings": [
     {
       "detail": "14 nodes from 12 files",
-      "ms": 79,
+      "ms": 0,
       "stage": "rust"
     },
     {
       "detail": "12 nodes annotated",
-      "ms": 11,
+      "ms": 0,
       "stage": "complexity"
     },
     {
       "detail": "nodes=14 edges=25",
-      "ms": 28,
+      "ms": 0,
       "stage": "projection"
     }
   ],
@@ -962,5 +974,5 @@
     "code-split": "1.0.0-alpha.3",
     "rustc": "1.95.0"
   },
-  "workspace": "/Users/roman/work/code-split"
+  "workspace": "/home/user/code-split"
 }

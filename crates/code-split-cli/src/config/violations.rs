@@ -23,6 +23,10 @@ pub struct Violation {
     pub group: &'static str,
     pub graph: &'static str,
     pub location: String,
+    /// 1-based line within `location`'s file to pin the diagnostic at (the edge
+    /// where a cycle can be broken). `None` for whole-file violations, where the
+    /// file-scope metric has no single line — renderers default to line 1.
+    pub line: Option<u32>,
     pub message: String,
     pub weight: f64,
 }
@@ -70,11 +74,13 @@ fn check_level_violations(
         if budget > 0 {
             message = format!("{message}  (over budget: {count} > {budget})");
         }
+        let (location, line) = cycle_break_point(level, &cg.nodes);
         push(
             vs,
             name,
             cycle_rule_id(&cg.kind),
-            String::new(),
+            location,
+            line,
             message,
             cg.nodes.len() as f64,
         );
@@ -134,6 +140,23 @@ fn check_node_metrics(
     check(vs, t.loc, "loc", "source loc", "loc");
 }
 
+/// Pick a concrete spot to break a cycle: the first edge (in the level's stable
+/// edge order) whose endpoints are both cycle members. Returns that edge's
+/// source node id as the location and its declaration line, if the plugin
+/// recorded one. Falls back to the first member with no line if no internal
+/// edge is found (shouldn't happen for a real cycle).
+fn cycle_break_point(level: &LevelGraph, nodes: &[String]) -> (String, Option<u32>) {
+    let in_cycle = |id: &str| nodes.iter().any(|n| n == id);
+    if let Some(e) = level
+        .edges
+        .iter()
+        .find(|e| in_cycle(&e.source) && in_cycle(&e.target))
+    {
+        return (e.source.clone(), e.line);
+    }
+    (nodes.first().cloned().unwrap_or_default(), None)
+}
+
 fn describe_cycle(kind: &str, nodes: &[String]) -> String {
     let preview: Vec<&str> = nodes.iter().take(4).map(String::as_str).collect();
     let truncated = nodes.len() > preview.len();
@@ -187,14 +210,16 @@ fn push_threshold(
     let message = format!(
         "{metric} {value:.decimals$} exceeds limit {limit:.decimals$} ({ratio:.1}× over budget)"
     );
-    push(vs, graph, id, location, message, ratio);
+    push(vs, graph, id, location, None, message, ratio);
 }
 
+#[allow(clippy::too_many_arguments)]
 fn push(
     vs: &mut Vec<Violation>,
     graph: &'static str,
     id: &str,
     location: String,
+    line: Option<u32>,
     message: String,
     weight: f64,
 ) {
@@ -204,6 +229,7 @@ fn push(
         group,
         graph,
         location,
+        line,
         message,
         weight,
     });
@@ -267,6 +293,41 @@ mod tests {
         assert!(check_violations(&graphs, &rules).is_empty());
         rules.cycles.chain = CycleRule::Max(2);
         assert_eq!(check_violations(&graphs, &rules).len(), 3);
+    }
+
+    #[test]
+    fn cycle_violation_points_at_breaking_edge_line() {
+        use code_split_plugin_api::edge::Edge;
+        let edge = |s: &str, t: &str, line: u32| Edge {
+            source: s.into(),
+            target: t.into(),
+            kind: "uses".into(),
+            line: Some(line),
+            attrs: Default::default(),
+        };
+        let level = LevelGraph {
+            nodes: vec![
+                file_node("{target}/a.rs", &[]),
+                file_node("{target}/b.rs", &[]),
+            ],
+            edges: vec![
+                edge("{target}/a.rs", "{target}/b.rs", 12),
+                edge("{target}/b.rs", "{target}/a.rs", 7),
+            ],
+            cycles: vec![CycleGroup {
+                kind: "mutual".into(),
+                nodes: vec!["{target}/a.rs".into(), "{target}/b.rs".into()],
+            }],
+            ..Default::default()
+        };
+        let graphs = BTreeMap::from([("files".to_string(), level)]);
+        let vs = check_violations(&graphs, &RulesConfig::default());
+        assert_eq!(vs.len(), 1);
+        assert_eq!(vs[0].rule, "cycle.mutual");
+        // First edge in the level's order whose endpoints are both in the cycle
+        // is a.rs -> b.rs at line 12.
+        assert_eq!(vs[0].location, "{target}/a.rs");
+        assert_eq!(vs[0].line, Some(12));
     }
 
     #[test]

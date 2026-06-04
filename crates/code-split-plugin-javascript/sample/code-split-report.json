@@ -59,46 +59,55 @@
       "edges": [
         {
           "kind": "uses",
+          "line": 11,
           "source": "{target}/src/a.js",
           "target": "ext:chalk"
         },
         {
           "kind": "uses",
+          "line": 9,
           "source": "{target}/src/a.js",
           "target": "ext:lodash"
         },
         {
           "kind": "uses",
+          "line": 5,
           "source": "{target}/src/a.js",
           "target": "{target}/src/b.js"
         },
         {
           "kind": "uses",
+          "line": 7,
           "source": "{target}/src/a.js",
           "target": "{target}/src/c.js"
         },
         {
           "kind": "uses",
+          "line": 3,
           "source": "{target}/src/a.test.js",
           "target": "{target}/src/a.js"
         },
         {
           "kind": "uses",
+          "line": 4,
           "source": "{target}/src/b.js",
           "target": "{target}/src/a.js"
         },
         {
           "kind": "uses",
+          "line": 6,
           "source": "{target}/src/b.js",
           "target": "{target}/src/c.js"
         },
         {
           "kind": "uses",
+          "line": 7,
           "source": "{target}/src/c.js",
           "target": "ext:chalk"
         },
         {
           "kind": "uses",
+          "line": 5,
           "source": "{target}/src/c.js",
           "target": "{target}/src/b.js"
         }

@@ -161,6 +161,7 @@ fn build_module_index(workspace: &Path, py_files: &[PathBuf]) -> HashMap<String,
 struct ExtractedImport {
     base: String,       // "parser.shops.amazon" or ".." or ".utils"
     names: Vec<String>, // imported names; empty for plain `import X`
+    line: u32,          // 1-based line of the import statement
 }
 
 fn parse_and_add(
@@ -229,6 +230,7 @@ fn parse_and_add(
                     source: file_id.clone(),
                     target: ext_id,
                     kind: "uses".into(),
+                    line: Some(imp.line),
                     attrs: BTreeMap::new(),
                 });
             }
@@ -241,6 +243,7 @@ fn parse_and_add(
                     source: file_id.clone(),
                     target: target_id,
                     kind: "uses".into(),
+                    line: Some(imp.line),
                     attrs: BTreeMap::new(),
                 });
             }
@@ -281,6 +284,7 @@ fn visit_imports<'t>(
         match child.kind() {
             "import_statement" => {
                 // import a.b.c  OR  import a, b
+                let line = child.start_position().row as u32 + 1;
                 let mut ic = child.walk();
                 for c in child.children(&mut ic) {
                     let actual = if c.kind() == "aliased_import" {
@@ -294,6 +298,7 @@ fn visit_imports<'t>(
                         imports.push(ExtractedImport {
                             base: t.to_string(),
                             names: vec![],
+                            line,
                         });
                     }
                 }
@@ -325,7 +330,8 @@ fn visit_imports<'t>(
                 }
 
                 if !base.is_empty() {
-                    imports.push(ExtractedImport { base, names });
+                    let line = child.start_position().row as u32 + 1;
+                    imports.push(ExtractedImport { base, names, line });
                 }
             }
             _ => {

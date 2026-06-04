@@ -39,6 +39,7 @@ pub(crate) fn contribute(metadata: &Metadata, builder: &mut GraphBuilder) {
                 to: crate_node_id(&dep.pkg.repr),
                 kind: EdgeKind::Uses,
                 visibility: None,
+                line: None,
             });
         }
     }

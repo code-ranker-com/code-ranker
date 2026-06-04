@@ -227,7 +227,7 @@ Non-flow edges (`contains`, `reexports`) are excluded from all of these.
 Edges live in `graphs.files.edges`, each a flat object:
 
 ```json
-{ "source": "<node-id>", "kind": "uses | reexports | contains", "target": "<node-id>" }
+{ "source": "<node-id>", "kind": "uses | reexports | contains", "target": "<node-id>", "line": 12 }
 ```
 
 | `kind` | flow? | drawn? | counted in fan-in / HK / cycles? |
@@ -240,6 +240,14 @@ An edge is **external iff its `target` is an `ext:` node** (no `edge.external`
 flag). Edge-level attributes (e.g. a Rust `reexports` edge's `visibility`) are
 flattened in alongside `source` / `kind` / `target`. Which kinds count as
 information flow is read from the level's `edge_kinds[kind].flow`.
+
+`line` is the 1-based line in the **source** node's file where the dependency is
+declared (the `use` / `import` / `require` statement). It is **optional** —
+omitted for structural `contains` edges and for edges the plugin can't place
+(e.g. Rust bare-path references). When several imports collapse onto one
+deduplicated edge, the first one's line is kept. `check` uses it to point a cycle
+violation at a concrete spot to break (see the `github` / `sarif` annotations in
+[CLI.md](code-split-cli/CLI.md)).
 
 ---
 

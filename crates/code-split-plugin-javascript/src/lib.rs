@@ -147,7 +147,7 @@ pub fn analyze_ecmascript(
 
         let specifiers = extract_import_specifiers(&tree.root_node(), &source);
 
-        for spec in &specifiers {
+        for (spec, line) in &specifiers {
             if let Some(target) = resolve_import(
                 spec,
                 abs_path,
@@ -162,6 +162,7 @@ pub fn analyze_ecmascript(
                         source: file_id.clone(),
                         target: target_id,
                         kind: "uses".to_string(),
+                        line: Some(*line),
                         attrs: BTreeMap::new(),
                     });
                 }
@@ -183,6 +184,7 @@ pub fn analyze_ecmascript(
                     source: file_id.clone(),
                     target: ext_id,
                     kind: "uses".to_string(),
+                    line: Some(*line),
                     attrs: BTreeMap::new(),
                 });
             }
@@ -318,34 +320,40 @@ pub fn external_package(spec: &str) -> Option<String> {
 // Tree-sitter extraction (import / require specifiers)
 // ─────────────────────────────────────────────────────────────────────────────
 
-fn extract_import_specifiers(root: &tree_sitter::Node, source: &[u8]) -> Vec<String> {
+/// Each specifier paired with the 1-based line of its import/export/require.
+fn extract_import_specifiers(root: &tree_sitter::Node, source: &[u8]) -> Vec<(String, u32)> {
     let mut specs = Vec::new();
     visit_imports(root, source, &mut specs);
     specs
 }
 
-fn visit_imports<'t>(node: &tree_sitter::Node<'t>, source: &[u8], specs: &mut Vec<String>) {
+fn visit_imports<'t>(
+    node: &tree_sitter::Node<'t>,
+    source: &[u8],
+    specs: &mut Vec<(String, u32)>,
+) {
     let mut cursor = node.walk();
     let children: Vec<tree_sitter::Node<'t>> = node.children(&mut cursor).collect();
 
     for child in &children {
+        let line = child.start_position().row as u32 + 1;
         match child.kind() {
             // import 'module' / import { x } from 'module'
             "import_statement" => {
                 if let Some(src) = import_source(child, source) {
-                    specs.push(src);
+                    specs.push((src, line));
                 }
             }
             // export { x } from 'module'  /  export * from 'module'
             "export_statement" => {
                 if let Some(src) = import_source(child, source) {
-                    specs.push(src);
+                    specs.push((src, line));
                 }
                 visit_imports(child, source, specs);
             }
             "call_expression" => {
                 if let Some(src) = require_source(child, source) {
-                    specs.push(src);
+                    specs.push((src, line));
                 } else {
                     visit_imports(child, source, specs);
                 }

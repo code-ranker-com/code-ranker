@@ -851,6 +851,7 @@ mod tests {
             source: "{target}/a.rs".into(),
             target: "{target}/b.rs".into(),
             kind: "uses".into(),
+            line: None,
             attrs: Default::default(),
         });
         let presets = vec![Preset {

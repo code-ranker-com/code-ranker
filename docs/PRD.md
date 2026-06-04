@@ -730,7 +730,7 @@ only; edges whose target is external are counted in `fan_out_external`. `cycle`
 **Edge shape**:
 
 ```json
-{ "source": "<node-id>", "kind": "uses | reexports | contains", "target": "<node-id>" }
+{ "source": "<node-id>", "kind": "uses | reexports | contains", "target": "<node-id>", "line": 12 }
 ```
 
 An edge is **external iff its `target` is an `ext:` node** — there is no
@@ -738,7 +738,9 @@ An edge is **external iff its `target` is an `ext:` node** — there is no
 read from `edge_kinds[kind].flow` (e.g. `contains` is `flow: false` — kept and
 shown as ownership, excluded from fan_in / HK / cycles). Edge attributes (e.g. a
 Rust `reexports` edge's `visibility`) are flattened in alongside `source` /
-`kind` / `target`.
+`kind` / `target`. `line` is the optional 1-based line of the declaring
+`use` / `import` statement (omitted for `contains` and unplaceable edges); `check`
+uses it to point a cycle violation at a concrete edge to break.
 
 **Stats shape** (`stats` field on a level) — a flat map of the mean of each
 tracked numeric metric across the level's file nodes (zero/missing excluded; a

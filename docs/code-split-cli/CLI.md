@@ -206,6 +206,13 @@ and `ruleId` plus a fired-rules `tool.driver.rules` catalog (`sarif`). With
 `--baseline`, the verdict (`improved` / `degraded` / `neutral`) and any regressions
 are included in the diagnostics too.
 
+The `github` and `sarif` formats also pin each finding to a **file and line** so
+it lands inline in a PR: `github` adds `file=…,line=N` to the `::error` command,
+`sarif` a `physicalLocation`. A cycle points at the line of the import/`use` that
+closes it (the breaking edge's `line`); a whole-file metric breach has no single
+line, so it pins to line 1. Run `check` from the repo root so the path resolves
+repo-relative.
+
 ### Current-values config block (`--suggest-config`)
 
 With `--suggest-config`, the `human` output prints — after the findings — the

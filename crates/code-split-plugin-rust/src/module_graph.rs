@@ -56,6 +56,7 @@ pub(crate) fn contribute(metadata: &Metadata, builder: &mut GraphBuilder) -> Res
                 to: root_mod_id.clone(),
                 kind: EdgeKind::Contains,
                 visibility: None,
+                line: None,
             });
 
             let mut module_index: HashMap<Vec<String>, NodeId> = HashMap::new();
@@ -216,6 +217,9 @@ struct PendingUse {
     /// `true` for a crate-qualified path captured from an expression/type
     /// (`other_crate::item`) rather than a `use` statement.
     bare: bool,
+    /// 1-based line of the originating `use` statement; `None` for bare paths
+    /// (an expression/type reference has no single statement to point at).
+    line: Option<u32>,
 }
 
 /// Collects every qualified path (≥ 2 segments) in a parsed file.
@@ -327,6 +331,7 @@ fn walk_file(
             use_path: path,
             visibility: Visibility::Private,
             bare: true,
+            line: None,
         });
     }
 
@@ -377,6 +382,7 @@ fn walk_items(
                 let mut paths = Vec::new();
                 collect_use_paths(&u.tree, Vec::new(), &mut paths);
                 let vis = convert_visibility(&u.vis);
+                let line = Some(u.span().start().line as u32);
                 for use_path in paths {
                     pending_uses.push(PendingUse {
                         from_mod_id: current_mod_id.clone(),
@@ -384,6 +390,7 @@ fn walk_items(
                         use_path,
                         visibility: vis.clone(),
                         bare: false,
+                        line,
                     });
                 }
             }
@@ -439,6 +446,7 @@ fn process_mod(
         to: sub_mod_id.clone(),
         kind: EdgeKind::Contains,
         visibility: None,
+        line: None,
     });
     module_index.insert(sub_path.clone(), sub_mod_id.clone());
 
@@ -579,6 +587,7 @@ fn emit_uses(
             } else {
                 None
             },
+            line: pu.line,
         });
     }
 }

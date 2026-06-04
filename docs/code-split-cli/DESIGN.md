@@ -91,7 +91,14 @@ the snapshot's `graphs` map under `"files"`.
   path`, `issue`, `why`, `fix`, `tune`, `ref`) so it doubles as an AI prompt;
   the `ref` link and the `sarif` `helpUri` are absolute GitHub URLs (`DOCS_URL` →
   `…/blob/main/docs/code-split-cli/ERRORS.md#group-<g>`) so they're clickable from anywhere.
-  `sarif` describes the fired rules under `tool.driver.rules`. With
+  `sarif` describes the fired rules under `tool.driver.rules`. Both machine
+  formats pin each finding to a file: `github` emits `::error file=…,line=N` and
+  `sarif` a `physicalLocation` (`artifactLocation` + `region.startLine`). The
+  path is the violation's `{target}/rel` location stripped to a repo-relative
+  path (assumes `check` ran from the repo root); the line is the cycle's breaking
+  edge `line`, or `1` for a whole-file metric breach (no single line). Findings
+  with no file path (a cycle whose edge couldn't be placed) stay general
+  annotations / locationless results. With
   `--suggest-config`, `human` output then calls `print_current_values` — the
   current per-kind cycle counts and the per-file metric maxima
   as paste-ready `code-split.toml` blocks for baselining (off by default;

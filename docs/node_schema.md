@@ -253,5 +253,5 @@ violation at a concrete spot to break (see the `github` / `sarif` annotations in
 
 **Related docs**: [PRD.md](PRD.md) §7.3 (the full Graph JSON Schema) ·
 [DESIGN.md](DESIGN.md) §3.1 Domain Model / §3.7 Snapshot File Format. The schema
-is defined by the `Snapshot` / `LevelGraph` / `Node` / `Edge` structs in
-`crates/code-split-graph/src/`.
+is defined by the `Node` / `Edge` structs in `crates/code-split-plugin-api/src/`
+and the `Snapshot` / `LevelGraph` structs in `crates/code-split-graph/src/`.

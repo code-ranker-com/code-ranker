@@ -29,6 +29,11 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Warm the cargo cache (rust plugin runs `cargo metadata --offline`)
+        # No prior build/test in this job, so $CARGO_HOME lacks the full dep
+        # graph and offline metadata resolution fails (e.g. on a platform-only
+        # crate like android_system_properties). Fetch fills the cache first.
+        run: cargo fetch --locked
 
       - name: Analyze -> JSON + HTML snapshot
         env:

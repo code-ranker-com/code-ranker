@@ -28,6 +28,10 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Warm the cargo cache (rust plugin runs `cargo metadata --offline`)
+        # No prior build/test in this job, so $CARGO_HOME lacks the full dep
+        # graph and offline metadata resolution fails. Fetch fills it first.
+        run: cargo fetch --locked
       - name: Generate HTML report into ./site
         # Self-contained HTML → site/report.html (served at <pages-url>/report.html).
         # Clean git metadata mapped from Actions vars (a detached checkout otherwise

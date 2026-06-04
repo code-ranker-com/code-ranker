@@ -6,7 +6,7 @@ use serde::{Deserialize, Deserializer};
 use std::fmt;
 
 #[derive(Debug, Deserialize, Default)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct Config {
     /// Default plugin name (e.g. "rust", "python"). Overridden by --plugin.
     pub plugin: Option<String>,
@@ -18,21 +18,21 @@ pub struct Config {
 /// Per-format output config: `[output.json]` / `[output.html]`, each with a
 /// `path` template and an optional `enabled` flag.
 #[derive(Debug, Clone, Deserialize, Default)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct OutputConfig {
     pub json: OutputArtifact,
     pub html: OutputArtifact,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct OutputArtifact {
     pub path: Option<String>,
     pub enabled: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Default)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct IgnoreConfig {
     pub paths: Vec<String>,
     /// Strip test files from the graph.
@@ -43,7 +43,7 @@ pub struct IgnoreConfig {
 }
 
 #[derive(Debug, Deserialize, Default)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct RulesConfig {
     pub cycles: CycleRules,
     pub thresholds: ThresholdRules,
@@ -93,7 +93,7 @@ impl<'de> Deserialize<'de> for CycleRule {
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct CycleRules {
     #[serde(rename = "test-embed")]
     pub test_embed: CycleRule,
@@ -126,13 +126,13 @@ impl CycleRules {
 }
 
 #[derive(Debug, Deserialize, Default)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct ThresholdRules {
     pub file: MetricThresholds,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct MetricThresholds {
     #[serde(default, deserialize_with = "de_opt_number")]
     pub hk: Option<f64>,
@@ -230,5 +230,18 @@ loc = 800
         assert_eq!(cfg.rules.cycles.mutual, CycleRule::Max(0));
         assert_eq!(cfg.rules.cycles.chain, CycleRule::Max(7));
         assert_eq!(cfg.rules.thresholds.file.loc, Some(800.0));
+    }
+
+    #[test]
+    fn config_rejects_unknown_keys() {
+        // A stale/mistyped key must be a hard error, not silently ignored.
+        let top = toml::from_str::<Config>("oops = 1").unwrap_err().to_string();
+        assert!(top.contains("unknown field"), "top-level: {top}");
+
+        let nested = toml::from_str::<Config>("[output]\njson-name = \"x\"\n")
+            .unwrap_err()
+            .to_string();
+        assert!(nested.contains("unknown field"), "nested: {nested}");
+        assert!(nested.contains("json-name"), "names the bad key: {nested}");
     }
 }

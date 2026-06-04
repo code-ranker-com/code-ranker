@@ -675,11 +675,14 @@ now and fails on regression. Off by default; the machine formats
 
 The path of the config file actually used is recorded in the snapshot as `config_file`.
 
-**Invalid configuration is fatal**: a malformed config file, an unknown threshold
-scope/metric, or a bad inline `--config` / `--threshold` / `--cycle-rule` value
-aborts the command with a non-zero exit and a clear message — the tool never
-silently falls back to defaults, which would drop the user's rules and let
-`check` pass when it should fail (a false green for a CI gate).
+**Invalid configuration is fatal**: a malformed config file, an **unknown key or
+section** in `code-split.toml` / `Cargo.toml` metadata (the schema is strict —
+`deny_unknown_fields` — so a typo or stale key like `json-name` is rejected, not
+silently ignored), an unknown threshold scope/metric, or a bad inline `--config`
+/ `--threshold` / `--cycle-rule` value aborts the command with a non-zero exit
+and a clear message (naming the offending field) — the tool never silently falls
+back to defaults, which would drop the user's rules and let `check` pass when it
+should fail (a false green for a CI gate).
 
 **Rationale**: Teams need to suppress expected patterns (e.g. `test-embed`
 cycles, dev-only crate noise) and enforce structural budgets in CI without

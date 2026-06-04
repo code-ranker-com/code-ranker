@@ -602,7 +602,10 @@ the snapshot's `graphs` map under `"files"`.
   Threshold values accept `_`
   separators and `K`/`M`/`G` suffixes via `config::parse_number` (CLI flags and a
   `deserialize_with` adaptor on `MetricThresholds` for quoted TOML strings); an
-  invalid configuration is a hard error, never a silent fallback to defaults. Every `Violation` is identified
+  invalid configuration is a hard error, never a silent fallback to defaults —
+  the config structs are `#[serde(deny_unknown_fields)]`, so an unknown/stale key
+  (e.g. `json-name`) fails with a field-named error rather than being ignored.
+  Every `Violation` is identified
   by its dotted rule id (the config key / CLI flag, e.g. `threshold.file.loc`) and
   tagged with a concern group from the `config::RULES` catalog
   (`CYC`/`CPX`/`CPL`/`SIZ`; one entry per metric resolved by `rule_doc` — the

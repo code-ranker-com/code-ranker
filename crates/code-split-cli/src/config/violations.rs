@@ -177,14 +177,13 @@ fn describe_cycle(kind: &str, nodes: &[String]) -> String {
             } else {
                 String::new()
             };
-            format!("test-embed cycle: {}{extra}", preview.join(" ↔ "))
+            format!("cycle: {}{extra}", preview.join(" ↔ "))
         }
     }
 }
 
 fn cycle_rule_id(kind: &str) -> &'static str {
     match kind {
-        "test_embed" => "cycle.test-embed",
         "mutual" => "cycle.mutual",
         "chain" => "cycle.chain",
         _ => "cycle.unknown",

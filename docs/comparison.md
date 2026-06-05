@@ -149,7 +149,7 @@ files, exports, types, and dependencies, and exits non-zero on findings.
 - **Same model across languages.** Rust, Python, JS, and TS produce the same node/edge
   schema behind one plugin protocol — you compare and gate them identically. The
   per-language tools each speak only their own dialect.
-- **Cycle classification.** Cycles are typed (`test_embed` / `mutual` / `chain`) with
+- **Cycle classification.** Cycles are typed (`mutual` / `chain`) with
   per-kind severity rules, not just a yes/no acyclic check.
 - **Portable, shareable output.** A self-contained offline HTML viewer plus a
   machine-readable JSON snapshot with stable, machine-independent path roots.

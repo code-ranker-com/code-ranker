@@ -249,7 +249,6 @@ fn print_current_values(graphs: &BTreeMap<String, LevelGraph>, cycles: &config::
     );
     println!("[rules.cycles]");
     for (key, kind, rule) in [
-        ("test-embed", "test_embed", cycles.test_embed),
         ("mutual", "mutual", cycles.mutual),
         ("chain", "chain", cycles.chain),
     ] {

@@ -79,7 +79,7 @@ pub fn default_node_kinds() -> BTreeMap<String, NodeKindSpec> {
     ])
 }
 
-/// The generic cycle-kind vocabulary (`mutual` / `chain` / `test_embed`).
+/// The generic cycle-kind vocabulary (`mutual` / `chain`).
 pub fn default_cycle_kinds() -> BTreeMap<String, CycleKindSpec> {
     let k = |label: &str, desc: &str| CycleKindSpec {
         label: Some(label.to_string()),
@@ -98,13 +98,6 @@ pub fn default_cycle_kinds() -> BTreeMap<String, CycleKindSpec> {
             k(
                 "Chain",
                 "Three or more nodes forming a dependency cycle (A → B → C → A).",
-            ),
-        ),
-        (
-            "test_embed".to_string(),
-            k(
-                "Test-embed",
-                "A test-only module pulled into production code.",
             ),
         ),
     ])

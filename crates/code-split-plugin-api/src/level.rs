@@ -121,7 +121,7 @@ pub struct NodeKindSpec {
     pub external: Option<bool>,
 }
 
-/// Label + description of one cycle kind (`"mutual"` / `"chain"` / `"test_embed"`).
+/// Label + description of one cycle kind (`"mutual"` / `"chain"`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CycleKindSpec {
     #[serde(default, skip_serializing_if = "Option::is_none")]

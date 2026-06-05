@@ -20,12 +20,16 @@ Cycle detection lives in `crates/code-split-graph/src/cycles.rs`:
   dropped earlier in `finalize_graph`.
 - A component that **spans multiple crates is discarded** (`cycles.rs:52`): Rust
   forbids circular crate dependencies, so such an SCC is not a real cycle.
-- Survivors are classified by `classify_scc` (`cycles.rs:105`), which checks the
-  test case **first**: an SCC that touches a test file is `test_embed`
-  (overriding size — even a 2-node test SCC is `test_embed`, not `mutual`);
-  otherwise exactly 2 nodes → `mutual`, 3+ → `chain`. `test_embed` is **off by
-  default** (`CycleRule::Off`, `config/model.rs:107`) and stripped from the
-  `check` gate, so it does not appear in normal output.
+- Survivors are classified by `classify_scc` purely by size: exactly 2 nodes →
+  `mutual`, 3+ → `chain`. There are only these two kinds.
+
+> **Removed: `test_embed`.** A third kind once tagged any SCC containing a
+> test-named file. It was dropped: a test file only joins a flow SCC when
+> production depends *back* on it (rare), and the `any-test-member → test_embed`
+> rule was coarse — one test node in a large SCC re-labelled the whole real cycle
+> as `test_embed`, which was off by default and so hid it. Test files are instead
+> handled by the `[ignore] tests` filter when unwanted; a test file that genuinely
+> sits in a cycle is now reported as a plain `mutual` / `chain` like any other.
 
 Edges in one loop may mix kinds — what matters is that **every** edge in the loop
 is flow.

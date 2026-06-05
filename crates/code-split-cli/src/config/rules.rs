@@ -9,7 +9,7 @@ use std::collections::HashSet;
 /// Strip disabled cycle kinds from the cycle groups and clear the matching
 /// `cycle` node attributes.
 pub fn apply_cycle_rules(cycles: &mut Vec<CycleGroup>, nodes: &mut [Node], rules: &CycleRules) {
-    let disabled: HashSet<&str> = ["test_embed", "mutual", "chain"]
+    let disabled: HashSet<&str> = ["mutual", "chain"]
         .into_iter()
         .filter(|k| rules.budget_for(k).is_none())
         .collect();
@@ -52,15 +52,6 @@ pub const RULES: &[RuleDoc] = &[
               component must be loaded and changed together, defeating modular boundaries.",
         fix: "Find the edge that closes the loop — usually one 'back' dependency pointing upward — \
               and invert or remove it, or introduce an abstraction layer between the units.",
-    },
-    RuleDoc {
-        key: "cycle.test-embed",
-        group: "CYC",
-        title: "Test-embedded-in-production cycle",
-        why: "Production code reaches a module that exists only for tests, coupling shippable code \
-              to test scaffolding so the two cannot ship or be reasoned about separately.",
-        fix: "Move test-only helpers into a test module/target, gate them behind a test feature, or \
-              invert the dependency so tests depend on production code and never the reverse.",
     },
     RuleDoc {
         key: "cyclomatic",
@@ -147,12 +138,18 @@ mod tests {
 
     #[test]
     fn apply_cycle_rules_strips_disabled_kind() {
+        use crate::config::model::CycleRule;
         let mut cycles = vec![CycleGroup {
-            kind: "test_embed".into(),
+            kind: "mutual".into(),
             nodes: vec!["a".into(), "b".into()],
         }];
         let mut nodes: Vec<Node> = vec![];
-        apply_cycle_rules(&mut cycles, &mut nodes, &CycleRules::default());
-        assert!(cycles.is_empty(), "test-embed off -> stripped");
+        // A kind whose budget is disabled is stripped from the groups.
+        let rules = CycleRules {
+            mutual: CycleRule::Off,
+            chain: CycleRule::Max(0),
+        };
+        apply_cycle_rules(&mut cycles, &mut nodes, &rules);
+        assert!(cycles.is_empty(), "disabled kind -> stripped");
     }
 }

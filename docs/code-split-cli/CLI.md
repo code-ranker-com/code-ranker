@@ -144,7 +144,7 @@ code-split check [input] [options]
 | Flag | Meaning |
 |---|---|
 | `--threshold <file.METRIC=N>` | Hard limit on a per-file metric — a breach fails the check. Scope is always `file` (a single file). METRIC: `cyclomatic`, `cognitive`, `hk`, `fan_in`, `fan_out`, `loc`. Repeatable. See [ERRORS.md](ERRORS.md#threshold-scopes). |
-| `--cycle-rule <KIND=on\|off\|N>` | Configure a cycle check. KIND: `test-embed`, `mutual`, `chain`. Value: `on` (any cycle fails), `off` (ignored), or `N` (allow up to N cycles of that kind — e.g. `chain=7` forbids an 8th). Defaults: `test-embed` off, `mutual`/`chain` on. |
+| `--cycle-rule <KIND=on\|off\|N>` | Configure a cycle check. KIND: `mutual`, `chain`. Value: `on` (any cycle fails), `off` (ignored), or `N` (allow up to N cycles of that kind — e.g. `chain=7` forbids an 8th). Defaults: `mutual`/`chain` on. |
 | `--baseline <snapshot>` | Compare `[input]` (current) against this baseline snapshot (`.json` or `.html`) and switch to a **relative gate**: fail only on *new* violations vs the baseline; pre-existing ones are tolerated. See [`--baseline`](#--baseline-comparison). |
 | `--output-format <fmt>` | Diagnostics format: `human` (default), `json`, `github`, `sarif`. Use `github` for PR annotations, `sarif`/`json` for tooling. |
 | `--top <N>` | Report only the `N` worst violations (ranked worst-first) and suppress the rest. A reporting limit only — it does **not** change the exit code. Default: all. |
@@ -169,8 +169,8 @@ code-split check
 code-split check ./api --plugin python \
   --threshold file.cognitive=25 --threshold file.loc=300
 
-# CI gate with machine-readable annotations; also flag test-embed cycles
-code-split check --cycle-rule test-embed=on --output-format github
+# CI gate with machine-readable annotations; allow up to 7 chain cycles
+code-split check --cycle-rule chain=7 --output-format github
 
 # regression gate: fail if the current tree got worse than the baseline
 code-split check . --baseline .code-split/main.json
@@ -566,7 +566,7 @@ The inline form takes a dotted key into the config schema:
 ```sh
 # tighten one rule in CI without editing code-split.toml
 code-split check --config rules.thresholds.file.cognitive=25 \
-                 --config rules.cycles.test-embed=true
+                 --config rules.cycles.chain=7
 
 # override an output destination inline
 code-split report --config output.html.path=dist/report.html

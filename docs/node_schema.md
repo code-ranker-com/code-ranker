@@ -144,7 +144,6 @@ The matching SCC is also listed in the level's `cycles` array.
 
 | value | meaning |
 |-------|---------|
-| `"test_embed"` | cycle caused by a `#[cfg(test)]` back-edge (Rust; off by default) |
 | `"mutual"` | two nodes that directly depend on each other (SCC size = 2) |
 | `"chain"` | cycle involving three or more nodes (SCC size ≥ 3) |
 

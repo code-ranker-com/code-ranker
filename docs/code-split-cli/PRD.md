@@ -137,7 +137,6 @@ dev_only_crates = true   # strip crates reachable only via [dev-dependencies]
                          # (uses `cargo metadata` for transitive accuracy)
 
 [rules.cycles]
-test-embed = false       # default: off  (Rust #[cfg(test)] back-edge)
 mutual     = true        # default: on
 chain      = true        # default: on
 
@@ -229,9 +228,9 @@ and a clear message (naming the offending field) — the tool never silently fal
 back to defaults, which would drop the user's rules and let `check` pass when it
 should fail (a false green for a CI gate).
 
-**Rationale**: Teams need to suppress expected patterns (e.g. `test-embed`
-cycles, dev-only crate noise) and enforce structural budgets in CI without
-modifying source code.
+**Rationale**: Teams need to suppress expected patterns (e.g. a budget of
+allowed `chain` cycles, dev-only crate noise) and enforce structural budgets in
+CI without modifying source code.
 
 **Actors**: `cpt-code-split-actor-developer`, `cpt-code-split-actor-ci`
 

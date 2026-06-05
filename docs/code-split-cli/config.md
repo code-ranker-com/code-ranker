@@ -12,7 +12,7 @@ Settings are merged from multiple sources. **Higher priority wins** for the same
 | 4 | `code-split.toml` in cwd | `./code-split.toml` |
 | 5 | `code-split.toml` in the analyzed target directory | `<target>/code-split.toml` |
 | 6 | `Cargo.toml` metadata | `[workspace.metadata.code-split]` |
-| 7 | Built-in defaults | `test-embed` off, `mutual` / `chain` on |
+| 7 | Built-in defaults | `mutual` / `chain` on |
 
 For `ignore.paths` and CLI `--ignore`: lists are **merged** (union), not replaced.  
 For cycle rules and thresholds: CLI **overrides** the file value.
@@ -35,7 +35,6 @@ tests = true             # strip test files from the graph (legacy alias: test_m
 [rules.cycles]
 # each kind: false = off, true = strict (any cycle fails, same as 0),
 # or an integer N = allow up to N cycles of that kind (the N+1-th fails).
-test-embed = false   # default — off (Rust #[cfg(test)] back-edge, not a smell)
 mutual     = true    # default — strict
 chain      = 7       # allow up to 7 chain cycles; pin today's count as a baseline
 
@@ -88,7 +87,6 @@ Useful when you don't want an extra file. Supports the same keys under
 paths = ["**/tests/**"]
 
 [workspace.metadata.code-split.rules.cycles]
-test-embed = false
 mutual     = true
 
 [workspace.metadata.code-split.rules.thresholds.file]
@@ -131,14 +129,14 @@ code-split check . --ignore '**/tests/**' --ignore '**/generated/**'
 
 ### `--cycle-rule <KIND=on|off|N>`
 
-Configure a cycle check. `KIND`: `test-embed` | `mutual` | `chain`. Value: `on`
+Configure a cycle check. `KIND`: `mutual` | `chain`. Value: `on`
 (strict — any cycle fails), `off` (ignored), or an integer `N` (allow up to `N`
-cycles of that kind, fail on the `N+1`-th). Defaults: `test-embed` off, `mutual`
-and `chain` on (= strict). Repeatable.
+cycles of that kind, fail on the `N+1`-th). Defaults: `mutual` and `chain` on
+(= strict). Repeatable.
 
 ```bash
-# flag test-embed cycles; allow up to 7 chain cycles (forbid an 8th)
-code-split check . --cycle-rule test-embed=on --cycle-rule chain=7
+# allow up to 7 chain cycles (forbid an 8th); keep mutual strict
+code-split check . --cycle-rule chain=7
 ```
 
 ### `--threshold <file.METRIC=N>`
@@ -214,5 +212,5 @@ There are no severity levels. Every rule is binary:
 Or with inline overrides to tighten rules in CI without changing `code-split.toml`:
 
 ```bash
-code-split check . --cycle-rule test-embed=on --threshold file.hk=200000
+code-split check . --cycle-rule chain=7 --threshold file.hk=200000
 ```

@@ -166,10 +166,9 @@ fn apply_inline_overrides(cfg: &mut Config, entries: &[&str]) -> Result<()> {
 
 fn set_cycle(cfg: &mut Config, kind: &str, rule: CycleRule) -> Result<()> {
     match kind {
-        "test-embed" => cfg.rules.cycles.test_embed = rule,
         "mutual" => cfg.rules.cycles.mutual = rule,
         "chain" => cfg.rules.cycles.chain = rule,
-        other => anyhow::bail!("unknown cycle kind {other:?}; expected test-embed|mutual|chain"),
+        other => anyhow::bail!("unknown cycle kind {other:?}; expected mutual|chain"),
     }
     Ok(())
 }
@@ -253,11 +252,11 @@ mod tests {
         apply_cli_overrides(
             &mut cfg,
             &[],
-            &["test-embed=on".into(), "mutual=off".into()],
+            &["chain=on".into(), "mutual=off".into()],
             &["file.cognitive=25".into(), "file.hk=1000".into()],
         )
         .unwrap();
-        assert_eq!(cfg.rules.cycles.test_embed, CycleRule::Max(0));
+        assert_eq!(cfg.rules.cycles.chain, CycleRule::Max(0));
         assert_eq!(cfg.rules.cycles.mutual, CycleRule::Off);
         assert_eq!(cfg.rules.thresholds.file.cognitive, Some(25.0));
         assert_eq!(cfg.rules.thresholds.file.hk, Some(1000.0));

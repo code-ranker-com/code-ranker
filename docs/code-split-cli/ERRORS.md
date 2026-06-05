@@ -20,7 +20,7 @@ and the fix.
 code-split has **no severity levels**. A rule is either *active* or not:
 
 - **Cycle rules** are on / off / a count budget. `mutual` and `chain` are on by
-  default; `test-embed` is off. A kind's value can be `on`/`true` (any cycle of
+  default. A kind's value can be `on`/`true` (any cycle of
   that kind fails — same as `0`), `off`/`false` (ignored), or an integer `N` (up
   to `N` cycles of that kind allowed; the `N+1`-th fails). Use `N` to pin today's
   count and forbid adding more (e.g. `chain=7`).
@@ -115,7 +115,7 @@ group are present in every format.
 ### CYC — dependency cycles
 
 Cycles are structural: they come from the import/dependency graph, not from a
-metric threshold. `mutual` and `chain` are on by default; `test-embed` is off.
+metric threshold. `mutual` and `chain` are on by default.
 Each kind takes `on` (strict — any cycle fails), `off` (ignored), or a count
 budget `N` (allow up to `N`, fail on the next): `--cycle-rule chain=off`,
 `--cycle-rule chain=7`, or `rules.cycles.chain = 7`. `check --suggest-config`
@@ -125,7 +125,6 @@ prints the current count per kind so you can paste it as a baseline.
 |---------|---------------|------------|
 | `cycle.mutual` | Two units import each other (A ↔ B), so neither can be built, tested, or understood in isolation — the tightest possible coupling. | Move the shared types into a third, lower-level unit both depend on; invert one direction behind a trait/interface; or merge the two if they are really one concept. |
 | `cycle.chain` | Three or more units form a strongly-connected component (A → B → C → A); the whole component must be loaded and changed together, defeating modular boundaries. | Find the edge that closes the loop — usually one "back" dependency pointing upward — and invert or remove it, or introduce an abstraction layer between the units. |
-| `cycle.test-embed` | Production code reaches a module that exists only for tests, coupling shippable code to test scaffolding so the two cannot ship or be reasoned about separately. | Move test-only helpers into a test module/target, gate them behind a test feature, or invert the dependency so tests depend on production code and never the reverse. |
 
 <a id="group-cpx"></a>
 
@@ -184,7 +183,6 @@ Equivalent `code-split.toml` (per-file metrics sit directly under
 [rules.cycles]
 mutual = true        # strict — any mutual cycle fails (same as 0)
 chain = 7            # allow up to 7 chain cycles; the 8th fails
-test-embed = false   # ignored
 
 [rules.thresholds.file]
 loc = 400

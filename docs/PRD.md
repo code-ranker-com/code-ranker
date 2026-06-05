@@ -416,7 +416,7 @@ workspaces. The plugin MUST:
   (language-agnostically): per-file complexity metrics (cyclomatic, cognitive,
   Halstead, maintainability index, LOC variants) via `code-split-complexity`;
   dependency cycles (Kosaraju SCC over flow edges) annotated as a `cycle` node
-  attribute (`test_embed` | `mutual` | `chain`) with `CycleGroup` entries, with
+  attribute (`mutual` | `chain`) with `CycleGroup` entries, with
   any SCC that spans more than one crate dropped (Rust forbids circular crate
   dependencies); `reexports` is **non-flow** (a `pub use` facade is not a
   dependency), so it is excluded from cycles **and** fan-in / HK and is not drawn,
@@ -736,7 +736,7 @@ attributes are **flat** and a metric is **omitted when it rounds to zero**.
 Numeric values use 3-significant-digit rounding; integral values serialize
 without a decimal point. `fan_in` / `fan_out` / `hk` count internal flow edges
 only; edges whose target is external are counted in `fan_out_external`. `cycle`
-(`"mutual"` / `"chain"` / `"test_embed"`) is present only on nodes in a cycle.
+(`"mutual"` / `"chain"`) is present only on nodes in a cycle.
 
 **Edge shape**:
 

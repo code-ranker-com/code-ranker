@@ -253,7 +253,7 @@ keys it understands, described per level by the semantics dictionaries.
 | NodeKindSpec / CycleKindSpec | Per-kind UI semantics. `NodeKindSpec`: `label`/`plural`/`fill`/`stroke`/`external`. `CycleKindSpec`: `label`/`description`. Generic defaults from `default_node_kinds()` / `default_cycle_kinds()` in `code-split-plugin-api`. | `crates/code-split-plugin-api/src/level.rs` |
 | Thresholds | `{ info: f64, warning: f64 }` — two-tier per-metric thresholds; language-calibrated, returned by a plugin's `thresholds()` and overlaid onto the matching `AttributeSpec`. | `crates/code-split-plugin-api/src/level.rs` |
 | Preset | A Prompt-Generator principle: `id`, `label`, `title`, `prompt`, `doc_url?`, `sort_metric`, `connections`. The orchestrator builds a generic default catalog (`code-split-cli/src/presets.rs`) and a plugin's `presets(defaults, input)` hook may pass through / edit / extend it. Stored top-level in the snapshot. | `crates/code-split-plugin-api/src/plugin.rs` |
-| CycleGroup | SCC with ≥ 2 nodes: `kind: String` (`"test_embed"` / `"mutual"` / `"chain"`), `nodes: Vec<NodeId>`. Each member node also carries a `cycle` attribute. | `crates/code-split-graph/src/level_graph.rs` |
+| CycleGroup | SCC with ≥ 2 nodes: `kind: String` (`"mutual"` for a 2-node SCC, `"chain"` for 3+), `nodes: Vec<NodeId>`. Each member node also carries a `cycle` attribute. | `crates/code-split-graph/src/level_graph.rs` |
 | LevelUi | Computed UI hints: `default_sort`, `sort_metrics`, `size_metrics`, `card_metrics`, `columns`, `summary_metrics` — each a curated metric order filtered to the attributes present on internal nodes, so the viewer renders them verbatim and hardcodes none of it — plus an optional `grouping` (carried through from the level spec, pruned to a usable attribute) telling the viewer how to cluster diagram nodes. | `crates/code-split-graph/src/level_graph.rs` |
 | LevelGraph | One analysis level in the snapshot: the semantics dictionaries (`edge_kinds`/`node_attributes`/`edge_attributes`/`attribute_groups`/`node_kinds`/`cycle_kinds`) + `nodes` + `edges` + `cycles: Vec<CycleGroup>` + `stats: BTreeMap<String, AttrValue>` (flat averages) + `ui: LevelUi`. | `crates/code-split-graph/src/level_graph.rs` |
 | Snapshot | The `.json` artifact: `schema_version: "2"`, `generated_at`, `command`, `workspace`, `target`, `plugin`, `config_file?`, `versions`, `roots`, `git?`, `timings`, `graphs: BTreeMap<String, LevelGraph>`, and top-level `presets: Vec<Preset>`. Serialized via `to_canonical_string_pretty` — **canonical JSON** (alphabetical keys; `nodes`/`edges` sorted). | `crates/code-split-graph/src/snapshot.rs` |
@@ -294,9 +294,8 @@ Modules:
   fabricate cycles. An SCC whose members span **more than one crate** is dropped
   — Rust forbids circular crate dependencies, so it can only be a resolution
   artifact (crate identity read from the node `crate` attribute, falling back to
-  the path). Classifies each surviving SCC `"test_embed"` (any member under
-  `tests/` / `test_support/` / a `*_test[s]` file) / `"mutual"` / `"chain"` and
-  writes a `cycle` attribute on each member node.
+  the path). Classifies each surviving SCC `"mutual"` (2 nodes) or `"chain"` (3+)
+  and writes a `cycle` attribute on each member node.
 - **`hk.rs`** — `annotate_hk(graph, flow_kinds)`: writes `fan_in` / `fan_out` /
   `fan_out_external` / `hk` (`hk = sloc × (fan_in × fan_out)²`) into each
   internal node's `attrs`. `fan_in` / `fan_out` count unique **internal** flow

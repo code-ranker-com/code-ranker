@@ -9,8 +9,8 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 
 /// Detect SCCs (≥ 2 members) over flow edges, write a `cycle` attribute on each
-/// participating node (`"mutual"` / `"chain"` / `"test_embed"`), and return the
-/// cycle groups.
+/// participating node (`"mutual"` for a 2-node SCC, `"chain"` for 3+), and
+/// return the cycle groups.
 pub fn annotate_cycles(graph: &mut Graph, flow_kinds: &HashSet<String>) -> Vec<CycleGroup> {
     let n = graph.nodes.len();
     if n == 0 {
@@ -52,7 +52,7 @@ pub fn annotate_cycles(graph: &mut Graph, flow_kinds: &HashSet<String>) -> Vec<C
         if spans_multiple_crates(scc, graph) {
             continue;
         }
-        let kind = classify_scc(scc, graph);
+        let kind = classify_scc(scc);
         for &idx in scc {
             node_kind[idx] = Some(kind);
         }
@@ -102,40 +102,8 @@ fn spans_multiple_crates(scc: &[usize], graph: &Graph) -> bool {
     crates.iter().any(|c| *c != crates[0])
 }
 
-fn classify_scc(scc: &[usize], graph: &Graph) -> &'static str {
-    if scc.iter().any(|&i| is_test_node(graph, i)) {
-        return "test_embed";
-    }
+fn classify_scc(scc: &[usize]) -> &'static str {
     if scc.len() == 2 { "mutual" } else { "chain" }
-}
-
-fn is_test_node(graph: &Graph, idx: usize) -> bool {
-    let node = &graph.nodes[idx];
-    let mut name = node.name.to_ascii_lowercase();
-    for ext in [".rs", ".py", ".ts", ".tsx", ".js", ".jsx"] {
-        if let Some(stem) = name.strip_suffix(ext) {
-            name = stem.to_string();
-            break;
-        }
-    }
-    if matches!(name.as_str(), "tests" | "test" | "benches" | "bench") {
-        return true;
-    }
-    if name.ends_with("_tests")
-        || name.ends_with("_test")
-        || name.ends_with("_bench")
-        || name.starts_with("test_")
-    {
-        return true;
-    }
-    let id = &node.id;
-    id.contains("::tests")
-        || id.contains("::test::")
-        || id.ends_with("::test")
-        || id.contains("/tests/")
-        || id.contains("/__tests__/")
-        || id.contains("/test_support/")
-        || id.contains("/test-support/")
 }
 
 // ── Kosaraju's SCC (iterative, O(V+E)) ─────────────────────────────────────
@@ -323,12 +291,29 @@ mod tests {
     }
 
     #[test]
-    fn test_node_makes_test_embed() {
+    fn three_node_scc_is_chain() {
+        let mut g = Graph {
+            nodes: vec![node("a", "a"), node("b", "b"), node("c", "c")],
+            edges: vec![
+                edge("a", "b", "uses"),
+                edge("b", "c", "uses"),
+                edge("c", "a", "uses"),
+            ],
+        };
+        let groups = annotate_cycles(&mut g, &flow());
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].kind, "chain");
+    }
+
+    #[test]
+    fn test_named_node_no_longer_special_cased() {
+        // A test-named file in an SCC is classified purely by size now (`mutual`),
+        // not the removed `test_embed` kind.
         let mut g = Graph {
             nodes: vec![node("a", "a"), node("b", "foo_tests")],
             edges: vec![edge("a", "b", "uses"), edge("b", "a", "uses")],
         };
         let groups = annotate_cycles(&mut g, &flow());
-        assert_eq!(groups[0].kind, "test_embed");
+        assert_eq!(groups[0].kind, "mutual");
     }
 }

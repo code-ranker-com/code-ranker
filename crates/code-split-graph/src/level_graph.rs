@@ -33,7 +33,7 @@ pub struct LevelUi {
 }
 
 /// One strongly-connected component with ≥ 2 nodes, plus its classification
-/// (`"mutual"` / `"chain"` / `"test_embed"`). Node ids match the level graph.
+/// (`"mutual"` for a 2-node SCC, `"chain"` for 3+). Node ids match the level graph.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CycleGroup {
     pub kind: String,

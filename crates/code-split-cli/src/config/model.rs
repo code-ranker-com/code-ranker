@@ -95,8 +95,6 @@ impl<'de> Deserialize<'de> for CycleRule {
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct CycleRules {
-    #[serde(rename = "test-embed")]
-    pub test_embed: CycleRule,
     pub mutual: CycleRule,
     pub chain: CycleRule,
 }
@@ -104,7 +102,6 @@ pub struct CycleRules {
 impl Default for CycleRules {
     fn default() -> Self {
         Self {
-            test_embed: CycleRule::Off,
             mutual: CycleRule::Max(0),
             chain: CycleRule::Max(0),
         }
@@ -112,11 +109,10 @@ impl Default for CycleRules {
 }
 
 impl CycleRules {
-    /// Budget for a cycle kind string (`"test_embed"`/`"mutual"`/`"chain"`):
+    /// Budget for a cycle kind string (`"mutual"`/`"chain"`):
     /// `Some(max)` if enabled, `None` if disabled.
     pub fn budget_for(self, kind: &str) -> Option<u32> {
         match kind {
-            "test_embed" => self.test_embed,
             "mutual" => self.mutual,
             "chain" => self.chain,
             _ => CycleRule::Off,
@@ -192,13 +188,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn cycle_rules_default_test_embed_off_others_strict() {
+    fn cycle_rules_default_strict() {
         let d = CycleRules::default();
-        assert_eq!(d.test_embed, CycleRule::Off);
         assert_eq!(d.mutual, CycleRule::Max(0));
         assert_eq!(d.chain, CycleRule::Max(0));
         assert_eq!(d.budget_for("mutual"), Some(0));
-        assert_eq!(d.budget_for("test_embed"), None);
+        assert_eq!(d.budget_for("chain"), Some(0));
+        assert_eq!(d.budget_for("unknown"), None);
     }
 
     #[test]
@@ -219,14 +215,12 @@ mod tests {
     fn config_toml_parses_cycles_and_thresholds() {
         let src = "
 [rules.cycles]
-test-embed = false
 mutual = true
 chain = 7
 [rules.thresholds.file]
 loc = 800
 ";
         let cfg: Config = toml::from_str(src).unwrap();
-        assert_eq!(cfg.rules.cycles.test_embed, CycleRule::Off);
         assert_eq!(cfg.rules.cycles.mutual, CycleRule::Max(0));
         assert_eq!(cfg.rules.cycles.chain, CycleRule::Max(7));
         assert_eq!(cfg.rules.thresholds.file.loc, Some(800.0));

@@ -1,0 +1,26 @@
+# Standalone workspace so this fixture is independent of the repo's root
+# workspace (otherwise `cargo metadata` refuses to run here). `helper` is a
+# second local member, imported by submodule path to exercise cross-crate,
+# submodule-precise edge resolution.
+[workspace]
+members = ["helper"]
+
+[package]
+name = "rust-sample"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# `serde` is referenced through a real `use` (and a derive) → DETECTED as External.
+serde = { version = "1", features = ["derive"] }
+# `once_cell` is referenced ONLY via a fully-qualified path, with no `use`
+# statement → DETECTED: crate-qualified bare paths are captured, so it shows up
+# as an External node.
+once_cell = "1"
+# Local workspace crate, imported across the crate boundary by submodule path
+# (`helper::widget::…`) → DETECTED as submodule-precise file→file edges.
+helper = { path = "helper" }

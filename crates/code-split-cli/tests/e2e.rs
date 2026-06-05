@@ -1,8 +1,9 @@
 //! End-to-end fixture tests.
 //!
-//! For every project under `samples/`, run the built `code-split` binary and
-//! compare its JSON report against the committed golden
-//! `samples/<lang>/code-split-report.json`.
+//! For every language's fixture project (colocated with its plugin crate at
+//! `crates/code-split-plugin-<lang>/sample/`), run the built `code-split` binary
+//! and compare its JSON report against the committed golden
+//! `crates/code-split-plugin-<lang>/sample/code-split-report.json`.
 //!
 //! The committed golden keeps its RAW header (timestamp, command, git, versions,
 //! absolute paths, timings). The comparison therefore:
@@ -24,7 +25,7 @@
 //! verbatim, which is where the real assertions about detected dependencies and
 //! blind spots live.
 //!
-//! To refresh the goldens after an intentional change, run `samples/regen.sh`.
+//! To refresh the goldens after an intentional change, see `docs/e2e.md`.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -44,11 +45,20 @@ fn repo_root() -> PathBuf {
         .to_path_buf()
 }
 
-/// Run the binary on `samples/<lang>` with the sample's own config and return
-/// the parsed JSON report.
+/// The fixture project for a language, now colocated with its plugin crate at
+/// `crates/code-split-plugin-<lang>/sample`.
+fn sample_dir(lang: &str) -> PathBuf {
+    repo_root()
+        .join("crates")
+        .join(format!("code-split-plugin-{lang}"))
+        .join("sample")
+}
+
+/// Run the binary on the language's `sample/` project with its own config and
+/// return the parsed JSON report.
 fn run_report(lang: &str) -> Value {
     let root = repo_root();
-    let sample = root.join("samples").join(lang);
+    let sample = sample_dir(lang);
     let out_dir = tempfile::tempdir().expect("create temp output dir");
 
     let out_json = out_dir.path().join("fresh.json");
@@ -70,10 +80,7 @@ fn run_report(lang: &str) -> Value {
 }
 
 fn read_golden(lang: &str) -> Value {
-    let path = repo_root()
-        .join("samples")
-        .join(lang)
-        .join("code-split-report.json");
+    let path = sample_dir(lang).join("code-split-report.json");
     let text = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("read golden {}: {e}", path.display()));
     serde_json::from_str(&text).expect("parse golden report json")
@@ -211,7 +218,281 @@ fn assert_sample_matches(lang: &str) {
     assert_eq!(
         fresh_s, golden_s,
         "[{lang}] normalized report differs from golden. \
-         If this change is intentional, run `samples/regen.sh`."
+         If this change is intentional, regenerate the goldens (see docs/e2e.md)."
+    );
+}
+
+/// Run `report` on a language's `sample/` with extra args, capturing stdout and
+/// stderr (instead of comparing a golden file). Used for the recommendation
+/// formats (`scorecard` / `prompt`), which stream to stdout.
+fn run_report_capture(lang: &str, extra: &[&str]) -> (bool, String, String) {
+    let root = repo_root();
+    let sample = sample_dir(lang);
+    let out = Command::new(env!("CARGO_BIN_EXE_code-split"))
+        .current_dir(&root)
+        .env("CARGO_NET_OFFLINE", "true")
+        .arg("report")
+        .arg(&sample)
+        .arg("--config")
+        .arg(sample.join("code-split.toml"))
+        .args(extra)
+        .output()
+        .expect("spawn code-split");
+    (
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    )
+}
+
+/// Run `check` on a language sample with its own config, capturing the outcome.
+fn run_check_capture(lang: &str, extra: &[&str]) -> (bool, String, String) {
+    let root = repo_root();
+    let sample = sample_dir(lang);
+    let out = Command::new(env!("CARGO_BIN_EXE_code-split"))
+        .current_dir(&root)
+        .env("CARGO_NET_OFFLINE", "true")
+        .arg("check")
+        .arg(&sample)
+        .arg("--config")
+        .arg(sample.join("code-split.toml"))
+        .args(extra)
+        .output()
+        .expect("spawn code-split");
+    (
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    )
+}
+
+/// `check` is the gate. The Rust sample has an a ⇄ b mutual cycle, so the default
+/// run fails (exit non-zero) and prints a self-contained human diagnostic.
+#[test]
+fn rust_sample_check_human_diagnostic() {
+    let (ok, stdout, stderr) = run_check_capture("rust", &[]);
+    assert!(!ok, "gate fails on the mutual cycle: {stderr}");
+    let out = format!("{stdout}{stderr}");
+    assert!(
+        out.contains("cycle.mutual") && out.contains("a.rs") && out.contains("b.rs"),
+        "human diagnostic names the cycle members: {out}"
+    );
+}
+
+/// `--output-format json` emits the machine-readable violation list.
+#[test]
+fn rust_sample_check_json_violations() {
+    let (_ok, stdout, stderr) = run_check_capture("rust", &["--output-format", "json"]);
+    let v: Value = serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("json: {e}: {stderr}"));
+    let first = &v.as_array().expect("array")[0];
+    assert_eq!(first["rule"], "cycle.mutual");
+    assert_eq!(first["graph"], "files");
+}
+
+/// `--output-format sarif` emits a SARIF 2.1.0 document.
+#[test]
+fn rust_sample_check_sarif() {
+    let (_ok, stdout, _e) = run_check_capture("rust", &["--output-format", "sarif"]);
+    let v: Value = serde_json::from_str(&stdout).expect("sarif json");
+    assert!(
+        v["$schema"].as_str().unwrap_or_default().contains("sarif"),
+        "sarif schema present: {stdout}"
+    );
+    assert!(v["runs"].is_array(), "sarif runs array");
+}
+
+/// `--output-format github` emits `::error` workflow annotations with file/line.
+#[test]
+fn rust_sample_check_github_annotations() {
+    let (_ok, stdout, stderr) = run_check_capture("rust", &["--output-format", "github"]);
+    let out = format!("{stdout}{stderr}");
+    assert!(
+        out.contains("::error") && out.contains("cycle.mutual"),
+        "github annotation: {out}"
+    );
+}
+
+/// `--suggest-config` prints today's measured values as paste-ready TOML blocks.
+#[test]
+fn rust_sample_check_suggest_config() {
+    let (_ok, stdout, _e) = run_check_capture("rust", &["--suggest-config"]);
+    assert!(
+        stdout.contains("[rules.cycles]") && stdout.contains("[rules.thresholds.file]"),
+        "suggested config blocks: {stdout}"
+    );
+    assert!(
+        stdout.contains("mutual") && stdout.contains("chain"),
+        "cycle rules listed: {stdout}"
+    );
+}
+
+/// A `--baseline` run computes a relative verdict; against itself it is `neutral`
+/// (no new violations).
+#[test]
+fn rust_sample_check_baseline_verdict_neutral() {
+    let root = repo_root();
+    let sample = sample_dir("rust");
+    let tmp = std::env::temp_dir().join("cs-e2e-baseline-rust.json");
+    // Capture a baseline snapshot.
+    let report = Command::new(env!("CARGO_BIN_EXE_code-split"))
+        .current_dir(&root)
+        .env("CARGO_NET_OFFLINE", "true")
+        .arg("report")
+        .arg(&sample)
+        .arg("--config")
+        .arg(sample.join("code-split.toml"))
+        .arg(format!("--output.json.path={}", tmp.display()))
+        .output()
+        .expect("spawn report");
+    assert!(report.status.success(), "baseline report");
+    let (_ok, stdout, stderr) = run_check_capture(
+        "rust",
+        &[
+            "--baseline",
+            tmp.to_str().unwrap(),
+            "--output-format",
+            "json",
+        ],
+    );
+    let v: Value = serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("json: {e}: {stderr}"));
+    assert_eq!(
+        v["verdict"], "neutral",
+        "self-baseline is neutral: {stdout}"
+    );
+}
+
+/// The `scorecard` format streams a per-principle table + worst-module list to
+/// stdout. The Rust sample has a mutual cycle (a.rs ↔ b.rs) and no metric
+/// breaches, so ADP is the only principle with violations and tops the table.
+#[test]
+fn rust_sample_scorecard_triage() {
+    let (ok, stdout, stderr) = run_report_capture("rust", &["--output.scorecard"]);
+    assert!(ok, "scorecard run failed: {stderr}");
+    assert!(
+        stdout.contains("scorecard  (rust, 20 files)"),
+        "header with file count: {stdout}"
+    );
+    assert!(
+        stdout.contains("ADP") && stdout.contains("Acyclic Dependencies"),
+        "ADP principle row present: {stdout}"
+    );
+    assert!(stdout.contains("WORST MODULES"), "worst-modules section");
+    assert!(
+        stdout.contains("src/a.rs") && stdout.contains("src/b.rs") && stdout.contains("cycle"),
+        "the two cycle members are listed as cycle breaches: {stdout}"
+    );
+    assert!(
+        stdout.contains("--preset ADP --output.prompt.path"),
+        "next-step hint points at the worst principle: {stdout}"
+    );
+}
+
+/// With no `--preset`, the prompt auto-picks the worst-violating principle (ADP
+/// here) and lists the cycle members + their connections — the same Markdown the
+/// HTML viewer's Prompt Generator emits.
+#[test]
+fn rust_sample_prompt_auto_picks_worst_principle() {
+    let (ok, stdout, stderr) = run_report_capture("rust", &["--output.prompt.path=stdout"]);
+    assert!(ok, "prompt run failed: {stderr}");
+    assert!(
+        stdout.starts_with("# ADP — Acyclic Dependencies Principle"),
+        "auto-picked ADP as the title heading: {stdout}"
+    );
+    assert!(
+        stdout.contains("## Modules in a dependency cycle"),
+        "cycle-modules section"
+    );
+    assert!(
+        stdout.contains("- `src/a.rs`") && stdout.contains("- `src/b.rs`"),
+        "both cycle members listed with cleaned paths: {stdout}"
+    );
+    assert!(
+        stdout.contains("## Connections — common"),
+        "ADP pre-selects the `common` connection set"
+    );
+    assert!(
+        stdout.contains(".code-split/<YYYYMMDD-HHMMSS>-ADP.md"),
+        "save-report instruction carries the preset id: {stdout}"
+    );
+}
+
+/// An explicit metric principle (`SRP`, ranked by SLOC) with `--top 1` yields the
+/// single worst module in an "ordered by" section.
+#[test]
+fn rust_sample_prompt_explicit_preset_top1() {
+    let (ok, stdout, stderr) = run_report_capture(
+        "rust",
+        &[
+            "--preset",
+            "SRP",
+            "--top",
+            "1",
+            "--output.prompt.path=stdout",
+        ],
+    );
+    assert!(ok, "prompt run failed: {stderr}");
+    assert!(
+        stdout.starts_with("# SRP — Single Responsibility Principle"),
+        "explicit preset honoured: {stdout}"
+    );
+    assert!(
+        stdout.contains("## Modules ordered by"),
+        "metric ordering section: {stdout}"
+    );
+    // lib.rs is the largest file in the sample (production SLOC 17 — its
+    // `#[cfg(test)] mod tests` is excluded from the metric).
+    assert!(
+        stdout.contains("- `src/lib.rs` (SLOC: 17)"),
+        "the single worst SLOC module: {stdout}"
+    );
+}
+
+#[test]
+fn rust_sample_prompt_metric_lens_preset() {
+    // Rust-only metric-lens preset (HK ranks by Henry-Kafura coupling). Added by
+    // the Rust plugin's `presets()` hook, so it must be a valid `--preset` id and
+    // rank modules by `hk`.
+    let (ok, stdout, stderr) = run_report_capture(
+        "rust",
+        &[
+            "--preset",
+            "HK",
+            "--top",
+            "1",
+            "--output.prompt.path=stdout",
+        ],
+    );
+    assert!(ok, "HK prompt run failed: {stderr}");
+    assert!(
+        stdout.starts_with("# HK — Henry-Kafura Coupling"),
+        "metric-lens preset honoured: {stdout}"
+    );
+    assert!(
+        stdout.contains("## Modules ordered by") && stdout.contains("(HK:"),
+        "modules ranked by HK: {stdout}"
+    );
+}
+
+/// `--index` is rejected with a hint to use `--top`.
+#[test]
+fn rust_sample_report_rejects_index() {
+    let (ok, _stdout, stderr) =
+        run_report_capture("rust", &["--output.prompt.path=stdout", "--index", "0"]);
+    assert!(!ok, "--index must fail");
+    assert!(
+        stderr.contains("--index is not supported") && stderr.contains("--top"),
+        "actionable error: {stderr}"
+    );
+}
+
+/// The recommendation knobs only apply with a `prompt` / `scorecard` format.
+#[test]
+fn rust_sample_report_rejects_stray_reco_flags() {
+    let (ok, _stdout, stderr) = run_report_capture("rust", &["--preset", "ADP"]);
+    assert!(!ok, "--preset without a prompt/scorecard format must fail");
+    assert!(
+        stderr.contains("apply only with --output.prompt or --output.scorecard"),
+        "actionable error: {stderr}"
     );
 }
 

@@ -1,0 +1,656 @@
+:root { font-family: -apple-system, system-ui, sans-serif; }
+body { margin: 0; background: #fafafa; color: #222; }
+
+header { background: #2c3e50; color: #fff; padding: 8px 24px; }
+.header-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; min-height: 32px; }
+.header-brand { font-size: 15px; font-weight: 800; letter-spacing: .12em;
+                color: #1abc9c; text-transform: uppercase; white-space: nowrap; margin-right: 4px; }
+/* Project title: capped width with an ellipsis (full value in the `title` attr). */
+.header-title { font-size: 18px; font-weight: 500; white-space: nowrap; color: #d7e0ea;
+                display: inline-block; max-width: 340px; overflow: hidden;
+                text-overflow: ellipsis; vertical-align: middle; }
+.header-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+               font-size: 13px; color: #b8c5d2; }
+header code { color: #1abc9c; }
+/* Branch name inside a control: capped with an ellipsis (full value in `title`). */
+.meta-info code { display: inline-block; max-width: 200px; overflow: hidden;
+                  text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.ml { color: #b8c5d2; }
+.mc { color: #8ba6c0; font-size: 13px; }
+.meta-info { color: #8ba6c0; font-size: 13px; }
+/* Big mode word, now a toggle button — "toggle" between the two controls (click /
+   hotkey `t` to switch baseline⇄current), "view" after the single control in
+   review (disabled). Sized to match the header title; flex `order` reseats it. */
+.meta-mode { font: inherit; font-size: 13px; color: #ecf0f1; white-space: nowrap;
+             text-transform: lowercase; margin: 0 4px; order: 2; user-select: none;
+             background: #455a73; border: 0; border-radius: 4px; padding: 6px 14px;
+             cursor: pointer; transition: background .15s; }
+.meta-mode:hover:not(:disabled) { background: #5d7593; }
+.meta-mode:disabled { cursor: default; background: #3a4a5e; color: #8ba6c0; }
+.snap-group[data-snap="baseline"] { order: 1; }
+.snap-group[data-snap="current"]  { order: 3; }
+body.mode-review #meta-mode { order: 4; }   /* review: place "view" after the control */
+/* Snapshot controls (branch + commit): clicking the body switches the shown side;
+   the ✎ pencil opens the detail/actions popup. No hover trigger. */
+.snap-group { display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+              border: 1px solid rgba(255,255,255,.18); border-radius: 6px; padding: 6px 11px;
+              transition: border-color .15s, box-shadow .15s; }
+/* The snapshot input currently shown on the map / tables (active Baseline/Current side). */
+.snap-group.snap-active { border-color: #1abc9c; background: rgba(26,188,156,.20);
+                          box-shadow: 0 0 0 1px rgba(26,188,156,.5) inset; }
+/* Gear: opens the snapshot details + actions popup. */
+.snap-edit { background: none; border: 0; color: #8ba6c0; cursor: pointer;
+             font-size: 18px; line-height: 1; padding: 1px 4px; border-radius: 4px; }
+.snap-edit:hover { color: #fff; background: rgba(255,255,255,.18); }
+
+/* Prompt Generator — lives in the Details table header, right of the node count. */
+#nav-prompt-btn { background: #455a73; color: #ecf0f1; border: 0; font-family: inherit;
+                  padding: 3px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+                  border-radius: 4px; white-space: nowrap; }
+#nav-prompt-btn:hover { background: #5d7593; }
+.nav-ai-letters { color: #fff; font-weight: 700; display: inline-block;
+                  animation: ai-pulse 2s ease-in-out infinite; }
+@keyframes ai-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.35); } }
+/* Warning-node count next to the AI button — plain text, no highlight. */
+.nav-warn-count { margin-left: 6px; font-weight: 400; }
+.nav-warn-count:empty { display: none; }
+.custom-indicator { color: #f39c12; font-size: 12px; font-style: italic; order: 5; }
+
+main { padding: 16px 24px 40px; }
+
+/* ── Stats bar ──────────────────────────────────────────────────────────────── */
+.stats-bar {
+  display: flex; flex-wrap: wrap; gap: 2px 18px;
+  padding: 6px 14px; margin-bottom: 10px;
+  background: #fff; border: 1px solid #ddd; border-radius: 6px;
+  font-size: 12px; font-family: ui-monospace, 'SF Mono', 'Fira Code', monospace;
+}
+.stats-bar:empty { display: none; }
+.sg { display: flex; align-items: baseline; gap: 5px; }
+.sg-label { font-weight: 600; color: #444; min-width: 84px; }
+.sg-n { color: #aaa; font-size: 10px; }
+.sg-n::before { content: '('; }
+.sg-n::after  { content: ' nodes)'; }
+.sg-cell { display: flex; align-items: baseline; gap: 2px; white-space: nowrap; }
+.sg-p { color: #999; font-size: 10px; min-width: 20px; text-align: right; }
+
+/* ── Views ──────────────────────────────────────────────────────────────────── */
+.view { display: none; }
+.view.active { display: block; }
+
+/* ── Control panel ──────────────────────────────────────────────────────────── */
+.control-panel { background: #fff; border: 1px solid #ddd; padding: 10px 14px;
+                 border-radius: 6px; margin-bottom: 12px; max-width: 560px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; align-items: center; }
+.chips-label { font-weight: 600; min-width: 64px; font-size: 13px; color: #555; }
+
+.chip { display: inline-block; padding: 3px 10px; font-size: 12px; line-height: 1.6;
+        border: 1px solid #bbb; border-radius: 14px; cursor: pointer;
+        user-select: none; background: #f4f4f4; color: #555; transition: .1s;
+        min-width: 108px; text-align: center; box-sizing: border-box; }
+.chip:hover:not(.disabled) { background: #e8e8e8; }
+.chip.active { color: #fff; background: #999; border-color: #777; }
+.chip.disabled { opacity: 0.35; cursor: not-allowed; }
+
+.chip[data-status="added"].active     { background: #2a7a30; border-color: #1d5e22; }
+.chip[data-status="removed"].active   { background: #b45309; border-color: #78350f; }
+.chip[data-status="unchanged"].active { background: #4d6f9c; border-color: #2c4768; }
+.chip[data-status="affected"].active  { background: #6b7280; border-color: #4b5563; }
+.chip[data-cycle="baseline-only"].active { background: #e57373; border-color: #b35454; }
+.chip[data-cycle="current-only"].active  { background: #c00;    border-color: #900; }
+.chip[data-cycle="both"].active        { background: #7a0000; border-color: #500000; }
+
+/* ── SVG frame ──────────────────────────────────────────────────────────────── */
+.frame-wrap { position: relative; margin-bottom: 10px; }
+.svg-frame { background: #fff; border: 1px solid #ddd; border-radius: 6px;
+             overflow: hidden; user-select: none;
+             height: calc(100vh - 240px); min-height: 200px; }
+.svg-frame svg { width: 100%; height: 100%; display: block; cursor: grab; }
+/* Drag-to-pan, GitHub-style: open hand at rest, closed hand while dragging
+   (the closed hand wins over a node's `pointer` cursor for the whole drag). */
+.svg-frame.panning svg { cursor: grabbing; }
+.svg-frame.panning svg g.node { cursor: grabbing !important; }
+
+.zoom-controls { position: absolute; bottom: 12px; right: 12px;
+                 display: flex; flex-direction: column; gap: 5px;
+                 opacity: 0; transition: opacity .15s; pointer-events: none; }
+.frame-wrap.show-zoom .zoom-controls { opacity: 1; pointer-events: auto; }
+.zoom-btn { width: 52px; height: 52px; border: 1px solid #bbb; border-radius: 8px;
+            background: rgba(255,255,255,.95); color: #333; font-size: 28px; line-height: 1;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 1px 4px rgba(0,0,0,.12); user-select: none; }
+.zoom-btn:hover { background: #f0f0f0; border-color: #999; }
+.zoom-btn[data-zoom="fit"]        { font-size: 13px; font-weight: 600; }
+.zoom-btn[data-zoom="fullscreen"] { font-size: 24px; }
+
+/* Fullscreen mode */
+.frame-wrap:fullscreen { background: #fff; display: flex; align-items: stretch; position: relative; }
+.frame-wrap:fullscreen .svg-frame { flex: 1; height: 100% !important; border-radius: 0; border: none; min-height: unset; }
+.frame-wrap:fullscreen .zoom-btn[data-zoom="fullscreen"]::before { content: '✕'; }
+.frame-wrap:fullscreen .zoom-btn[data-zoom="fullscreen"] { font-size: 14px; color: #666; }
+
+/* Fullscreen overlay bar */
+.fs-bar { position: absolute; top: 0; left: 0; right: 0; z-index: 200;
+          transform: translateY(-100%); transition: transform .18s ease; }
+.fs-bar.visible { transform: translateY(0); }
+.fs-bar header { margin: 0; box-shadow: 0 2px 10px rgba(0,0,0,.25); }
+/* Overlays (node modal / prompt popup) hosting the always-on header reserve top
+   space (the exact amount is set inline from the bar's measured height). */
+.fly-header-host { box-sizing: border-box; }
+/* The `t` toggle hint only applies in a diff (two snapshots) — hide it in review. */
+body.mode-review .kbd-hint-toggle { display: none; }
+.fly-header-host > .fs-bar { z-index: 10001; }   /* above the overlay's own content */
+.fs-bar .control-panel { margin: 0; border-radius: 0; border-left: none; border-right: none; border-top: none; max-width: none; }
+
+.loading-indicator { display: none; position: absolute; inset: 0; background: rgba(255,255,255,.9);
+                     align-items: center; justify-content: center; font-size: 15px; color: #555;
+                     border-radius: 6px; pointer-events: none; }
+.loading-indicator.on { display: flex; }
+
+/* ── Legend / hint ──────────────────────────────────────────────────────────── */
+/* ── Node modal ─────────────────────────────────────────────────────────────── */
+#node-modal-overlay { display: none; position: fixed; inset: 0; z-index: 10000; }
+#node-modal { background: #fff; width: 100%; height: 100%; position: relative;
+              display: flex; flex-direction: column; overflow: hidden; }
+#node-modal-hdr { display: flex; align-items: center; gap: 12px;
+                  padding: 14px 28px 12px; flex-shrink: 0;
+                  border-bottom: 2px solid #1abc9c; background: #fff; }
+#node-modal-hdr-title { display: flex; align-items: center; gap: 10px;
+                        flex: 1; min-width: 0; }
+#node-modal-close { flex-shrink: 0; background: none; border: none;
+                    font-size: 22px; color: #aaa; cursor: pointer; line-height: 1; padding: 0; }
+.nm-cb-wrap { display: flex; align-items: center; flex-shrink: 0; cursor: pointer; padding: 2px 4px; }
+.nm-cb-wrap .nt-cb { width: 16px; height: 16px; cursor: pointer; }
+#node-modal-close:hover { color: #333; }
+#node-modal-main { display: flex; flex: 1; overflow: hidden; }
+#node-modal-body { overflow-y: auto; flex: 1; padding: 0 28px 24px; border-right: 1px solid #eee; }
+/* Shown when the opened node does not exist on the side now toggled to. */
+.nm-absent { padding: 28px 4px; color: #888; font-size: 14px; font-style: italic; }
+/* The diagram panel is a non-scrolling positioning frame (so the shortcut legend,
+   absolutely placed here, stays put). Scrolling happens in the inner wrapper. */
+#node-modal-diagram { flex: 2; position: relative; overflow: hidden; background: #f8fafc; }
+.nm-diagram-scroll { width: 100%; height: 100%; box-sizing: border-box; padding: 32px;
+                     overflow-y: auto; overflow-x: hidden;
+                     display: flex; align-items: center; justify-content: center; }
+/* `margin:auto` (not align-items) centres a short diagram yet keeps a tall one
+   fully reachable when it overflows and scrolls. */
+.nm-diagram-scroll > svg { margin: auto; }
+.nm-title { font-size: 18px; font-weight: 700; color: #2c3e50;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nm-badge { display: inline-block; flex-shrink: 0; padding: 2px 10px; border-radius: 12px;
+            font-size: 12px; font-weight: 600; background: #dbe9f4; color: #2980b9; }
+.nm-side { display: inline-block; flex-shrink: 0; padding: 2px 10px; border-radius: 12px;
+           font-size: 12px; font-weight: 600; background: #eef0f3; color: #6b7c8d;
+           text-transform: uppercase; letter-spacing: .04em; }
+.nm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; margin-top: 12px; }
+.nm-col { min-width: 0; }
+.nm-sect-label { font-weight: 700; font-size: 11px; text-transform: uppercase;
+                 letter-spacing: .08em; color: #999; padding: 12px 0 4px;
+                 border-top: 1px solid #eee; }
+.nm-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.nm-table .nm-key { color: #777; white-space: nowrap; padding: 4px 12px 4px 0;
+                    vertical-align: top; width: 90px; min-width: 90px; }
+.nm-table .nm-val { color: #222; word-break: break-all; padding: 4px 0; }
+.nm-table .nm-src { color: #1a73c2; text-decoration: none; white-space: nowrap; }
+.nm-table .nm-src:hover { text-decoration: underline; }
+.nm-table .nm-sep { font-weight: 700; font-size: 11px; text-transform: uppercase;
+                    letter-spacing: .08em; color: #999; padding: 12px 0 4px;
+                    border-top: 1px solid #eee; }
+.nm-has-hint { cursor: default; }
+.nm-copy-btn { display: inline-flex; align-items: center; margin-left: 6px;
+               padding: 1px 5px; background: none; border: 1px solid #d0dcea;
+               border-radius: 3px; font-size: 12px; color: #999; cursor: pointer;
+               vertical-align: middle; line-height: 1.4; }
+.nm-copy-btn:hover { background: #e8edf2; border-color: #aab; color: #555; }
+/* SVG main card: click anywhere on it to copy the path (id for libraries). The
+   `copy` cursor signals this; a successful copy flashes the card border green. */
+.mn-card { cursor: default; }
+/* Only the individual labels copy on click (title + each `key: value` row). */
+#node-modal-diagram .mn-copy { cursor: copy; }
+/* On copy: hide the card body and show a centred "copied" message for ~1s. */
+.mn-copied-msg { display: none; }
+.mn-card.copied .mn-card-body { display: none; }
+.mn-card.copied .mn-copied-msg { display: block; }
+/* Popup side cards: simplified by default (bare hk / loc), full detail (labelled
+   values + connection-kind row) revealed on hover. */
+g[data-diag-node] .sn-detail { display: none; }
+g[data-diag-node]:hover .sn-simple { display: none; }
+g[data-diag-node]:hover .sn-detail { display: inline; }
+/* Hoverable metric / connection-kind labels inside popup cards.
+   Keep the card's own cursor — don't switch to a help cursor over a tooltip
+   label (overrides the global `[data-tip] { cursor: help }`). The text/fill is
+   intentionally NOT changed on hover (no highlight): only the tooltip appears. */
+text.sn-hint, tspan.sn-hint, g.sn-hint { cursor: inherit; }
+#nm-tooltip { display: none; position: fixed; z-index: 30000;
+              background: #2c3e50; color: #ecf0f1;
+              font-size: 12px; line-height: 1.45;
+              padding: 6px 10px; border-radius: 6px;
+              max-width: 280px; white-space: pre-wrap;
+              box-shadow: 0 3px 12px rgba(0,0,0,.28);
+              pointer-events: none; }
+
+.size-controls { position: absolute; top: 12px; right: 12px; z-index: 10;
+                 display: flex; gap: 4px;
+                 opacity: 0; transition: opacity .15s; pointer-events: none; }
+.frame-wrap.show-zoom .size-controls  { opacity: 1; pointer-events: auto; }
+.size-mode-btn { width: 52px; height: 52px; border: 1px solid #bbb; border-radius: 8px;
+                 background: rgba(255,255,255,.95); color: #555; font-size: 12px; font-weight: 600;
+                 cursor: pointer; display: flex; align-items: center; justify-content: center;
+                 box-shadow: 0 1px 4px rgba(0,0,0,.12); user-select: none; }
+.size-mode-btn:hover { background: #f0f0f0; border-color: #999; }
+.size-mode-btn.active { border-color: #1abc9c; color: #1abc9c; }
+
+.frame-wrap:fullscreen .size-controls { z-index: 250; transition: opacity .15s, top .18s ease; }
+
+
+/* ── Summary ────────────────────────────────────────────────────────────────── */
+#summary-container { max-height: none; width: fit-content; }
+.node-table.summary-table { width: auto; table-layout: fixed; }
+.summary-table .metric-cell,
+.summary-table .metric-header { width: 180px; }
+.node-table.summary-table thead th { border-bottom: none; }
+.node-table.summary-table thead tr:last-child th { border-bottom: 2px solid #ddd; }
+.node-table.summary-table td { border-bottom: none; }
+.node-table.summary-table tbody tr:nth-child(even) td { background: #f4f6f8; }
+.summary-table .level-header  { text-align: center; }
+.summary-table .metric-header { vertical-align: middle; border-right: 2px solid #d0d8e4; }
+.node-table.summary-table .metric-header { border-bottom: 2px solid #ddd; }
+.summary-table .metric-cell   { color: #555; font-weight: 500; white-space: nowrap; border-right: 2px solid #d0d8e4; }
+.summary-table .grp-start     { border-left: 2px solid #d0d8e4; }
+.summary-table td.delta-good  { color: #2a7a30; font-weight: 600; }
+.summary-table td.delta-bad   { color: #c0392b; font-weight: 600; }
+.summary-table th.num,
+.summary-table td.num { width: 66px; min-width: 66px; max-width: 66px; }
+.cycle-badge { display: inline-block; padding: 1px 9px; border-radius: 10px;
+               background: #fff0f0; border: 1px solid #f5a0a0;
+               color: #c00; font-weight: 600; font-size: 13px; }
+
+/* ── Tooltip ────────────────────────────────────────────────────────────────── */
+#tt { position: fixed; z-index: 30001; pointer-events: none;
+      background: #1e2a3a; color: #e8eef5; border-radius: 8px;
+      padding: 10px 14px; font-size: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.4); max-width: 240px;
+      border: 1px solid rgba(255,255,255,.08); }
+#tt[hidden] { display: none; }
+.tt-title { font-weight: 700; color: #7ec8e3; margin-bottom: 7px; font-size: 13px; }
+.tt-count { color: #8ba6c0; font-size: 11px; font-weight: 400; margin-left: 5px; }
+.tt-tbl { border-collapse: collapse; width: 100%; margin-top: 4px; }
+.tt-tbl th { color: #8ba6c0; font-size: 10px; text-transform: uppercase;
+             letter-spacing: .06em; text-align: center; padding: 2px 6px 4px; }
+.tt-tbl th:first-child { text-align: left; }
+.tt-tbl td { color: #e8eef5; font-weight: 600; text-align: right; padding: 3px 6px;
+             font-family: ui-monospace, 'SF Mono', monospace; font-size: 12px; }
+.tt-tbl td:first-child { color: #8ba6c0; font-weight: 400; text-align: left; font-family: inherit; }
+.tt-tbl tr:first-child td { padding-top: 0; }
+[data-tt] { cursor: help; border-bottom: 1px dashed rgba(100,120,140,.35); }
+[data-tip] { cursor: help; }
+.tt-desc { color: #c8d8e8; font-size: 12px; line-height: 1.55; margin-top: 2px; }
+/* Inline `code` spans inside a description: highlighted and never wrapped. */
+.tt-desc .tt-code { white-space: nowrap; font-family: ui-monospace, 'SF Mono', monospace;
+                    font-size: 11px; color: #e8eef5; background: rgba(126,200,227,0.16);
+                    border-radius: 3px; padding: 0 4px; }
+/* Metric formula on its own bold line, never wrapped mid-expression. */
+.tt-formula { font-weight: 700; color: #e8eef5; white-space: nowrap;
+              margin: 4px 0 6px; font-size: 11px;
+              font-family: ui-monospace, 'SF Mono', monospace; }
+/* The formula filled with the node's real values — lighter, sits under the
+   generic formula. */
+.tt-calc { font-weight: 400; color: #9fd0e8; margin-top: -3px; }
+#tt { max-width: 330px; }
+
+/* ── Node table ─────────────────────────────────────────────────────────────── */
+.node-table-wrap { margin: 10px 0 20px; }
+
+.node-table-header {
+  color: #2c3e50; border-bottom: 2px solid #1abc9c; padding-bottom: 6px; margin-top: 24px;
+  cursor: pointer; user-select: none;
+  display: flex; align-items: center; gap: 8px;
+  font-size: 1.5rem; font-weight: 700;
+}
+.node-table-header::after { content: '▾'; font-size: 14px; color: #7a92a8; font-weight: 400; }
+.node-table-wrap.collapsed .node-table-header::after { content: '▸'; }
+.node-table-badge {
+  background: #4d6f9c; color: #fff; border-radius: 10px;
+  padding: 1px 8px; font-size: 11px; font-weight: 600; min-width: 20px; text-align: center;
+}
+
+.node-table-body { margin-top: 4px; }
+.nt-search-input { padding: 2px 8px; font-size: 12px; border: 1px solid #c8d4e0;
+                   border-radius: 4px; outline: none; color: #333; background: #fff; width: 200px;
+                   font-family: inherit; }
+.nt-search-input:focus { border-color: #1abc9c; }
+.nt-search-input::placeholder { color: #aaa; font-weight: 400; }
+
+/* ── Export popup ───────────────────────────────────────────────────────────── */
+#export-popup-overlay { position: fixed; inset: 0; z-index: 10001; background: rgba(0,0,0,.45);
+                        display: flex; align-items: center; justify-content: center; }
+#export-popup { background: #e9edf2; box-shadow: 0 8px 40px rgba(0,0,0,.25);
+                display: flex; flex-direction: column; width: 100%; height: 100%; border-radius: 0; }
+#export-popup-hdr { display: flex; align-items: center; gap: 10px; padding: 14px 18px 10px;
+                    border-bottom: 1px solid #e8edf2; }
+#export-popup-hdr h3 { margin: 0; font-size: 15px; font-weight: 700; color: #1a2f45; flex: 1; }
+#export-popup-close { border: none; background: none; font-size: 18px; cursor: pointer;
+                      color: #888; line-height: 1; padding: 2px 6px; border-radius: 4px; }
+#export-popup-close:hover { background: #f0f0f0; }
+.exp-modes { display: flex; gap: 0; padding: 10px 18px 6px; align-items: center; flex-wrap: nowrap; }
+.exp-cb-group { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; flex: 1; }
+.exp-conn-label { font-size: 13px; color: #2c3e50; font-weight: 600; }
+.exp-mode-cb { display: flex; align-items: center; gap: 5px; font-size: 13px; color: #2c3e50;
+               cursor: pointer; user-select: none; white-space: nowrap; }
+.exp-mode-cb input { accent-color: #4d6f9c; width: 14px; height: 14px; cursor: pointer; margin: 0; }
+/* A checkbox with nothing under it is disabled (it can't affect the output). */
+.exp-mode-cb--off { opacity: .4; cursor: not-allowed; }
+.exp-mode-cb--off input { cursor: not-allowed; }
+.exp-sel-count, .exp-rec-count { font-weight: 700; color: #4d6f9c; }
+/* Recommendation criterion (e.g. `hk > 25,000`) shown next to the count. */
+.exp-sort-select { font-size: 13px; font-family: inherit; color: #2c3e50; cursor: pointer;
+                   border: 1px solid #c8d4e0; border-radius: 4px; padding: 3px 6px; background: #fff; }
+/* Count emphasis: warning zone gets a calm text-colour highlight (no alarming
+   red); the info zone is left plain (no class added) to keep the UI low-key. */
+.exp-rec-warn { color: #2c3e50 !important; font-weight: 700; background: rgba(44,62,80,.10);
+                border-radius: 4px; }
+.exp-source-or { font-size: 11px; font-weight: 700; color: #aaa; letter-spacing: .06em;
+                 white-space: nowrap; }
+.exp-source-group { display: flex; gap: 12px; align-items: center; flex-wrap: nowrap; }
+.exp-src-radio { display: flex; align-items: center; gap: 5px; font-size: 13px; color: #2c3e50;
+                 cursor: pointer; user-select: none; white-space: nowrap; }
+.exp-src-radio input { accent-color: #4d6f9c; cursor: pointer; margin: 0; }
+.exp-rec-count { width: 52px; padding: 3px 6px; font-size: 13px; border: none;
+                 background: transparent; text-align: center; color: #2c3e50; outline: none; }
+.exp-textarea-wrap { position: relative; flex: 1; margin: 0 18px; display: flex;
+                     min-height: 0; overflow: hidden; }
+/* The raw markdown lives in a hidden textarea (still the Copy source); the user
+   sees the snarkdown-rendered preview instead. It is a document, not an input —
+   no field border/background, just a scrollable region. */
+#export-textarea { display: none; }
+/* A lighter (white) document card on the popup's soft-grey background, so the
+   rendered markdown reads as a clean page rather than a form field. */
+.exp-md-preview { flex: 1; padding: 14px 22px 22px; font-size: 13px; line-height: 1.5;
+                  color: #1a2f45; background: #fff; border-radius: 8px;
+                  box-shadow: 0 1px 4px rgba(0,0,0,.06); outline: none;
+                  min-height: 0; overflow-y: auto; }
+.exp-md-preview h1 { font-size: 18px; margin: 12px 0 8px; color: #15324f; }
+.exp-md-preview h2 { font-size: 15px; margin: 14px 0 6px; color: #15324f;
+                     border-bottom: 1px solid #e4ebf2; padding-bottom: 3px; }
+.exp-md-preview p { margin: 6px 0; }
+.exp-md-preview ul { margin: 6px 0; padding-left: 20px; }
+.exp-md-preview li { margin: 2px 0; }
+.exp-md-preview a { color: #2c6fad; text-decoration: none; }
+.exp-md-preview a:hover { text-decoration: underline; }
+.exp-md-preview code { font-family: ui-monospace,'SF Mono',monospace; font-size: 12px;
+                       background: #eef2f7; border: 1px solid #e0e6ee; border-radius: 3px;
+                       padding: 1px 4px; color: #b3801f; }
+.exp-md-preview strong { color: #15324f; }
+.exp-presets { padding: 8px 18px; border-top: 1px solid #edf1f5; }
+.exp-presets-label { font-size: 11px; color: #888; text-transform: uppercase;
+                     letter-spacing: .05em; margin-bottom: 6px; }
+/* Equal-width preset buttons in a grid; cells stretch to equal height so a
+   button with a count badge is the same size as one without. */
+.exp-preset-btns { display: grid; grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)); gap: 5px; }
+.exp-preset-btn { padding: 3px 6px; font-size: 11px; font-family: inherit; border-radius: 4px;
+                  border: 1px solid #c8d4e0; background: #f8fafc; color: #2c3e50; cursor: pointer;
+                  display: flex; flex-direction: row; align-items: center; gap: 4px; text-align: left; }
+.exp-preset-btn:hover { background: #dbe9f4; border-color: #4d6f9c; }
+/* Low-sensitivity UI: presets get no button-level emphasis (border/colour) for
+   info or warning — only the count badge differs. */
+.exp-preset-btn--active { background: #2c6fad; border-color: #2c6fad; color: #fff; }
+.exp-preset-btn--active:hover { background: #2259a0; border-color: #2259a0; }
+/* Recommendation count badge. `--warn`: a filled pill in the text colour (a calm
+   label/background, not red) with a light digit. `--info`: a plain right-aligned
+   number — no pill, no highlight. Collapses to nothing when there is no count. */
+.exp-preset-count { font-size: 10px; font-weight: 700; line-height: 16px; color: #fff;
+                    display: inline-block; min-width: 16px; height: 16px; padding: 0 4px;
+                    border-radius: 999px; text-align: center; margin-left: auto; }
+.exp-preset-count:empty { display: none; }
+.exp-preset-count--warn { background: #2c3e50; }
+.exp-preset-count--info { background: none; color: inherit; min-width: 0; height: auto;
+                          padding: 0; line-height: inherit; border-radius: 0; }
+.exp-copy-btn { position: absolute; bottom: 10px; right: 10px;
+                width: 150px; height: 36px; padding: 0;
+                font-size: 13px; font-family: inherit; border-radius: 6px;
+                border: none; background: #4d6f9c; color: #fff; cursor: pointer;
+                box-shadow: 0 2px 8px rgba(0,0,0,.25); opacity: .92;
+                display: flex; align-items: center; justify-content: center; gap: 6px; }
+.exp-copy-btn:hover { background: #3a5a8a; opacity: 1; }
+.exp-copy-icon { font-size: 22px; line-height: 1; }
+.node-table-wrap.collapsed .node-table-body { display: none; }
+/* Collapsed: show only the title + count, hide the search box. */
+.node-table-wrap.collapsed .nt-search-input { display: none; }
+
+.node-table-container {
+  overflow-x: auto; max-height: 760px; overflow-y: auto;
+  border: 1px solid #ddd; border-radius: 6px; background: #fff;
+}
+.node-table {
+  width: 100%; border-collapse: collapse;
+  font-size: 12px; font-family: ui-monospace, 'SF Mono', 'Fira Code', monospace;
+}
+.node-table thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: #f4f6f8; color: #555; font-weight: 600;
+  font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+  padding: 6px 10px; border-bottom: 2px solid #ddd;
+  cursor: pointer; user-select: none; white-space: nowrap;
+}
+.node-table thead th:hover { background: #e8edf2; }
+.node-table thead th.sort-asc::after  { content: ' ▲'; color: #1abc9c; }
+.node-table thead th.sort-desc::after { content: ' ▼'; color: #1abc9c; }
+.node-table td { padding: 4px 10px; border-bottom: 1px solid #f0f0f0; color: #333; white-space: nowrap; }
+.node-table:not(.summary-table) { table-layout: fixed; }
+.node-table:not(.summary-table) .nt-sel-th,
+.node-table:not(.summary-table) .nt-sel-td { width: 28px; min-width: 28px; max-width: 28px; padding: 0; text-align: center; }
+.nt-cb { cursor: pointer; margin: 0; accent-color: #4d6f9c; }
+.node-table:not(.summary-table) th[data-col="name"] { width: 420px; }
+.node-table:not(.summary-table) th[data-col]:not([data-col="name"]) { width: 54px; }
+/* Tighter horizontal padding on the narrow metric columns (the Name column keeps
+   the default padding). */
+.node-table td[data-col]:not([data-col="name"]),
+.node-table th[data-col]:not([data-col="name"]) { padding-left: 5px; padding-right: 5px; }
+.node-table td[data-col="name"],
+.node-table th[data-col="name"] { position: sticky; left: 0; z-index: 2; overflow: hidden; text-overflow: ellipsis; }
+.node-table td[data-col="name"] { background: #fff; }
+.node-table th[data-col="name"] { background: #f4f6f8; z-index: 3; }
+/* "Too many nodes" guard shown instead of a slow large-graph render. */
+.too-many { display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 12px; height: 100%; min-height: 240px; text-align: center; color: #5c7a96; }
+.too-many-title { font-size: 22px; font-weight: 700; color: #c0392b; font-family: ui-monospace,'SF Mono',monospace; }
+.too-many-sub { font-size: 13px; color: #7a92a8; max-width: 360px; }
+.too-many-btn { padding: 8px 18px; font-size: 13px; font-weight: 600; cursor: pointer;
+                background: #4d6f9c; color: #fff; border: none; border-radius: 6px; }
+.too-many-btn:hover { background: #3d5a82; }
+
+.node-table tr:last-child td { border-bottom: none; }
+/* Summary footer row: averages (numeric) / counts (text), pinned visual weight. */
+.node-table tr.nt-foot td { border-top: 2px solid #ddd; font-weight: 600; background: #eef1f4; color: #2c3e50; }
+.node-table tr.nt-foot td[data-col="name"] { background: #eef1f4; }
+.node-table tr.nt-foot:hover td { background: #eef1f4; }
+.node-table tr:hover td { background: transparent; }
+.node-table .num { text-align: right; }
+.node-table thead th.num { text-align: right; }
+
+
+.cell-s-added     { color: #2a7a30; font-weight: 600; }
+.cell-s-removed   { color: #b45309; font-weight: 600; }
+.cell-s-affected  { color: #6b7280; }
+.cell-s-unchanged { color: #aaa; }
+
+.nt-empty { text-align: center !important; color: #aaa; font-style: italic; padding: 16px !important; }
+
+/* ── Collapsible Diff summary ───────────────────────────────────────────────── */
+.summary.collapsed .node-table-body { display: none; }
+.summary.collapsed .node-table-header::after { content: '▸'; }
+
+/* ── Snap popup ─────────────────────────────────────────────────────────────── */
+#snap-popup {
+  display: none; position: fixed; z-index: 20000;
+  background: #fff; border: 1px solid #d0dcea; border-radius: 8px;
+  padding: 12px 16px; font-size: 12px; color: #2c3e50;
+  box-shadow: 0 6px 24px rgba(0,0,0,.14);
+  max-width: 820px; min-width: 380px;
+}
+.sp-side { font-weight: 700; font-size: 13px; color: #2c3e50; margin-bottom: 8px;
+           padding-bottom: 6px; border-bottom: 1px solid #eef1f5; }
+.sp-side.sp-side-shown { color: #117a65; }   /* the side currently shown on the map */
+.sp-row { display: flex; gap: 10px; margin: 3px 0; align-items: baseline; }
+.sp-lbl { color: #888; font-weight: 600; min-width: 88px; flex-shrink: 0; }
+.sp-cmd { font-family: ui-monospace, 'SF Mono', 'Fira Code', monospace; font-size: 11px; color: #2c3e50; }
+.sp-cmd-block { margin: 4px 0; }
+.sp-cmd-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.sp-cmd-input { width: 100%; box-sizing: border-box; font-family: ui-monospace, 'SF Mono', 'Fira Code', monospace;
+                font-size: 11px; color: #2c3e50; background: #f5f7fa; border: 1px solid #d0dcea;
+                border-radius: 4px; padding: 4px 6px; outline: none; cursor: text; resize: none; }
+.sp-cmd-input:focus { border-color: #1abc9c; }
+.sp-copy-btn { flex-shrink: 0; background: none; border: 1px solid #d0dcea; border-radius: 4px;
+               padding: 1px 5px; font-size: 11px; color: #888; cursor: pointer; line-height: 1.4;
+               transition: background .15s, color .15s; }
+.sp-copy-btn:hover { background: #1abc9c; border-color: #1abc9c; color: #fff; }
+.sp-dirty { color: #b45309; font-weight: 600; }
+.sp-clean { color: #2a7a30; }
+.sp-section-label { font-weight: 700; font-size: 10px; text-transform: uppercase;
+                    letter-spacing: .07em; color: #aaa; margin: 10px 0 4px; }
+.sp-section-label:first-child { margin-top: 0; }
+.sp-gen-diff { color: #888; font-size: 11px; }
+/* Snapshot actions, moved out of the header into the popup. */
+.sp-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.sp-action { background: #2c3e50; color: #fff; border: 0; border-radius: 4px;
+             padding: 4px 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.sp-action:hover { background: #1abc9c; }
+.sp-action-x { background: #fdecea; color: #c0392b; }
+.sp-action-x:hover { background: #c0392b; color: #fff; }
+
+/* ── Review mode ────────────────────────────────────────────────────────────── */
+[data-review] { display: none; }
+body.mode-review [data-review]         { display: inline-block; }
+body.mode-review [data-review].active  { background: #1abc9c; color: #fff; }
+body.mode-review [data-review="cycles"].has-cycles.active  { background: #c0392b; color: #fff; }
+body.mode-review [data-review="cycles"]:not(.has-cycles)   { opacity: 0.4; pointer-events: none; }
+
+body.mode-review [data-preset="baseline"],
+body.mode-review [data-preset="current"],
+body.mode-review [data-preset="diff"],
+body.mode-review [data-preset="cycles"] { display: none; }
+body.mode-review .control-panel        { display: none; }
+body.mode-review [data-col="status"]   { display: none; }
+/* Review (single snapshot) lives in the CURRENT slot; the BASELINE slot is an empty,
+   editable baseline placeholder. Header element visibility is driven by JS
+   (updateHeader), so no mode-review hiding of the arrow / current metadata here. */
+
+/* ── Graphviz nodes / edges ──────────────────────────────────────────────────── */
+g.node polygon, g.node ellipse { stroke-width: 1; }
+
+/* ── Visibility toggles (class on .svg-frame → CSS hides matching SVG elements) ── */
+.hide-nodes-added    g.node.status-added    { display: none; }
+.hide-nodes-removed  g.node.status-removed  { display: none; }
+.hide-nodes-affected g.node.status-affected { display: none; }
+.hide-nodes-unchanged g.node.status-unchanged { display: none; }
+.hide-edges-added    g.edge.status-added    { display: none; }
+.hide-edges-removed  g.edge.status-removed  { display: none; }
+.hide-edges-affected g.edge.status-affected { display: none; }
+.hide-edges-unchanged g.edge.status-unchanged { display: none; }
+/* ── Cycle visibility override (specificity 0,4,1 > hide rules 0,2,1) ──────── */
+/* When a cycle chip is active alongside any hide-* chip, cycle elements win */
+:is(.hide-nodes-added,.hide-nodes-removed,.hide-nodes-affected,.hide-nodes-unchanged).show-cycle-baseline
+  g.node:is(.status-added,.status-removed,.status-affected,.status-unchanged):is(.cycle-status-baseline-only,.cycle-status-both) { display: block; }
+:is(.hide-nodes-added,.hide-nodes-removed,.hide-nodes-affected,.hide-nodes-unchanged).show-cycle-current
+  g.node:is(.status-added,.status-removed,.status-affected,.status-unchanged):is(.cycle-status-current-only,.cycle-status-both)  { display: block; }
+:is(.hide-edges-added,.hide-edges-removed,.hide-edges-affected,.hide-edges-unchanged).show-cycle-baseline
+  g.edge:is(.status-added,.status-removed,.status-affected,.status-unchanged):is(.cycle-status-baseline-only,.cycle-status-both) { display: block; }
+:is(.hide-edges-added,.hide-edges-removed,.hide-edges-affected,.hide-edges-unchanged).show-cycle-current
+  g.edge:is(.status-added,.status-removed,.status-affected,.status-unchanged):is(.cycle-status-current-only,.cycle-status-both)  { display: block; }
+
+/* ── Cycle highlights: members of a dependency cycle are red — but only for the
+   side currently shown. `both` cycles are red on either side; `baseline-only` /
+   `current-only` only on their own side (`.side-baseline` / `.side-current` on the
+   frame), so a cycle that was removed in the current snapshot stops being red
+   when you switch to Current. ───────────────────────────────────────────────── */
+.svg-frame.side-baseline g.node:is(.cycle-status-baseline-only,.cycle-status-both) > polygon,
+.svg-frame.side-baseline g.node:is(.cycle-status-baseline-only,.cycle-status-both) > ellipse,
+.svg-frame.side-current  g.node:is(.cycle-status-current-only,.cycle-status-both)  > polygon,
+.svg-frame.side-current  g.node:is(.cycle-status-current-only,.cycle-status-both)  > ellipse {
+  stroke: #c00 !important; stroke-width: 3 !important;
+}
+.svg-frame.side-baseline g.edge:is(.cycle-status-baseline-only,.cycle-status-both) > path,
+.svg-frame.side-current  g.edge:is(.cycle-status-current-only,.cycle-status-both)  > path {
+  stroke: #c00 !important; stroke-width: 2.5 !important;
+}
+.svg-frame.side-baseline g.edge:is(.cycle-status-baseline-only,.cycle-status-both) > polygon,
+.svg-frame.side-current  g.edge:is(.cycle-status-current-only,.cycle-status-both)  > polygon {
+  stroke: #c00 !important; fill: #c00 !important;
+}
+
+/* ── Shift = "select mode" on the main map: cursor signals click-to-select ──── */
+body.shift-select .svg-frame svg { cursor: crosshair; }
+body.shift-select .svg-frame g.node { cursor: copy !important; }
+
+/* ── Ctrl/⌘ = "open source" on the main map: cursor signals click-to-open ───── */
+body.ctrl-link .svg-frame svg { cursor: default; }
+body.ctrl-link .svg-frame g.node { cursor: alias !important; }
+
+/* Same modifier cursors inside the per-node popup diagram; 3rd-party (`.diag-ext`)
+   cards are inert (not selectable, no source) so they show `not-allowed`. */
+body.shift-select #node-modal-diagram g[data-diag-node]:not(.diag-ext) { cursor: copy !important; }
+body.ctrl-link    #node-modal-diagram g[data-diag-node]:not(.diag-ext) { cursor: alias !important; }
+body.shift-select #node-modal-diagram g.diag-ext,
+body.ctrl-link    #node-modal-diagram g.diag-ext { cursor: not-allowed !important; }
+/* The central (main) card reacts to modifiers too (copy/view-source); external
+   main cards are inert. */
+body.shift-select #node-modal-diagram .mn-card:not(.diag-ext) { cursor: copy !important; }
+body.ctrl-link    #node-modal-diagram .mn-card:not(.diag-ext) { cursor: alias !important; }
+body.shift-select #node-modal-diagram .mn-card.diag-ext,
+body.ctrl-link    #node-modal-diagram .mn-card.diag-ext { cursor: not-allowed !important; }
+
+/* Popup's own shortcut legend (bottom-left of the fullscreen modal), shown while
+   a modifier is held — the map's legend is hidden behind the popup. */
+#node-modal-hints { z-index: 5; }
+body.shift-select #node-modal-hints,
+body.ctrl-link    #node-modal-hints { opacity: 1; }
+
+/* While a modifier is held, a Shift/⌘-click on a card must not drag-select the
+   SVG/label text (without a modifier, normal text selection is left intact). */
+body.shift-select, body.ctrl-link { user-select: none; -webkit-user-select: none; }
+
+/* While a map hotkey is held, reveal the same right-side controls (zoom + size)
+   that a hover into the right edge shows — visual cue that a mode is active. */
+body.shift-select .frame-wrap .zoom-controls,
+body.ctrl-link   .frame-wrap .zoom-controls,
+body.shift-select .frame-wrap .size-controls,
+body.ctrl-link   .frame-wrap .size-controls { opacity: 1; pointer-events: auto; }
+
+/* ── Shortcut legend (bottom-left): shown on the same hover/hotkey as controls ── */
+.kbd-hints { position: absolute; bottom: 12px; left: 12px; z-index: 10;
+             display: flex; gap: 8px; opacity: 0; transition: opacity .15s;
+             pointer-events: none; }
+.kbd-hint { display: inline-flex; align-items: center; gap: 5px; font-size: 11px;
+            color: #5c7a96; background: rgba(255,255,255,.95); border: 1px solid #d0dcea;
+            border-radius: 6px; padding: 3px 8px; }
+.kbd-hint kbd { font-family: ui-monospace,'SF Mono',monospace; font-size: 11px;
+                font-weight: 600; color: #2c3e50; background: #eef1f4;
+                border: 1px solid #cdd7e2; border-radius: 4px; padding: 0 5px; }
+.frame-wrap.show-zoom .kbd-hints,
+body.shift-select .frame-wrap .kbd-hints,
+body.ctrl-link   .frame-wrap .kbd-hints { opacity: 1; }
+
+/* ── Selection: persistent yellow highlight ─────────────────────────────────── */
+.node-table tr.row-selected td { background: rgb(254,245,222); }
+.node-table tr.row-selected td[data-col="name"] { background: rgb(254,245,222); }
+g.node.node-selected > polygon,
+g.node.node-selected > ellipse { fill: #fffde7 !important; stroke: #f9a825 !important; stroke-width: 2 !important; }
+/* The cycle stroke wins over selection: a selected node that is also in a cycle
+   on the shown side keeps its red outline (the yellow fill still marks it
+   selected). Side-gated, mirroring the cycle-highlight rules above. */
+.svg-frame.side-baseline g.node.node-selected:is(.cycle-status-baseline-only,.cycle-status-both) > polygon,
+.svg-frame.side-baseline g.node.node-selected:is(.cycle-status-baseline-only,.cycle-status-both) > ellipse,
+.svg-frame.side-current  g.node.node-selected:is(.cycle-status-current-only,.cycle-status-both)  > polygon,
+.svg-frame.side-current  g.node.node-selected:is(.cycle-status-current-only,.cycle-status-both)  > ellipse {
+  stroke: #c00 !important; stroke-width: 3 !important;
+}
+/* Same selection highlight inside the per-node popup diagram (side + main cards). */
+#node-modal-diagram g[data-diag-node].diag-selected > rect,
+#node-modal-diagram g.mn-card.diag-selected > rect { fill: #fffde7 !important; stroke: #f9a825 !important; stroke-width: 2 !important; }
+/* Popup: cycle red stroke wins over selection, mirroring the main map. */
+#node-modal-diagram g.diag-cycle.diag-selected > rect { stroke: #c00 !important; stroke-width: 2 !important; }
+
+/* ── Hover: last → wins over selection when both classes present ─────────────── */
+.node-table tr.row-hl td { background: rgb(210,235,248); }
+.node-table tr.row-hl td[data-col="name"] { background: rgb(210,235,248); }
+g.node.node-hl { filter: drop-shadow(0 0 28px rgba(30,160,220,1)) drop-shadow(0 0 14px rgba(30,160,220,.85)) drop-shadow(0 0 6px rgba(30,160,220,.6)); }

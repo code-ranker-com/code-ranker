@@ -1,0 +1,69 @@
+function getNavParams() {
+  const p = new URLSearchParams(location.search);
+  return { level: p.get('level'), node: p.get('node'), side: p.get('side') };
+}
+// The active diff side carried in the URL — only in diff mode (a current snapshot
+// exists); review mode has a single view and omits the param.
+function navSide() {
+  return window.CURRENT && window.viewSide ? window.viewSide : null;
+}
+window.navPush = function(level, nodeId) {
+  const p = new URLSearchParams();
+  if (level)     p.set('level', level);
+  const side = navSide();
+  if (side)      p.set('side', side);
+  if (nodeId)    p.set('node', nodeId);
+  const url = p.toString() ? '?' + p : location.pathname;
+  history.pushState({ level: level ?? null, node: nodeId ?? null, side }, '', url);
+};
+// Update only the `side` param in place (Baseline/Current toggle), preserving the
+// level / node / Prompt-Generator params already in the URL.
+window.navSetSide = function() {
+  const p = new URLSearchParams(location.search);
+  const side = navSide();
+  if (side) p.set('side', side); else p.delete('side');
+  const url = p.toString() ? '?' + p : location.pathname;
+  history.replaceState({ ...(history.state || {}), side }, '', url);
+};
+function currentLevel() {
+  return document.querySelector('.view.active')?.dataset.view ?? null;
+}
+function switchToLevel(target) {
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.dataset.view === target));
+  document.querySelectorAll('.report-switch a').forEach(l => l.classList.toggle('selected', l.dataset.view === target));
+  const sec = document.querySelector('.view.active');
+  if (sec && sec.dataset.rendered !== 'true' && window.gv) renderView(sec);
+}
+function openModalForNode(nodeId, level) {
+  // Is the node on the side currently shown? (vs. only in the union/DIFF)
+  const onSide   = activeGraph(level).nodes.find(n => n.id === nodeId);
+  const nodeData = onSide ?? window.DIFF?.[level]?.nodes?.find(n => n.id === nodeId);
+  if (!nodeData) return false;
+  // Remember which node the modal shows so a baseline⇄current toggle can re-render it.
+  window._modalNode = { id: nodeId, level };
+  // Clear any tooltip anchored to the element we're about to replace.
+  window.hideMetricTooltip?.();
+  const section = document.querySelector(`.view[data-view="${level}"]`);
+  const overlay = getModal();
+  if (onSide) {
+    const mc = buildModalContent(nodeData, level);
+    document.getElementById('node-modal-hdr-title').innerHTML = mc.hdr;
+    document.getElementById('node-modal-body').innerHTML = mc.body;
+    window.setModalDiagram(mc.diagram);
+    attachModalCheckbox(nodeData, level, section);
+  } else {
+    // The node does not exist on the side now shown (a removed node viewed as
+    // current, or an added node viewed as baseline). Don't render its card or
+    // its (stale, other-side) values — just say it isn't here.
+    const side = viewModeSuffix().trim();   // 'Baseline' / 'Current' (diff mode only)
+    document.getElementById('node-modal-hdr-title').innerHTML =
+      `<span class="nm-title">${escHtml(nodeData.name || nodeId)}</span>`;
+    document.getElementById('node-modal-body').innerHTML =
+      `<div class="nm-absent">Not present in the ${escHtml(side.toLowerCase())} snapshot.</div>`;
+    window.setModalDiagram('');
+  }
+  overlay.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  window.flyoutHeader?.mount(overlay, 'modal');
+  return true;
+}

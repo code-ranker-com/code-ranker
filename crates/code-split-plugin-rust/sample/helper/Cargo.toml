@@ -1,0 +1,11 @@
+# Second workspace member, depended on by the root `rust-sample` crate via a
+# path dependency. Its submodules let the fixture exercise *cross-crate,
+# submodule-precise* edge resolution.
+[package]
+name = "helper"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "src/lib.rs"

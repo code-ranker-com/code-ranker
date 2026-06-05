@@ -1,4 +1,4 @@
-.PHONY: all build test e2e clippy lint-md lint check fmt clean bump tag release publish
+.PHONY: all build test e2e clippy lint-md lint check fmt fmt-check clean bump tag release publish
 
 all: build test lint
 
@@ -20,11 +20,15 @@ clippy:
 fmt:
 	cargo fmt --all
 
+# Mirrors CI's `Format` step — fails on unformatted code instead of rewriting it.
+fmt-check:
+	cargo fmt --all --check
+
 lint-md:
 	lychee --offline --no-progress 'docs/**/*.md' 'contrib/**/*.md' 'principles/**/*.md' 'AGENTS.md' 'CLAUDE.md'
 	npx --yes markdownlint-cli2
 
-lint: clippy lint-md
+lint: fmt-check clippy lint-md
 
 check: build test clippy lint-md
 

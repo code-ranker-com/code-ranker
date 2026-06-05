@@ -1,0 +1,63 @@
+# Publishes the code-split HTML report for the default branch to GitHub Pages,
+# so the latest structure view is always live at the repo's Pages URL — the
+# GitHub equivalent of browsing a GitLab job artifact. Dogfoods `report` (the
+# CI test job already dogfoods the `check` gate).
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Pages needs these; id-token is for the deploy attestation.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One Pages deploy at a time; don't cancel an in-flight publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build report
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Warm the cargo cache (rust plugin runs `cargo metadata --offline`)
+        # No prior build/test in this job, so $CARGO_HOME lacks the full dep
+        # graph and offline metadata resolution fails. Fetch fills it first.
+        run: cargo fetch --locked
+      - name: Generate HTML report into ./site
+        # Self-contained HTML → site/report.html (served at <pages-url>/report.html).
+        # Clean git metadata mapped from Actions vars (a detached checkout otherwise
+        # reports branch "HEAD" and counts job-written files as dirty). The JSON
+        # still goes to .code-split/ per code-split.toml; only the HTML is
+        # redirected into the Pages dir.
+        run: |
+          mkdir -p site
+          cargo run -q -p code-split -- report . \
+            --git.branch=main \
+            --git.commit="$GITHUB_SHA" \
+            --git.dirty-files=0 \
+            --git.origin="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --output.html.path=site/report.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy:
+    name: Deploy to Pages
+    needs: build
+    runs-on: ubuntu-22.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

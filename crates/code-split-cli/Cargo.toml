@@ -14,9 +14,14 @@ name = "code-split"
 path = "src/main.rs"
 
 [dependencies]
-code-split-core = { workspace = true }
-code-split-syn = { workspace = true }
+code-split-graph = { workspace = true }
 code-split-complexity = { workspace = true }
+code-split-plugin-api = { workspace = true }
+code-split-plugin-rust = { workspace = true }
+code-split-plugin-python = { workspace = true }
+code-split-plugin-javascript = { workspace = true }
+code-split-plugin-typescript = { workspace = true }
+code-split-viewer = { workspace = true }
 anyhow = { workspace = true }
 globset = { workspace = true }
 toml = { workspace = true }
@@ -25,10 +30,6 @@ clap = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 which = { workspace = true }
-tree-sitter = { workspace = true }
-tree-sitter-python = { workspace = true }
-tree-sitter-javascript = { workspace = true }
-tree-sitter-typescript = { workspace = true }
 walkdir = { workspace = true }
 
 [dev-dependencies]

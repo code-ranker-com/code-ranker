@@ -48,7 +48,7 @@ jobs:
           target: ${{ matrix.platform.target }}
           args: --release --out dist --strip
           manylinux: ${{ contains(matrix.platform.target, 'linux') && '2_28' || 'auto' }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheels-${{ matrix.platform.target }}
           path: dist/
@@ -64,7 +64,7 @@ jobs:
         with:
           command: sdist
           args: --out dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheels-sdist
           path: dist/
@@ -73,7 +73,7 @@ jobs:
     needs: [build-wheels, build-sdist]
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: wheels-*
           path: dist/

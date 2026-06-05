@@ -3,7 +3,7 @@ members = ["crates/*"]
 resolver = "3"
 
 [workspace.package]
-version = "1.0.0-alpha.3"
+version = "1.0.0-alpha.4"
 edition = "2024"
 rust-version = "1.88"
 license = "Apache-2.0"
@@ -12,9 +12,14 @@ keywords = ["dependency-graph", "coupling", "refactoring", "code-quality", "stat
 categories = ["development-tools", "command-line-utilities"]
 
 [workspace.dependencies]
-code-split-core = { path = "crates/code-split-core", version = "1.0.0-alpha.3" }
-code-split-syn = { path = "crates/code-split-syn", version = "1.0.0-alpha.3" }
-code-split-complexity = { path = "crates/code-split-complexity", version = "1.0.0-alpha.3" }
+code-split-graph = { path = "crates/code-split-graph", version = "1.0.0-alpha.4" }
+code-split-plugin-api = { path = "crates/code-split-plugin-api", version = "1.0.0-alpha.4" }
+code-split-complexity = { path = "crates/code-split-complexity", version = "1.0.0-alpha.4" }
+code-split-plugin-rust = { path = "crates/code-split-plugin-rust", version = "1.0.0-alpha.4" }
+code-split-plugin-python = { path = "crates/code-split-plugin-python", version = "1.0.0-alpha.4" }
+code-split-plugin-javascript = { path = "crates/code-split-plugin-javascript", version = "1.0.0-alpha.4" }
+code-split-plugin-typescript = { path = "crates/code-split-plugin-typescript", version = "1.0.0-alpha.4" }
+code-split-viewer = { path = "crates/code-split-viewer", version = "1.0.0-alpha.4" }
 
 anyhow = "1.0"
 globset = "0.4"
@@ -22,7 +27,6 @@ toml = "1"
 cargo_metadata = "0.18"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
-petgraph = "0.6"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 syn = { version = "2", features = ["full", "visit"] }

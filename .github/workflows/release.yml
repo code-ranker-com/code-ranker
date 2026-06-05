@@ -40,11 +40,13 @@ permissions:
 # will be marked as a prerelease.
 # NOTE: hand-edited away from cargo-dist's default tag-push trigger. Pushing a
 # tag no longer publishes — it only runs Verify. This workflow now publishes the
-# GitHub Release + binaries + npm on manual dispatch for an EXISTING tag (driven
-# by the single "Release" button, publish.yml). Re-running `dist generate` will
-# overwrite these edits — re-apply the on:/plan changes if you do.
+# GitHub Release + binaries + npm on manual dispatch ONLY, for an EXISTING tag
+# (driven by the single "Release" button, publish.yml). There is deliberately no
+# pull_request/tag trigger: `dist plan` fails its own generated-file consistency
+# check against these hand-edits, so running it on PRs only ever red-Xes them
+# (packaging is dry-run on tags by Verify instead). Re-running `dist generate`
+# will overwrite these edits — re-apply the on:/plan changes if you do.
 on:
-  pull_request:
   workflow_dispatch:
     inputs:
       tag:

@@ -1,64 +1,46 @@
-# code-split.toml — project-level configuration for code-split
-#
-plugin = "rust"   # default plugin; overridden by --plugin
-#
+# code-split.toml — project-level configuration for code-split.
+# Discovery order: --config PATH > ./code-split.toml > <target>/code-split.toml >
+# Cargo.toml [workspace.metadata.code-split]. CLI flags always win over the file.
 
-# ── Output ─────────────────────────────────────────────────────────────────────
-# Default artifact filenames for `report`. A `--json-name` / `--html-name` flag
-# still overrides these. Placeholders: {project-dir}, {ts}, {git-hash},
-# {git-hash-N} (first N chars of the commit). Built-in default if unset:
-# "{ts}-{git-hash-3}.json".
-[output]
-json-name = "{project-dir}-{ts}.json"
-html-name = "{project-dir}-{ts}.html"
+# Default plugin; overridden by --plugin. `auto` (or unset) → marker detection.
+plugin = "rust"
 
-#
-# Searched automatically (highest priority first):
-#   1. CLI flags (--ignore, --cycle-rule, --threshold)
-#   2. --config <file>
-#   3. code-split.toml  (cwd, then workspace root)
-#   4. Cargo.toml    [workspace.metadata.code-split] or [package.metadata.code-split]
-#   5. Built-in defaults
+# ── Output artifacts (`report`) ──────────────────────────────────────────────
+# One section per format. `path` is a filename template; `enabled` forces the
+# format on/off. A `--output.<fmt>.path` flag overrides `path`. Placeholders:
+# {project-dir}, {ts}, {git-hash}, {git-hash-N} (first N chars of the commit).
+# Built-in defaults if unset: .code-split/{ts}-{git-hash-3}.{json,html}.
+[output.json]
+path = ".code-split/{project-dir}-{ts}.json"
+# enabled = true
 
-# ── Ignore ─────────────────────────────────────────────────────────────────────
-# Nodes whose path matches any glob are removed before analysis.
-# Patterns are relative to the workspace root. Supports ** globs.
+[output.html]
+path = ".code-split/{project-dir}-{ts}.html"
+# enabled = true
+
+# ── Ignore filters (applied before cycles/metrics) ───────────────────────────
 [ignore]
-# Strip test files from the graph (Rust `tests/`, Python `test_*.py` / `tests/`,
-# JS/TS `*.test.*` / `__tests__/`, …). Accepts the legacy name `test_modules` too.
+# Glob patterns (repo-relative) to drop from the graph.
+paths = []
+# Skip the language's test files (the plugin decides what counts as a test:
+# Rust `#[cfg(test)]` modules, Python `test_*.py`/`tests/`, JS/TS `*.test.*` …).
+# On by default — metrics and cycles describe production code. Set false to keep.
 tests = true
+# Strip crates that appear only in [dev-dependencies].
+dev_only_crates = false
 
-paths = [
-  # "**/tests/**",
-  # "**/generated/**",
-  # "crates/*/benches/**",
-
-  # External test-only crates (dev-dependencies from registry).
-  # "rstest-*/**",
-  # "wiremock-*/**",
-]
-
-# ── Cycle rules ────────────────────────────────────────────────────────────────
-# Each cycle kind: false = off (ignored); true = strict (any cycle fails, = 0);
-# or an integer N = allow up to N cycles of that kind (the N+1-th fails — pin
-# today's count to forbid adding new ones). `check` prints the current counts.
+# ── Gate rules (`check`) ─────────────────────────────────────────────────────
+# Cycle checks per kind: on/off, or an integer budget (max allowed; the N+1-th
+# fails). `false` = disabled, `true`/0 = strict, `7` = allow up to 7.
 [rules.cycles]
-test-embed = false   # off — language feature, not a smell
-mutual     = true    # strict — two files that directly depend on each other
-chain      = true    # strict — three or more files in a dependency cycle
+mutual = true
+chain = true
 
-# ── Threshold rules ────────────────────────────────────────────────────────────
-# There is a single graph level — files — so the only scope is `file`:
-#   [rules.thresholds.file]  — limits applied to each individual file
-#
-# Available metrics: hk, cyclomatic, cognitive, fan_in, fan_out, loc
-# A set threshold fails `check` when exceeded; unset = not checked. HK and
-# fan_in/fan_out count internal file→file coupling only (external library edges
-# are excluded). Current baseline below, pasted from `check --suggest-config`.
-
+# Per-file metric thresholds (the `file` scope is the only one). Values accept
+# `_` separators and K/M/G suffixes (e.g. 1_500, 5K, 1.5M). Unset = no limit.
 [rules.thresholds.file]
-cyclomatic  = 1
-hk          = 149_058
-fan_in      = 13
-fan_out     = 7
-loc         = 1_520
+# hk = 150_000
+# cyclomatic = 25
+# cognitive = 25
+# fan_out = 18
+# loc = 800

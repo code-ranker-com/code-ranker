@@ -36,6 +36,13 @@
 
 <!-- /toc -->
 
+> **Component PRDs.** This is the product PRD — overview, actors, the
+> plugin/extraction layer, the graph model and JSON schema, and the
+> cross-cutting requirements. The two consumer components have their own PRDs:
+> the command-line interface in [`code-split-cli/PRD.md`](code-split-cli/PRD.md)
+> and the offline HTML viewer in
+> [`code-split-viewer/PRD.md`](code-split-viewer/PRD.md).
+
 ## 1. Overview
 
 ### 1.1 Purpose
@@ -234,109 +241,36 @@ required.
 
 ### 5.1 Plugin System — Step 1
 
-#### Unified Entry-Point Command
-
-- [x] `p1` - **ID**: `cpt-code-split-fr-unified-cli`
-
-All user-facing operations MUST be accessible through a single binary
-`code-split`. Running it with no command prints help — every action goes
-through an explicit subcommand; there is no default command. There are
-exactly **two** subcommands, split by *what they emit* — `check` produces
-an exit code (a CI gate), `report` produces files (a snapshot and a
-viewer):
-
-```
-code-split check  [input] [--plugin <name|auto>] [--baseline <snapshot>] [options]
-code-split report [input] [--plugin <name|auto>] [--baseline <snapshot>] [--output.<fmt>.path <path>] [options]
-```
-
-The single positional `[input]` (default `.`) is **polymorphic**: a
-**directory** is analyzed in-process (run the plugin, build the graph,
-compute metrics), while a **`.json` snapshot** or **`.html` report** is
-read for its embedded snapshot — no analysis, source tree, or toolchain
-required. Analysis-only flags (`--plugin`, `--ignore`) are rejected with a
-snapshot input.
-
-- `check` is the linter: it evaluates cycle rules and thresholds, prints
-  diagnostics, exits non-zero on any violation, and writes **no files**.
-  With `--baseline <snapshot>` it switches to a **relative gate** that
-  fails only on *new* violations versus the baseline (pre-existing ones
-  tolerated) and emits a verdict (`improved` / `degraded` / `neutral`); a
-  machine-readable verdict is produced with `--output-format json`.
-- `report` writes artifacts (a JSON snapshot and/or an HTML viewer) and
-  always exits `0`. Without `--baseline` the HTML is a single-snapshot
-  viewer; with `--baseline <snapshot>` it becomes a baseline↔current diff
-  view with a verdict, named `…-diff.html`.
-
-`report` selects artifacts and their destinations through one flag family,
-`--output.<fmt>.path <path>` (`<fmt>` is `json` or `html`). When no
-`--output.*` flag is given it writes **both** formats with default names
-into `.code-split/`: `{ts}-{git-hash-3}.json` and `{ts}-{git-hash-3}.html`,
-e.g. `.code-split/20260526-114144-a3f.json` (`{ts}` is a local
-`YYYYMMDD-HHMMSS` timestamp, `{git-hash-3}` the first three chars of the
-commit). When one or more `--output.<fmt>.path` are given, **exactly** the
-listed formats are written. The `.path` value is a file path (or a name
-template, or `stdout`/`-` to stream the artifact); it supports placeholders
-`{project-dir}` (slugified workspace name), `{ts}`, `{git-hash}` (the
-12-char short commit) and `{git-hash-N}` (its first N chars). The
-destination resolves as **`--output.<fmt>.path` flag › `[output.<fmt>]
-path` in `code-split.toml` › built-in default**, so a project can pin its
-own naming while a flag still wins for named states (e.g., `pr.json`). With
-`--baseline`, the HTML default gains a `-diff` marker
-(`{ts}-{git-hash-3}-diff.html`); the JSON artifact is always the current
-snapshot, never a diff. No additional registry is created.
-
-Each snapshot is a **single self-contained `.json` file** combining
-metadata (command, versions, git state) and the one `files` graph. See
-`cpt-code-split-fr-snapshot-meta` for the full schema.
-
-The snapshot is written as **canonical JSON**: every object key is emitted
-in alphabetical order and the `nodes` / `edges` arrays are sorted by a
-stable key (node `id`; edge `from`/`to`/`kind`). Re-analyzing unchanged
-code therefore yields byte-identical graph data — no churn from map
-iteration order — which keeps committed snapshots (e.g. the `samples/`
-goldens) diff-clean and makes a baseline comparison reflect only real changes.
-
-A `--baseline` comparison consumes snapshot files produced by `report` and
-is plugin-agnostic. Splitting into separate binaries is forbidden at
-P1; the separation of concerns lives inside the binary.
-
-**Rationale**: One file per snapshot is easier to copy, archive, attach
-to CI artifacts, and pass as a `--baseline`. A timestamped, commit-stamped
-filename (`{ts}-{git-hash-3}`) means users never have to think about naming
-for routine snapshots while keeping per-commit runs distinct; the
-`[output.<fmt>]` config sets a project-wide template and an explicit
-`--output.<fmt>.path` is available for named states (e.g.,
-`snap-before-refactor.json`).
-
-**Actors**: `cpt-code-split-actor-developer`, `cpt-code-split-actor-ci`
+> **Moved.** The unified entry-point command (`cpt-code-split-fr-unified-cli`)
+> — the `check` / `report` subcommands, the polymorphic `[input]`, and the
+> `--output.<fmt>.path` artifact selection — is specified in
+> [`code-split-cli/PRD.md`](code-split-cli/PRD.md). The snapshot it writes is a
+> single self-contained `.json` file; its schema is `cpt-code-split-fr-snapshot-meta`
+> below.
 
 #### Snapshot File Format
 
 - [x] `p1` - **ID**: `cpt-code-split-fr-snapshot-meta`
 
-Each `code-split report` run produces a single `.json` file. The file
-combines metadata and the one `files` graph in one document:
+Each `code-split report` run produces a single `.json` file
+(`schema_version: "2"`). The file combines metadata and the `graphs` map (one
+entry per analysis level — today only `files`) in one document. Each level
+bundles its semantics dictionaries with the structural graph and computed data
+(see §7.3 for the full shape):
 
 ```json
 {
-  "schema_version": "1",
+  "schema_version": "2",
   "generated_at": "2026-05-22T11:22:33Z",
   "command": "code-split report /path/to/axum-api --plugin rust",
   "workspace": "/Users/alice/projects/code-split",
   "target":    "/Users/alice/projects/axum-api",
   "plugin": "rust",
   "config_file": "/Users/alice/projects/axum-api/code-split.toml",
-  "versions": {
-    "code-split": "0.3.1",
-    "plugin_rust": "0.3.1",
-    "rustc": "1.78.0"
-  },
+  "versions": { "code-split": "1.0.0-alpha.4", "rustc": "1.78.0" },
   "roots": {
-    "cargo":    "/Users/alice/.cargo",
     "registry": "/Users/alice/.cargo/registry/src/index.crates.io-abc123",
-    "rustup":   "/Users/alice/.rustup",
-    "rust-src": "/Users/alice/.rustup/toolchains/stable-aarch64-apple-darwin/lib/rustlib/src/rust/library"
+    "target":   "/Users/alice/projects/axum-api"
   },
   "git": {
     "branch": "refactor/split-handlers",
@@ -345,45 +279,48 @@ combines metadata and the one `files` graph in one document:
     "origin": "git@gitlab.example.com:team/axum-api.git"
   },
   "timings": [
-    { "stage": "syn",        "ms": 600, "detail": "547 module nodes" },
-    { "stage": "complexity", "ms": 700, "detail": "147 files annotated" },
-    { "stage": "collapse",   "ms": 5,   "detail": "files=512 external=38" },
-    { "stage": "write",      "ms": 20,  "detail": "/path/to/snap.json" }
+    { "stage": "rust",       "ms": 600, "detail": "547 nodes from 512 files" },
+    { "stage": "complexity", "ms": 700, "detail": "512 nodes annotated" },
+    { "stage": "projection", "ms": 5,   "detail": "nodes=550 edges=1320" }
   ],
   "graphs": {
-    "files": { "nodes": [...], "edges": [...], "stats": { ... } }
+    "files": {
+      "edge_kinds": { ... }, "node_attributes": { ... },
+      "edge_attributes": { ... }, "attribute_groups": { ... },
+      "nodes": [...], "edges": [...], "cycles": [...], "stats": { ... }
+    }
   }
 }
 ```
 
 Top-level fields:
 
-- `schema_version` — version of the snapshot file format
+- `schema_version` — `"2"` (the generic property-graph format)
 - `generated_at` — ISO-8601 timestamp
 - `command` — full command line as typed
 - `workspace` — absolute path to the directory where `code-split` was invoked
 - `target` — absolute path to the analyzed project
-- `plugin` — resolved built-in plugin name (`rust`, `python`, or `javascript`)
-- `config_file` — absolute path of the config file used (`code-split.toml` or `Cargo.toml#metadata.code-split`); omitted when no config file was found
-- `versions` — `code-split` semver at minimum; the Rust plugin adds
-  `plugin_rust` and `rustc`; other built-in plugins add `plugin_<name>`
-  for the language they analyze
-- `roots` — named system prefixes used to relativize node paths
-  (e.g. `{cargo}`, `{registry}`, `{rustup}`, `{rust-src}`); resolve formula:
-  `roots[name] + "/" + rest` gives the absolute path. The Rust plugin
-  auto-detects `rust-src` from `rustc --print sysroot` to shorten stdlib
-  paths (e.g. `{rust-src}/alloc/src/vec/mod.rs`). Roots that did not
-  shorten any node path are pruned, so a JS/TS/Python snapshot carries no
-  Rust toolchain roots (only `{target}`)
-- `git` — `branch`, `commit` (12-char short SHA), `dirty_files` (count from
-  `git status --porcelain`), and `origin` (the `remote.origin.url`, used by
-  the HTML viewer to build "open in GitLab/GitHub" source links; omitted when
-  there is no origin remote); omitted entirely if not a git repository
-- `timings` — per-stage wall-clock timings in milliseconds, in execution
-  order; each entry has `stage` (name), `ms` (elapsed), `detail` (human
-  summary); omitted when empty
-- `graphs` — object with a single key: `files`; its value is a graph
-  object with `nodes` and `edges` arrays
+- `plugin` — resolved built-in plugin name (`rust` / `python` / `javascript` / `typescript`)
+- `config_file` — absolute path of the config file used; omitted when none was found
+- `versions` — `code-split` semver at minimum; the Rust plugin adds `rustc`
+- `roots` — named system prefixes used to relativize node ids/paths
+  (`roots[name] + "/" + rest` → absolute path). Roots that did not shorten any
+  path are pruned, so a JS/TS/Python snapshot carries only `{target}` and a Rust
+  snapshot `{target}` + `{registry}`
+- `git` — `branch`, `commit` (12-char short SHA), `dirty_files`, and `origin`;
+  the whole block omitted if not a git repository. Each field is read from `git`
+  but can be overridden with a `--git.<field>` flag (for CI, where a detached
+  checkout otherwise reports the branch as `HEAD` and job-written files inflate
+  the dirty count); when `branch`, `commit`, and `dirty-files` are all supplied,
+  `git` is not invoked at all
+- `timings` — per-stage wall-clock timings (`stage`, `ms`, `detail`), in
+  execution order; omitted when empty
+- `graphs` — a map `level_name → level`; today the only key is `files`. Each
+  level carries the four semantics dictionaries (`edge_kinds`,
+  `node_attributes`, `edge_attributes`, `attribute_groups`) plus `nodes`,
+  `edges`, `cycles`, `stats`, and a computed `ui` block (column/sort/size order
+  and an optional `grouping` telling the viewer how to cluster nodes — e.g.
+  `{ "key": "crate" }`)
 
 `code-split report` and `code-split check` (with `--baseline`) read
 snapshot files and embed the top-level metadata in the generated HTML as a
@@ -400,10 +337,10 @@ filename makes snapshots self-organizing without a registry.
 
 - [x] `p1` - **ID**: `cpt-code-split-fr-plugin-discovery`
 
-The plugins are built into the `code-split` binary; the only valid plugin
-names are `rust`, `python`, and `javascript` (covers JS+TS). The
-`--plugin <name>` option (on `check` / `report`) selects one of these
-built-ins. There is no external or dynamic plugin loading.
+The plugins are built into the `code-split` binary; the valid plugin names are
+`rust`, `python`, `javascript`, and `typescript` (JS and TS are **separate**
+plugins, no aliases). The `--plugin <name>` option (on `check` / `report`)
+selects one of these built-ins. There is no external or dynamic plugin loading.
 
 The plugin is resolved in the following order, stopping at the first match:
 
@@ -413,7 +350,9 @@ The plugin is resolved in the following order, stopping at the first match:
    `Cargo.toml#metadata.code-split`), if set and not `auto`.
 3. Otherwise **auto-detect by project markers** in the workspace root
    (`Cargo.toml` → `rust`; `pyproject.toml` / `setup.py` / `setup.cfg`
-   → `python`; `package.json` / `tsconfig.json` → `javascript`).
+   → `python`; `package.json` → `javascript`; `tsconfig.json` → `typescript`).
+   A project carrying both `package.json` and `tsconfig.json` is ambiguous and
+   requires an explicit `--plugin`.
 
 If `--plugin` resolves to a name that is not a built-in, or if `auto`
 detection finds more than one marker or none, the analyzing command MUST
@@ -446,32 +385,62 @@ workspaces. The plugin MUST:
   `External` library nodes (`ext:<name>`) recorded at depth 1, never
   expanded; edges into them are flagged `external: true`. Each `External`
   node carries the resolved `version` and its cargo-cache `path` (from
-  `cargo metadata`). A dependency on another **local workspace crate**
-  becomes a file→file edge to that crate's root file (`lib.rs` / `main.rs`)
+  `cargo metadata`). A dependency on another **local workspace crate** is
+  resolved **submodule-precise**: `other_crate::sub::Item` walks that crate's
+  library module index to the file that owns `Item` (→ its `sub.rs`); a path
+  that stops at a crate-root item falls back to the root file (`lib.rs` /
+  `main.rs`). A registry crate (no local library index) collapses to its
+  `External` node. Resolution is **re-export-aware**, intra- and cross-crate: a
+  `crate::X` / `super::X` / `other_crate::X` whose trailing segment is
+  `pub use`-re-exported by the resolved module follows the re-export chain to the
+  file that **defines** `X`, not the facade (`lib.rs` / `mod.rs`) — so a widely
+  re-exported type lands on its defining file, not a 17-line crate-root hub.
+  Module ids are namespaced **per target**, so a package
+  with a library and a same-named binary (`bat` lib + `bat` bin) does not collide
+  their roots (which would mis-resolve library `crate::X` onto the binary's
+  `main.rs`). Each file node records its owning crate (per-target) as a `crate`
+  attribute
 - Capture **bare qualified paths** in expressions/types (`commands::run()`,
   `other_crate::item`, `crate::a::Alpha` with no `use`), resolved the same
   way as `use`, so both intra-crate and cross-crate dependencies referenced
   only by qualified path are not lost
+- Capture **qualified paths inside `#[derive(...)]`** (e.g.
+  `#[derive(serde::Serialize)]` with no `use serde`) so a crate used only
+  through a derive still gets an edge, and honour **`#[path = "…"]`** on a
+  `mod` (resolved relative to the declaring file's directory) so a module whose
+  backing file sits at a non-default location is walked and its edges captured
 - NOT emit a function-level call graph (no `Calls` edges, no
   rust-analyzer / `ra_ap_*` dependency); analysis runs in seconds
-- Compute per-file code complexity metrics (cyclomatic, cognitive,
-  Halstead, maintainability index, LOC variants, functions, closures,
-  nexits, nargs) for each `File` node via `code-split-complexity`;
-  metrics are stored in the `complexity` field of the node and
-  serialized into the snapshot
-- Detect dependency cycles (Kosaraju SCC) in the file graph; annotate
-  each node in a cycle with `cycle_kind` (`TestEmbed` | `Mutual` |
-  `Chain`) and store `CycleGroup` entries in `Graph.cycles`
-- Compute Henry-Kafura complexity (`HK = LOC × (fan_in × fan_out)²`)
-  for every file node from **internal** file→file edges; store in
-  `complexity.coupling` (`fan_in`, `fan_out`, `fan_out_external`, `hk`).
-  Edges to `External` nodes are excluded from `fan_in`/`fan_out`/`hk`
-  and counted in `fan_out_external` instead
+- Emit **structure only** (file + external nodes, `uses`/`contains`/`reexports`/`super`
+  edges). The downstream pipeline then enriches every file node centrally
+  (language-agnostically): per-file complexity metrics (cyclomatic, cognitive,
+  Halstead, maintainability index, LOC variants) via `code-split-complexity`;
+  dependency cycles (Kosaraju SCC over flow edges) annotated as a `cycle` node
+  attribute (`mutual` | `chain`) with `CycleGroup` entries, with
+  any SCC that spans more than one crate dropped (Rust forbids circular crate
+  dependencies); `reexports` is **non-flow** (a `pub use` facade is not a
+  dependency), so it is excluded from cycles **and** fan-in / HK and is not drawn,
+  exactly like `contains`. A glob `use` that pulls in an **enclosing** module's
+  namespace (`use super::*`, `use crate::<ancestor>::*`) is emitted as the
+  separate **non-flow** kind `super` rather than `uses`: it is scope-sugar (a
+  module split across files reaching back into itself), not a real outward
+  dependency, so — like `contains`/`reexports` — it is kept in the data but
+  excluded from cycles / fan-in / fan-out / HK and not drawn. A glob that pulls
+  in a *child* module, or any **named** import of a parent item
+  (`use crate::parent::Item`, `super::Item`), stays a real `uses` edge. And
+  Henry-Kafura (`HK = sloc × (fan_in × fan_out)²`) — all written into the node's
+  flat `attrs`. Edges to external nodes are excluded from `fan_in`/`fan_out`/`hk`
+  and counted in `fan_out_external` instead. The Rust plugin additionally
+  supplies language-calibrated `thresholds()` for `hk`/`sloc`/`fan_out`/`items`,
+  and extends the Prompt-Generator catalog via its `presets()` hook with four
+  metric-lens presets — `HK`, `SLOC`, `FANIN`, `FANOUT` — that rank modules by a
+  single coupling/size metric (`hk`/`sloc`/`fan_in`/`fan_out`) rather than a
+  design principle, documented under `principles/rust/`
 
 **Rationale**: Rust is the primary use-case for the initial release.
-The `code-split-syn` analysis crate plus the module→file collapse pass
-in `code-split-cli` implement this plugin. Removing rust-analyzer makes
-the Rust path fast and the binary light.
+The `code-split-plugin-rust` crate (cargo metadata + `syn`, including the
+module→file collapse pass) implements this plugin. Removing rust-analyzer
+makes the Rust path fast and the binary light.
 
 **Actors**: `cpt-code-split-actor-developer`
 
@@ -541,8 +510,8 @@ at the package file), and imports that do not resolve to a project file
 become `External` library nodes (`ext:<top-level-package>`, e.g.
 `numpy`) reached by a `uses` edge flagged `external: true`. Per-file
 complexity metrics (cyclomatic, cognitive, Halstead, MI, LOC, functions,
-nexits, nargs) are annotated on each `File` node via
-`code-split-complexity` using `rust-code-analysis`'s `PythonParser`.
+nexits, nargs) are annotated on each `File` node via the shared
+`code-split-plugin` complexity engine using `rust-code-analysis`'s `PythonParser`.
 
 **JavaScript / TypeScript plugin** (`--plugin javascript`) is shipped as a
 built-in in `code-split-cli`; one plugin handles `.js`, `.jsx`, `.ts`, and
@@ -563,353 +532,33 @@ diff layer.
 
 **Actors**: `cpt-code-split-actor-developer`
 
-#### Configuration System
-
-- [x] `p1` - **ID**: `cpt-code-split-fr-config`
-
-The analyzing commands (`check` / `report`) MUST load a layered
-configuration from multiple sources. Priority order (highest wins for
-scalars; `ignore.paths` is merged):
-
-| Priority | Source |
-|---|---|
-| 1 | CLI flags (`--ignore`, `--cycle-rule`, `--threshold`, `--plugin`, `--output.<fmt>.path`) |
-| 2 | `--config KEY=VALUE` inline overrides (dotted key into the config schema) |
-| 3 | `--config <file>` |
-| 4 | `code-split.toml` in cwd, then in target directory |
-| 5 | `Cargo.toml` `[workspace.metadata.code-split]` / `[package.metadata.code-split]` |
-| 6 | Built-in defaults |
-
-**Config file keys** (`code-split.toml` or `Cargo.toml` metadata section):
-
-```toml
-plugin = "auto"          # default plugin; "auto" detects by project markers, overridden by --plugin
-
-[ignore]
-paths        = ["**/generated/**"]  # glob patterns matched against node path
-tests        = true      # strip test files from the graph (legacy alias: test_modules)
-dev_only_crates = true   # strip crates reachable only via [dev-dependencies]
-                         # (uses `cargo metadata` for transitive accuracy)
-
-[rules.cycles]
-test-embed = false       # default: off  (Rust #[cfg(test)] back-edge)
-mutual     = true        # default: on
-chain      = true        # default: on
-
-[rules.thresholds.file]      # a single file (files graph)
-loc        = 800
-hk         = 500_000
-cyclomatic = 10
-
-[output.json]                # default JSON snapshot destination (report command)
-path    = "{project-dir}-{ts}.json"   # placeholders: {project-dir} {ts} {git-hash} {git-hash-N}
-enabled = true               # whether to write this format by default
-
-[output.html]                # default HTML viewer destination (report command)
-path    = "{project-dir}-{ts}.html"   # a --output.html.path flag still overrides
-enabled = true
-```
-
-**CLI flags**:
-
-- `--plugin <NAME|auto>` — override default plugin (`auto` detects by markers)
-- `--output.<fmt>.path <PATH>` (`report`; `<fmt>` is `json` or `html`) — select
-  that artifact format and set its destination (a path, a name template with
-  placeholders `{project-dir}`, `{ts}`, `{git-hash}`, `{git-hash-N}`, or
-  `stdout`/`-`); wins over `[output.<fmt>] path`; built-in default
-  `{ts}-{git-hash-3}`. Presence of any `--output.*` flag selects exactly the
-  listed formats; with none, both `json` and `html` are written
-- `--baseline <SNAPSHOT>` (`check` / `report`) — compare the current `[input]`
-  against this baseline snapshot (`.json` or `.html`); on `check` it switches
-  to a relative gate (fail only on new violations), on `report` it turns the
-  HTML into a baseline↔current diff with a verdict
-- `--config <PATH | KEY=VALUE>` — load config from an explicit file path, or
-  override a single setting inline via a dotted key (repeatable; inline wins)
-- `--ignore <GLOB>` — add a path glob (repeatable, merged with file)
-- `--cycle-rule <KIND=on|off|N>` — configure a cycle check: `on` (any cycle of
-  that kind fails), `off` (ignored), or an integer `N` (allow up to `N`, fail on
-  the `N+1`-th — e.g. `chain=7` to pin today's count and forbid new ones)
-- `--threshold <file.METRIC=N>` — set a per-file threshold (e.g.
-  `file.loc=800`, `file.cyclomatic=10`); a breach fails the check (`check`
-  only). The scope is always `file` (a single source file). `N` accepts `_`
-  separators and `K`/`M`/`G` suffixes (e.g. `file.hk=5M`)
-- `--top <N>` — report only the `N` worst violations (`check` only); reporting
-  limit, does not change the exit code
-- `--exit-zero` — exit 0 even when violations are found (`check` only,
-  collect-only mode)
-- `--suggest-config` — also print the current values as a ready-to-paste
-  `code-split.toml` baseline (`check` only; off by default)
-
-**No severity levels**: there is no warning tier — `check` either passes or fails.
-A threshold is set or unset; a cycle kind is off, strict (`on`/`0`), or carries a
-count budget `N` (up to `N` cycles of that kind allowed). A budget lets teams pin
-today's cycle count and fail only on regressions, without fixing the backlog first.
-
-**Rule ids and self-contained diagnostics**: every violation is identified by its
-dotted rule id — the same string used as the config key and CLI flag (e.g.
-`threshold.file.loc`) — and tagged with a concern group: `CYC` (dependency
-cycles), `CPX` (complexity), `CPL` (coupling), `SIZ` (size). The full reference is
-documented in [ERRORS.md](ERRORS.md). The default `human` output renders each
-finding as a self-contained block — rule id, group, location (`id — path:line`),
-measurement, rationale, fix, and the flag/config key that tunes the rule — so a
-single block copied from the terminal is a complete prompt for an AI assistant.
-The rule id and group are carried in every `--output-format` (block header,
-`json` `rule`/`group` fields, `github` annotation title, `sarif` `ruleId` plus a
-fired-rules `tool.driver.rules` catalog).
-
-**Current-values config block (`--suggest-config`)**: with `--suggest-config`,
-`human` output prints — after the findings — the project's current measured values
-as ready-to-paste `code-split.toml` blocks: the `[rules.cycles]` counts per kind,
-and the per-file thresholds (the worst single unit). A team copies the block to pin today's numbers as a baseline that passes
-now and fails on regression. Off by default; the machine formats
-(`json`/`github`/`sarif`) omit it.
-
-The path of the config file actually used is recorded in the snapshot as `config_file`.
-
-**Invalid configuration is fatal**: a malformed config file, an unknown threshold
-scope/metric, or a bad inline `--config` / `--threshold` / `--cycle-rule` value
-aborts the command with a non-zero exit and a clear message — the tool never
-silently falls back to defaults, which would drop the user's rules and let
-`check` pass when it should fail (a false green for a CI gate).
-
-**Rationale**: Teams need to suppress expected patterns (e.g. `test-embed`
-cycles, dev-only crate noise) and enforce structural budgets in CI without
-modifying source code.
-
-**Actors**: `cpt-code-split-actor-developer`, `cpt-code-split-actor-ci`
+> **Moved.** The layered configuration system (`cpt-code-split-fr-config`) —
+> source priority, `code-split.toml` keys, the CLI flags, rule ids and
+> self-contained diagnostics — is specified in
+> [`code-split-cli/PRD.md`](code-split-cli/PRD.md). See also
+> [`code-split-cli/config.md`](code-split-cli/config.md) for the full schema and
+> [`code-split-cli/ERRORS.md`](code-split-cli/ERRORS.md) for the rule reference.
 
 ### 5.2 Visualization Reports — Step 2
 
-#### HTML Report Generation
-
-- [x] `p1` - **ID**: `cpt-code-split-fr-html-report`
-
-The `code-split report` subcommand MUST analyze the workspace and, when the
-`html` artifact is selected (the default set is both `json` and `html`),
-generate a single self-contained offline HTML file alongside the snapshot
-`.json`. The HTML MUST include:
-
-- Interactive file-graph visualization, with `external` library nodes
-  shown in a distinct amber colour (dashed edges)
-- A coupling metrics table showing node weight (fan-in + fan-out) for
-  each file
-- All JavaScript and CSS inlined (no CDN or external resources)
-
-**Rationale**: A self-contained HTML file requires no server, no
-internet, and no installed dependencies to view — maximizing
-accessibility for developers and reviewers on any machine.
-
-**Actors**: `cpt-code-split-actor-developer`, `cpt-code-split-actor-tech-lead`
-
-#### Node Sorting by Weight
-
-- [x] `p1` - **ID**: `cpt-code-split-fr-node-sorting`
-
-The HTML report MUST allow the user to sort files by coupling weight
-(fan-in + fan-out edge count). The report MUST display the top-N
-heaviest files prominently. Sorting MUST be performed client-side within
-the HTML (no server required).
-
-**Rationale**: The heaviest nodes are the most likely candidates for
-refactoring. Surfacing them first reduces the time to actionable insight.
-
-**Actors**: `cpt-code-split-actor-developer`, `cpt-code-split-actor-tech-lead`
-
-#### AI Prompt Generator (P2)
-
-- [x] `p2` - **ID**: `cpt-code-split-fr-ai-prompts`
-
-The HTML report SHOULD include a UI control that generates a prompt for
-an LLM, pre-populated with the top-N heaviest nodes and their coupling
-context, asking for refactoring recommendations. The prompt format MUST
-be copyable as plain text for direct paste into any LLM interface.
-
-**Rationale**: Connecting structural data to an LLM's reasoning closes
-the loop between measurement and advice without coupling the offline
-tool to a specific LLM provider.
-
-**Actors**: `cpt-code-split-actor-developer`, `cpt-code-split-actor-tech-lead`
-
-#### Principles-Based Prompt Generation (P3)
-
-- [x] `p3` - **ID**: `cpt-code-split-fr-principles-prompts`
-
-The HTML report SHOULD support a principles-audit prompt mode that maps
-the top coupling findings to the canonical principle corpus under
-`principles/<language>/` (currently `rust/`, `python/`, `typescript/`)
-and instructs the LLM to audit the codebase against each principle.
-
-**Actors**: `cpt-code-split-actor-developer`, `cpt-code-split-actor-tech-lead`
+> **Moved.** The visualization / HTML report requirements are specified in
+> [`code-split-viewer/PRD.md`](code-split-viewer/PRD.md): HTML report generation
+> (`cpt-code-split-fr-html-report`), node sorting by weight
+> (`cpt-code-split-fr-node-sorting`), the AI Prompt Generator
+> (`cpt-code-split-fr-ai-prompts`, whose CLI counterpart is the `recommend`
+> module), and principles-based prompt generation
+> (`cpt-code-split-fr-principles-prompts`).
 
 ### 5.3 Baseline Comparison — Step 4
 
-#### Graph Diff Engine
-
-- [x] `p1` - **ID**: `cpt-code-split-fr-graph-diff`
-
-With `--baseline <snapshot>`, `code-split report` MUST compute a structured
-diff between the baseline snapshot and the current `[input]`: nodes and
-edges added, removed, or affected. The diff MUST include an overall
-verdict: `improved`, `degraded`, or `neutral`. The interactive
-diff HTML uses Graphviz WASM (bundled in the binary) for client-side
-DOT→SVG layout with directory cluster grouping; there is a single Files
-view (no level switcher). The map is laid out **once** from the **union**
-of both snapshots (Graphviz computes a single set of node positions); the
-`[data-side]` Baseline/Current buttons are then a pure CSS visibility flip —
-current-only (added) elements are hidden on the Baseline side, baseline-only
-(removed) elements on the Current side — so every file present on both sides
-keeps its exact position and never moves when toggling. **Current is shown by
-default.** In the metric node-size modes (SLOC/HK) each circle is resized
-to the active side's value around its fixed centre (a file that grew or
-shrank changes size, not position). The active side is reflected
-throughout: the `side=baseline|current` URL parameter, the node-table title
-(`Details` / `Details Baseline` / `Details Current`), and a `Baseline` /
-`Current` badge on the node-popup and Prompt-Generator headers. The two header
-slots are the **current** (right) — the primary snapshot the report is
-about, always present and **not removable** — and an optional **baseline**
-(left, editable, removable). With no baseline it is
-single-snapshot **review** mode: the baseline slot is an empty, editable
-placeholder (`↑ Set baseline`) and the Baseline/Current buttons are hidden;
-loading a baseline turns the report into a diff. Each header slot's hover
-tooltip is labelled `Baseline` / `Current` and notes which side is currently
-shown; that slot is also highlighted in the header. Two buttons swap in a
-different snapshot from disk (each accepts a `.json` snapshot or an `.html`
-report): **↑ Replace current** changes the evaluated snapshot, **↑ Set
-baseline** loads a reference to diff against. Cycle detection
-(Tarjan SCC) runs in-browser and annotates nodes/edges for red-stroke
-highlighting (solid red, no dasharray); the highlight is **side-aware** —
-a `baseline-only` cycle is red only on the Baseline side, `current-only` only
-on Current, `both` on either, so a cycle removed in the current snapshot
-stops being red once you switch to Current. Internal `file` nodes render
-blue; `external` library nodes render amber with dashed edges. The node
-table column order is: checkbox, Name, Kind, Cycle, Status, LOC, HK,
-Fan-in, Fan-out, H.vol, H.bugs, H.effort, H.time, H.len, H.vocab,
-Cyclomatic, Cognitive, MI, MI SEI, Logical, Comments, Blank. A checkbox column
-(leftmost) enables persistent multi-node selection (shared across
-Baseline/Current by node id — a file present in both snapshots stays selected
-when toggling; the selected-row count reflects the active side): clicking a checkbox
-highlights the row (yellow) and the corresponding SVG node (yellow fill
-- amber stroke); shift-click selects a range; the header checkbox
-selects or deselects all visible rows (indeterminate when partial).
-Selection also works directly on the map: **holding Shift** turns the main
-diagram into a selection surface (the cursor changes over the SVG), and
-Shift-clicking an SVG node toggles its selection — exactly like ticking its
-table checkbox, kept in sync — instead of opening the modal. Holding the
-**"open source" modifier** — **⌘ on macOS, Ctrl elsewhere** (Ctrl is left
-alone on macOS, where it maps to right-click) — likewise changes the cursor
-and turns a node click into "open source": it opens the file on the project's
-git host (from `git.origin`) in a new tab instead of the modal (project files
-only). While either modifier is held — or the cursor hovers the right edge — the map's
-right-side controls (zoom and node-size) and a bottom-left shortcut legend are
-revealed; the legend spells out the active keys for the platform (⌘ on macOS,
-Ctrl elsewhere).
-The modal popup opened by clicking a row or an SVG node is fullscreen
-(locks body scroll); it includes a synced selection checkbox, fields in
-order id (⎘ copy) → path (⎘ copy, filename bold) → source (a link to the
-file on the project's git host, built from `git.origin`; project files
-only) → kind → visibility → items/methods → cycle info → status → metric
-sections in a single column. Hover highlight (blue drop-shadow) takes CSS
-priority over selection highlight. **Space** toggles the selection checkbox
-while the popup is open. The popup's neighbourhood diagram mirrors the map's
-gestures — Shift-click toggles a node's selection, ⌘/Ctrl-click opens its
-source — and shows the same yellow highlight for nodes already selected; its
-3rd-party (external) cards and arrows are drawn grey and are inert (not
-selectable, no source, no ⌘-navigation).
-
-**Rationale**: The diff is the quantitative answer to "did my
-refactoring reduce coupling?" Without it, the user must compare two
-static visualizations manually.
-
-**Actors**: `cpt-code-split-actor-developer`, `cpt-code-split-actor-tech-lead`,
-`cpt-code-split-actor-pr-reviewer`
-
-#### Diff HTML Report
-
-- [x] `p1` - **ID**: `cpt-code-split-fr-diff-html-report`
-
-`code-split report --baseline` MUST generate a single self-contained
-offline HTML report displaying:
-
-- Added / removed / affected files and edges, color-coded by per-node diff
-  state (added, removed, affected, unchanged)
-- Cycle detection: files/edges in dependency cycles annotated with
-  `baseline-only` / `current-only` / `both` / `none` status and red-stroke
-  highlighting
-- `external` library nodes shown in a distinct amber colour with dashed
-  edges to distinguish them from internal file edges
-- Diff summary table: node/edge counts and cycle counts (SCCs, nodes in
-  cycles), baseline vs current with Δ
-- All JavaScript and CSS bundled locally (no CDN or external resources)
-
-**Rationale**: Self-contained HTML is viewable without tooling and
-suitable for attaching to PRs or sharing with stakeholders.
-
-**Actors**: `cpt-code-split-actor-developer`, `cpt-code-split-actor-tech-lead`,
-`cpt-code-split-actor-pr-reviewer`
-
-#### Machine-Readable Comparison Verdict
-
-- [x] `p1` - **ID**: `cpt-code-split-fr-compare`
-
-`code-split check --baseline <snapshot> --output-format json` MUST compare
-the current `[input]` against the baseline snapshot and emit a
-machine-readable verdict and new-violation summary to stdout. The verdict is
-`improved`, `degraded`, or `neutral`; the gate is **relative** — it fails
-only on violations not already present in the baseline.
-
-JSON summary:
-
-```json
-{
-  "schema_version": "1",
-  "baseline": { "target": "…", "branch": "…", "commit": "…" },
-  "current":  { "target": "…", "branch": "…", "commit": "…" },
-  "verdict": "degraded",
-  "identical": false,
-  "files":     { "nodes": { "added": 0, "removed": 0, "affected": 0, "unchanged": 26 },
-                 "edges": { … }, "cycle_nodes_baseline": 10, "cycle_nodes_current": 10,
-                 "sccs_baseline": 4, "sccs_current": 4 }
-}
-```
-
-The human-facing counterpart is `code-split report --baseline`, which writes
-an interactive diff HTML viewer. That report is **fully self-contained**: it
-embeds all JS/CSS assets (including Graphviz WASM) inline **and** embeds both
-snapshots inline as `<script type="application/json">` data tags
-(`cs-baseline` / `cs-current`), so the single `.html` file opens straight
-from disk with no relative-path reference and no separate snapshot files
-needed. This is the CI-shareable artifact.
-
-**Rationale**: `check --baseline` is the machine gate (an exit code and a
-JSON verdict for CI), while `report --baseline` is the shareable human diff
-viewer — the same comparison surfaced two ways.
-
-**Actors**: `cpt-code-split-actor-developer`, `cpt-code-split-actor-ci`,
-`cpt-code-split-actor-pr-reviewer`
-
-#### Text Change Report
-
-- [x] `p1` - **ID**: `cpt-code-split-fr-diff-text-report`
-
-`code-split check --baseline <snapshot> --output-format json` emits a
-structured JSON summary (see `cpt-code-split-fr-compare`) embeddable in CI
-logs and PR comments. The JSON contains the verdict, node/edge counts and
-delta per level, plus cycle SCC counts.
-
-**Actors**: `cpt-code-split-actor-ci`, `cpt-code-split-actor-pr-reviewer`
-
-#### CI Diff Integration (P2)
-
-- [x] `p2` - **ID**: `cpt-code-split-fr-ci-diff`
-
-`code-split check --baseline <snapshot>` SHOULD act as a CI regression
-gate: exit non-zero when the current tree introduces *new* violations
-versus the baseline (e.g. new cycles added, HK degraded beyond a limit).
-The base-branch snapshot is fetched from a stored CI artifact; the verdict
-JSON (`--output-format json`) and the `report --baseline` diff HTML are
-attached to the pull request automatically.
-
-**Actors**: `cpt-code-split-actor-ci`, `cpt-code-split-actor-pr-reviewer`
+> **Moved — split across the two component PRDs.** The interactive HTML diff
+> viewer (`cpt-code-split-fr-graph-diff`, `cpt-code-split-fr-diff-html-report`)
+> is specified in [`code-split-viewer/PRD.md`](code-split-viewer/PRD.md). The
+> machine gate and structured verdict (`cpt-code-split-fr-compare`,
+> `cpt-code-split-fr-diff-text-report`, `cpt-code-split-fr-ci-diff`) are
+> specified in [`code-split-cli/PRD.md`](code-split-cli/PRD.md). The diff itself
+> is computed browser-side from the two embedded snapshots; the relative gate
+> (`check --baseline`) is rule-based, not count-based.
 
 ## 6. Non-Functional Requirements
 
@@ -950,10 +599,11 @@ subcommand at 10k nodes.
 
 - [x] `p1` - **ID**: `cpt-code-split-nfr-portability`
 
-JSON snapshot artifacts MUST conform to Graph JSON Schema v1 and MUST
-be readable by the report generator and baseline comparison without migration
-for all v1.x releases. Generated HTML reports MUST open correctly in
-Chrome, Firefox, and Safari without installation.
+JSON snapshot artifacts MUST conform to the Graph JSON Schema
+(`schema_version: "2"`) and MUST be readable by the report generator and
+baseline comparison without migration within a major schema version. Generated
+HTML reports MUST open correctly in Chrome, Firefox, and Safari without
+installation.
 
 **Threshold**: Zero schema-migration failures within a major version.
 
@@ -973,40 +623,11 @@ across plugin and tool version bumps within a major version.
 
 - [x] `p1` - **ID**: `cpt-code-split-interface-cli`
 
-**Type**: Single CLI binary (`code-split`)
-
-**Stability**: unstable (pre-1.0)
-
-**Subcommands**: bare `code-split` prints help — there is no default
-command; every action is an explicit subcommand.
-
-```
-# Lint — gate on cycle rules & thresholds; writes no files
-code-split check  [input] [--plugin <name|auto>] [--threshold ...] [--cycle-rule ...] [--baseline <snapshot>] [--output-format <human|json|github|sarif>] [--exit-zero]
-
-# Steps 1+2 — analyze (or read) the input and write a snapshot and/or HTML viewer
-code-split report [input] [--plugin <name|auto>] [--output.<fmt>.path <path>] [--baseline <snapshot>]
-```
-
-The positional `[input]` (default `.`) is polymorphic: a directory is
-analyzed, while a `.json` snapshot or `.html` report is read for its
-embedded snapshot (no analysis). Step 4 is `--baseline <snapshot>`, accepted
-by both commands: `report --baseline` writes a baseline↔current diff HTML
-viewer with a verdict, and `check --baseline` is a relative CI gate (fail
-only on new violations) whose verdict is machine-readable with
-`--output-format json`.
-
-Global options accepted by every command: `--config <PATH | KEY=VALUE>`
-(repeatable; inline wins), `--color <when>`, `-v/--verbose`, `-q/--quiet`,
-`-h/--help`, `-V/--version`.
-
-**Exit codes**: 0 = `check` passed (or `--exit-zero`), `report`
-completed; non-zero = generic failure, or `check` found a violation;
-failures emit a structured JSON error on stderr.
-
-**Breaking Change Policy**: Adding flags or subcommands is minor;
-renaming or removing flags, changing JSON artifact schema, or changing
-exit-code semantics requires a major-version bump.
+> **Moved.** The unified CLI interface (`cpt-code-split-interface-cli`) — the
+> `check` / `report` subcommands, the polymorphic `[input]`, global options,
+> exit codes, and the breaking-change policy — is specified in
+> [`code-split-cli/PRD.md`](code-split-cli/PRD.md). The full flag reference is
+> in [`code-split-cli/CLI.md`](code-split-cli/CLI.md).
 
 ### 7.2 Plugin Model
 
@@ -1018,15 +639,24 @@ exit-code semantics requires a major-version bump.
 
 Plugins are compiled into the `code-split` binary and run **in-process**
 when a command analyzes a workspace (`code-split check` / `code-split
-report`). The only plugins are `rust`, `python`, and `javascript`
-(covers JS+TS), selected with `--plugin <name>` (see
-`cpt-code-split-fr-plugin-discovery`). There is no subprocess invocation,
-no external plugin binary, and no external/dynamic plugin loading.
+report`). The plugins are `rust`, `python`, `javascript`, and `typescript`,
+selected with `--plugin <name>` (see `cpt-code-split-fr-plugin-discovery`).
+There is no subprocess invocation, no external plugin binary, and no
+external/dynamic plugin loading.
 
-Internally each plugin produces the `graphs` object (a single `files`
-graph); `code-split` merges it with the top-level metadata and writes the
-final snapshot `.json`. Adding a language means adding a built-in plugin
-to the binary.
+Each plugin implements the `LanguagePlugin` trait (`code-split-plugin-api`) as a
+**pure parser**: `analyze(workspace, level, input)` returns a structural `Graph`
+(nodes + edges, **no metrics**), and `levels()` declares the level's semantics
+dictionaries. When `input.ignore_tests` is set (`[ignore] tests`, **on by
+default**), the plugin skips its own test files during the walk — what counts as
+a test is language-specific (Rust `#[cfg(test)]` modules, Python
+`test_*.py`/`tests/`, JS/TS `*.test.*`/`__tests__`), so the detection
+(`is_test_path`) lives in the plugin, not the CLI. The orchestrator computes all
+metrics centrally
+(`code-split-complexity` by file extension; cycles / Henry-Kafura / stats in
+`code-split-graph` over the level's flow edges), writing them into node
+attributes by id, and assembles the snapshot. Adding a language means adding a
+built-in plugin crate and one line in `plugin::registry()`.
 
 ### 7.3 Graph JSON Schema
 
@@ -1036,100 +666,111 @@ to the binary.
 
 **Stability**: unstable (pre-1.0)
 
+A **generic property graph**: free-form string `kind` on nodes and edges, and a
+flat free-form attribute map on each. No fixed enums, no nested metric objects.
+Each level carries semantics dictionaries describing its vocabulary so a consumer
+can render any language/metric set without hardcoding names.
+
 **Top-level shape** (full snapshot file):
 
 ```json
 {
-  "schema_version": "1",
+  "schema_version": "2",
   "generated_at":   "<ISO-8601>",
   "command":        "<full command line>",
   "workspace":      "<absolute-path>",
+  "target":         "<absolute-path>",
   "plugin":         "<plugin-id>",
-  "versions":       { "code-split": "0.3.1", "plugin_rust": "0.3.1", "rustc": "1.78.0" },
-  "git":            { "branch": "main", "commit": "a3f9c21b4d5e", "dirty_files": 0, "origin": "git@gitlab.example.com:team/proj.git" },
+  "versions":       { "code-split": "1.0.0-alpha.4", "rustc": "1.78.0" },
+  "roots":          { "target": "<abs>", "registry": "<abs>" },
+  "git":            { "branch": "main", "commit": "a3f9c21b4d5e", "dirty_files": 0, "origin": "git@…:team/proj.git" },
+  "timings":        [ { "stage": "rust", "ms": 0, "detail": "…" }, … ],
   "graphs": {
-    "files": { "nodes": [...], "edges": [...], "stats": { ... } }
-  }
-}
-```
-
-`stats` is omitted when the graph is empty.
-
-**Graph stats shape** (`stats` field on the `files` graph):
-
-```json
-{
-  "cyclomatic": 4.2,
-  "cognitive":  1.8,
-  "coupling":     { "fan_in": 2.1, "fan_out": 3.4, "hk": 12.5 },
-  "maintainability": { "mi": 72.1, "mi_sei": 68.4 },
-  "loc":          { "source": 38.2, "logical": 0.0, "comments": 1.1, "blank": 5.3 },
-  "halstead":     { "length": 210.4, "vocabulary": 48.1, "volume": 1240.2,
-                    "effort": 85000.0, "time": 4722.2, "bugs": 0.413 }
-}
-```
-
-Fields mirror the node `complexity` structure with per-graph averages (nodes
-with zero values excluded from the average). Zero-valued scalar fields and
-absent sub-objects are omitted. Percentiles are not stored in JSON — the
-HTML viewer computes `p1`/`p10`/`p50`/`p90`/`p99` client-side from raw
-node data. All numeric values use 3-significant-digit truncation.
-
-**Node shape**:
-
-```json
-{
-  "id":          "file:{target}/src/foo.rs",
-  "kind":        "file | external",
-  "name":        "foo.rs",
-  "path":        "{target}/src/foo.rs",
-  "external":    false,
-  "version":     "1.0.228",
-  "visibility":  "public",
-  "complexity": {
-    "cyclomatic": 3, "cognitive": 2, "exits": 2, "args": 3,
-    "coupling": { "fan_in": 4, "fan_out": 2, "fan_out_external": 1, "hk": 1344 },
-    "maintainability": { "mi": 78.4, "mi_sei": 52.1 },
-    "loc": { "source": 42, "logical": 12, "comments": 4, "blank": 6 },
-    "halstead": {
-      "length": 87, "vocabulary": 23,
-      "volume": 312.5, "effort": 4820, "time": 267.8, "bugs": 0.104
+    "files": {
+      "edge_kinds":       { "<kind>": { "flow": true, "label": "…", "description": "…" } },
+      "node_attributes":  { "<key>": { "value_type": "int|float|str|bool", "label": "…",
+                                       "name": "…", "short": "…", "description": "…",
+                                       "formula": "…", "calc": "<eval expr>",
+                                       "direction": "higher_better|lower_better",
+                                       "abbreviate": true, "group": "<group?>",
+                                       "thresholds": { "info": N, "warning": N } } },
+      "edge_attributes":  { "<key>": { "value_type": "…", "label": "…" } },
+      "attribute_groups": { "<group>": { "label": "…", "description": "…" } },
+      "node_kinds":       { "<kind>": { "label": "…", "plural": "…", "fill": "#…", "stroke": "#…", "external": true } },
+      "cycle_kinds":      { "<kind>": { "label": "…", "description": "…" } },
+      "ui":               { "default_sort": "…", "sort_metrics": [...], "size_metrics": [...],
+                            "card_metrics": [...], "columns": [...], "summary_metrics": [...] },
+      "nodes": [...], "edges": [...], "cycles": [...], "stats": { ... }
     }
-  }
+  },
+  "presets": [ { "id": "ADP", "label": "ADP", "title": "…", "prompt": "…",
+                 "doc_url": "…", "sort_metric": "cycle", "connections": ["common","out"] } ]
 }
 ```
 
-All optional fields (`path`, `external`, `version`, `visibility`,
-`complexity`) are omitted when null or empty. `kind` is `file` (a project
-source file, id `file:<path>`) or `external` (a 3rd-party library, id
-`ext:<name>`, no `complexity`; for Rust it carries `path` = the crate's
-cargo-cache directory and `version` = the resolved semver). `visibility` is a plain string
-(`"public"`, `"private"`, `"crate"`, `"super"`) or an object
-`{"restricted": "<path>"}` for path-restricted visibility. `path` values
-use named-root prefixes resolved via `roots` (e.g. `{target}/src/main.rs`).
-For `file` nodes `loc.source` is the source-line count and `complexity`
-carries the whole-file metrics (cyclomatic, Halstead, MI, LOC). The
-`complexity` object is omitted entirely when all sub-fields are
-zero/absent; within it, zero-valued scalar fields and absent sub-objects
-are omitted. The `coupling` sub-object is omitted when `fan_in`,
-`fan_out`, and `fan_out_external` are all 0. `coupling.fan_in` /
-`fan_out` / `hk` count internal file→file edges only; edges to `external`
-nodes are counted in `fan_out_external` instead. All numeric fields use
-3-significant-digit truncation; whole numbers are serialized without a
-decimal point.
+`graphs` is a map `level_name → level`; today only `files`. The dictionaries are
+pruned to the keys/kinds/groups actually present at that level, and the `ui`
+block is computed by the orchestrator from the present attributes. Every
+metric's label / name / formula / live-`calc` / direction / threshold lives in
+`node_attributes`, and the Prompt-Generator principles live in top-level
+`presets`, so the **viewer hardcodes no metric, kind, threshold or prompt by
+name** — it renders entirely from this data (see DESIGN §3.2 HTML assets).
+Optional `AttributeSpec` fields are omitted when absent.
+
+**Node shape** — `id`, `kind`, `name`, optional `parent`, plus flat attributes:
+
+```json
+{ "id": "{target}/src/foo.rs", "kind": "file", "name": "foo.rs",
+  "visibility": "public", "loc": 48, "sloc": 36, "lloc": 12, "cloc": 4, "blank": 6, "tloc": 2,
+  "cyclomatic": 3, "cognitive": 2, "exits": 2, "args": 3,
+  "mi": 78.4, "mi_sei": 52.1, "length": 87, "vocabulary": 23, "volume": 312.5,
+  "effort": 4820, "time": 267.8, "bugs": 0.104,
+  "fan_in": 4, "fan_out": 2, "fan_out_external": 1, "hk": 1344, "cycle": "mutual" }
+```
+
+```json
+{ "id": "ext:serde", "kind": "external", "name": "serde",
+  "external": true, "version": "1.0.228", "path": "{registry}/serde-1.0.228" }
+```
+
+`kind` is `"file"` (a project source file — **its id IS its relativized path**,
+no `file:` prefix, and it carries no `path` attribute) or `"external"` (a
+3rd-party library, id `ext:<name>`, marked `external: true`; for Rust it also
+carries `version` and `path` = the crate's cargo-cache directory). All
+attributes are **flat** and a metric is **omitted when it rounds to zero**.
+Numeric values use 3-significant-digit rounding; integral values serialize
+without a decimal point. `fan_in` / `fan_out` / `hk` count internal flow edges
+only; edges whose target is external are counted in `fan_out_external`. `cycle`
+(`"mutual"` / `"chain"`) is present only on nodes in a cycle.
 
 **Edge shape**:
 
 ```json
-{ "from": "<node-id>", "to": "<node-id>", "kind": "uses | reexports | contains", "external": false }
+{ "source": "<node-id>", "kind": "uses | reexports | contains | super", "target": "<node-id>", "line": 12 }
 ```
 
-`external: true` marks a `uses` edge from a file to an `external` library
-node; omitted (false) for internal file→file edges. A `contains` edge
-(Rust `mod foo;`, parent→child) is kept as structural ownership metadata
-and is excluded from fan_in / HK / cycle computation and from the main map.
+An edge is **external iff its `target` is an `ext:` node** — there is no
+`edge.external` flag. Whether an edge kind is information flow vs. structural is
+read from `edge_kinds[kind].flow` (e.g. `contains` is `flow: false` — kept and
+shown as ownership, excluded from fan_in / HK / cycles). Edge attributes (e.g. a
+Rust `reexports` edge's `visibility`) are flattened in alongside `source` /
+`kind` / `target`. `line` is the optional 1-based line of the declaring
+`use` / `import` statement (omitted for `contains` and unplaceable edges); `check`
+uses it to point a cycle violation at a concrete edge to break.
 
+**Stats shape** (`stats` field on a level) — a flat map of the mean of each
+tracked numeric metric across the level's file nodes (zero/missing excluded; a
+metric emitted only when its average is positive), e.g.:
+
+```json
+{ "cyclomatic": 1.4, "cognitive": 1.8, "fan_in": 2.25, "fan_out": 3, "hk": 864,
+  "mi": 104.0, "mi_sei": 105.7, "sloc": 15.8, "cloc": 3.8, "blank": 6.8, "tloc": 4.2,
+  "length": 32.2, "vocabulary": 19.6, "volume": 149.1, "effort": 1030.4,
+  "time": 57.2, "bugs": 0.029 }
 ```
+
+Percentiles are not stored — a viewer can compute them client-side from raw node
+data.
 
 **Breaking Change Policy**: Additive fields are minor; renames or
 removals require a major-version bump and migration notes.
@@ -1238,9 +879,8 @@ as a self-contained HTML report.
   snapshots; the verdict (`improved` / `degraded` / `neutral`) is present
 - [x] All P1 tools operate with zero outbound network calls
 - [x] Generated HTML reports contain no external resource references
-- [x] JSON artifacts conform to Graph JSON Schema v1 and pass schema
-  validation
-- [ ] A `--baseline` comparison exits non-zero with a structured error on
+- [x] JSON artifacts conform to the Graph JSON Schema (`schema_version: "2"`)
+- [x] A `--baseline` comparison exits non-zero with a structured error on
   schema version mismatch
 
 ## 10. Dependencies
@@ -1249,8 +889,8 @@ as a self-contained HTML report.
 |------------|-------------|----------|
 | `cargo_metadata` crate | Cargo workspace enumeration (local vs. external crates) | p1 |
 | `syn` crate | Rust source parsing for the module tree and `use` statements | p1 |
-| `petgraph` crate | In-memory graph representation in the Rust plugin | p1 |
-| `rust-code-analysis` crate | Tree-sitter-based multi-language metrics library (cyclomatic, cognitive, Halstead, MI, LOC, NOM, nexits, nargs); used via fork `ffedoroff/rust-code-analysis` | p1 |
+| `rust-code-analysis` crate | Tree-sitter-based multi-language metrics library (cyclomatic, cognitive, Halstead, MI, LOC); the central `code-split-complexity` pass; via fork `ffedoroff/rust-code-analysis` | p1 |
+| `tree-sitter` (+ `-python` / `-javascript` / `-typescript`) | Source parsing in the Python / JavaScript / TypeScript plugins | p3 |
 | Python 3.9+ | Runtime for the built-in Python language plugin | p3 |
 
 ## 11. Assumptions

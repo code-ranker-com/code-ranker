@@ -31,7 +31,6 @@ dev_only_crates = false
 # Cycle checks per kind: on/off, or an integer budget (max allowed; the N+1-th
 # fails). `false` = disabled, `true`/0 = strict, `7` = allow up to 7.
 [rules.cycles]
-test-embed = false
 mutual = true
 chain = true
 

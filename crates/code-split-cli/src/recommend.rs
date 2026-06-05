@@ -9,8 +9,9 @@
 //! `node_attributes[*].thresholds` (the `info` / `warning` tiers) — never a gate.
 
 use anyhow::{Result, bail};
-use code_split_graph::level_graph::LevelGraph;
+use code_split_graph::level_graph::{CycleGroup, LevelGraph};
 use code_split_plugin_api::{attrs::AttrValue, level::Thresholds, node::Node, plugin::Preset};
+use std::collections::HashMap;
 
 /// Which threshold tier drives an output. `Auto` resolves to `Warning` when any
 /// module breaches it, else `Info` (the viewer's headline rule).
@@ -151,6 +152,46 @@ pub fn reco_for<'a>(level: &'a LevelGraph, metric: &str) -> Reco<'a> {
     }
 }
 
+/// Cycle groups ranked worst-first for the ADP (cycle) preset: `chain` cycles
+/// before `mutual`, larger SCCs before smaller, so `--top 1` surfaces the single
+/// biggest chain. Ties broken by the first node id for determinism.
+fn ranked_cycle_groups(level: &LevelGraph) -> Vec<&CycleGroup> {
+    let mut groups: Vec<&CycleGroup> = level.cycles.iter().collect();
+    groups.sort_by(|a, b| {
+        let chain = |g: &CycleGroup| u8::from(g.kind == "chain");
+        chain(b)
+            .cmp(&chain(a))
+            .then(b.nodes.len().cmp(&a.nodes.len()))
+            .then(a.nodes.first().cmp(&b.nodes.first()))
+    });
+    groups
+}
+
+/// The top-N cycle groups (see [`ranked_cycle_groups`]), each paired with its
+/// member nodes ordered by HK (worst first). A node id with no matching node is
+/// skipped. This is the unit the ADP preset recommends on: `--top` counts
+/// **cycles**, and every member of each selected cycle is listed.
+fn top_cycle_groups(level: &LevelGraph, n_groups: usize) -> Vec<(&CycleGroup, Vec<&Node>)> {
+    let by_id: HashMap<&str, &Node> = level.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
+    ranked_cycle_groups(level)
+        .into_iter()
+        .take(n_groups)
+        .map(|g| {
+            let mut members: Vec<&Node> = g
+                .nodes
+                .iter()
+                .filter_map(|id| by_id.get(id.as_str()).copied())
+                .collect();
+            members.sort_by(|a, b| {
+                num(b, "hk")
+                    .unwrap_or(0.0)
+                    .total_cmp(&num(a, "hk").unwrap_or(0.0))
+            });
+            (g, members)
+        })
+        .collect()
+}
+
 /// How many modules a tier selects for a metric's reco.
 fn tier_count(reco: &Reco, sev: Severity) -> usize {
     match sev {
@@ -231,10 +272,25 @@ pub fn compose_prompt(
     };
 
     let reco = reco_for(level, &preset.sort_metric);
-    // Default count = the active tier's size; never below 1 so an explicitly
-    // requested principle with no breach still surfaces its single worst module.
-    let n = top.unwrap_or_else(|| tier_count(&reco, sev).max(1));
-    let modules: Vec<&Node> = reco.sorted.iter().take(n).copied().collect();
+    // For the cycle (ADP) preset the unit is a whole cycle group, not a node:
+    // `--top` counts CYCLES (default 1 — the single biggest chain), and every
+    // member of each selected cycle is listed. Other presets rank nodes, and
+    // the default count = the active tier's size (≥ 1).
+    let is_cycle = preset.sort_metric == "cycle";
+    let cycle_groups = if is_cycle {
+        top_cycle_groups(level, top.unwrap_or(1))
+    } else {
+        Vec::new()
+    };
+    let modules: Vec<&Node> = if is_cycle {
+        cycle_groups
+            .iter()
+            .flat_map(|(_, members)| members.iter().copied())
+            .collect()
+    } else {
+        let n = top.unwrap_or_else(|| tier_count(&reco, sev).max(1));
+        reco.sorted.iter().take(n).copied().collect()
+    };
 
     let mut parts: Vec<String> = Vec::new();
 
@@ -269,10 +325,40 @@ pub fn compose_prompt(
     // 2. The offending modules, ordered by the preset's metric (or listed as a
     //    cycle for cycle-based principles), each annotated with its value.
     if !modules.is_empty() {
-        if preset.sort_metric == "cycle" {
-            let mut s = String::from("## Modules in a dependency cycle\n\n");
-            for n in &modules {
-                s.push_str(&format!("- `{}`\n", clean_path(&n.id)));
+        if is_cycle {
+            let mut s = String::new();
+            if cycle_groups.len() == 1 {
+                let (g, members) = &cycle_groups[0];
+                s.push_str(&format!(
+                    "## Modules in a dependency cycle ({}, {} modules)\n\n",
+                    g.kind,
+                    members.len()
+                ));
+                s.push_str(
+                    "This is **one** dependency cycle; every module in it is listed below so the \
+                     whole loop is visible. Fix one cycle at a time — `--top 2`+ lists several \
+                     separate cycles at once and obscures how each one connects.\n\n",
+                );
+                for n in members {
+                    s.push_str(&format!("- `{}`\n", clean_path(&n.id)));
+                }
+            } else {
+                s.push_str(&format!(
+                    "## {} dependency cycles (every member listed)\n\n",
+                    cycle_groups.len()
+                ));
+                for (i, (g, members)) in cycle_groups.iter().enumerate() {
+                    s.push_str(&format!(
+                        "### Cycle {} — {}, {} modules\n\n",
+                        i + 1,
+                        g.kind,
+                        members.len()
+                    ));
+                    for n in members {
+                        s.push_str(&format!("- `{}`\n", clean_path(&n.id)));
+                    }
+                    s.push('\n');
+                }
             }
             parts.push(s.trim_end().to_string());
         } else {
@@ -582,30 +668,56 @@ pub fn render_scorecard(
     if narrow.is_some() {
         // Narrowed: the chosen principle's ranked modules.
         let preset = shown_presets[0];
-        let reco = reco_for(level, &preset.sort_metric);
-        for n in reco.sorted.iter().take(limit) {
-            let cyc = preset.sort_metric == "cycle";
-            let head = if cyc {
-                "cycle".to_string()
-            } else {
-                match num(n, &preset.sort_metric) {
+        if preset.sort_metric == "cycle" {
+            // ADP: `--top` counts CYCLES (default 1 — the biggest chain). List
+            // every member of each selected cycle so the whole loop is visible.
+            let groups = top_cycle_groups(level, top.unwrap_or(1));
+            match groups.as_slice() {
+                [(g, members)] => out.push_str(&format!(
+                    "  one cycle ({}, {} modules) — all members listed; fix one cycle at a \
+                     time (avoid --top 2+):\n",
+                    g.kind,
+                    members.len()
+                )),
+                _ => out.push_str(&format!(
+                    "  {} cycles — all members listed:\n",
+                    groups.len()
+                )),
+            }
+            for (g, members) in &groups {
+                for n in members {
+                    mod_rows.push(ModRow {
+                        warning_icon: true,
+                        path: clean_path(&n.id),
+                        head: g.kind.clone(),
+                        rest: Vec::new(),
+                        n_warn: 0,
+                        n_info: 0,
+                        hk: num(n, "hk").unwrap_or(0.0),
+                    });
+                }
+            }
+        } else {
+            let reco = reco_for(level, &preset.sort_metric);
+            for n in reco.sorted.iter().take(limit) {
+                let head = match num(n, &preset.sort_metric) {
                     Some(v) if v != 0.0 => format!(
                         "{} {}",
                         attr_short(level, &preset.sort_metric),
                         fmt_val(level, &preset.sort_metric, v)
                     ),
                     _ => attr_short(level, &preset.sort_metric).to_string(),
-                }
-            };
-            mod_rows.push(ModRow {
-                warning_icon: true,
-                path: clean_path(&n.id),
-                head,
-                rest: Vec::new(),
-                n_warn: 0,
-                n_info: 0,
-                hk: num(n, "hk").unwrap_or(0.0),
-            });
+                };
+                mod_rows.push(ModRow {
+                    warning_icon: true,
+                    path: clean_path(&n.id),
+                    head,
+                    rest: Vec::new(),
+                    n_warn: 0,
+                    n_info: 0,
+                    hk: num(n, "hk").unwrap_or(0.0),
+                });
+            }
         }
     } else {
         for n in level.nodes.iter().filter(|n| is_internal(n)) {
@@ -847,6 +959,12 @@ mod tests {
                 ],
             ),
         ]);
+        // The cycle recommendation groups by the level's `cycles` (the SCC groups
+        // the pipeline computes), not by per-node attrs.
+        level.cycles.push(CycleGroup {
+            kind: "mutual".into(),
+            nodes: vec!["{target}/a.rs".into(), "{target}/b.rs".into()],
+        });
         level.edges.push(code_split_plugin_api::edge::Edge {
             source: "{target}/a.rs".into(),
             target: "{target}/b.rs".into(),
@@ -884,6 +1002,38 @@ mod tests {
             md.contains("191019-ADP.md") || md.contains("-ADP.md"),
             "save-report name carries preset id"
         );
+    }
+
+    #[test]
+    fn cycle_groups_rank_chain_first_then_size() {
+        let mut level = level_with(vec![
+            file_node("{target}/m1.rs", &[("hk", AttrValue::Float(9.0))]),
+            file_node("{target}/m2.rs", &[("hk", AttrValue::Float(1.0))]),
+            file_node("{target}/c1.rs", &[("hk", AttrValue::Float(1.0))]),
+            file_node("{target}/c2.rs", &[("hk", AttrValue::Float(5.0))]),
+            file_node("{target}/c3.rs", &[("hk", AttrValue::Float(2.0))]),
+        ]);
+        level.cycles = vec![
+            CycleGroup {
+                kind: "mutual".into(),
+                nodes: vec!["{target}/m1.rs".into(), "{target}/m2.rs".into()],
+            },
+            CycleGroup {
+                kind: "chain".into(),
+                nodes: vec![
+                    "{target}/c1.rs".into(),
+                    "{target}/c2.rs".into(),
+                    "{target}/c3.rs".into(),
+                ],
+            },
+        ];
+        // --top 1 picks the chain (chains rank before mutuals), and lists all of
+        // its members ordered by HK (c2 → c3 → c1).
+        let top = top_cycle_groups(&level, 1);
+        assert_eq!(top.len(), 1);
+        assert_eq!(top[0].0.kind, "chain");
+        let ids: Vec<&str> = top[0].1.iter().map(|n| n.id.as_str()).collect();
+        assert_eq!(ids, ["{target}/c2.rs", "{target}/c3.rs", "{target}/c1.rs"]);
     }
 
     #[test]

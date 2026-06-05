@@ -55,8 +55,15 @@ open .code-split/after.html          # macOS; xdg-open on Linux
 # 8. Repeat until no warnings remain.
 ```
 
-Note: ADP is cycle-based, so `--severity` is a no-op for it (every module in a
-cycle counts) — keep the flag so the ADP and HK loops stay identical.
+Notes on ADP (cycles):
+
+- For ADP, `--top` counts **cycles**, not modules. `--top 1` prints **one whole
+  cycle** — the biggest `chain` (else the biggest `mutual`) — with **all** its
+  modules listed, so you see the entire loop and can fix it as a unit. **Do not
+  use `--top 2`+** for ADP: it prints several separate cycles at once and
+  obscures how each one connects.
+- `--severity` is a no-op for ADP (every module in a cycle counts) — keep the
+  flag only so the ADP and HK loops stay identical.
 
 ## Cheat sheet
 

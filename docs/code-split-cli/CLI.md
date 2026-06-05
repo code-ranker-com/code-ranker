@@ -242,7 +242,7 @@ code-split report [input] [options]
 | `--baseline <snapshot>` | — | Baseline snapshot (`.json` or `.html`). Turns the HTML into a diff (baseline vs current) with a verdict, and names it `…-diff.html`. See [`--baseline`](#--baseline-comparison). |
 | `--preset <ID>` | worst-violating | Principle for the `prompt` / `scorecard` formats (`ADP`, `SRP`, `CPX`, …). When omitted, the principle with the most violations is chosen. See [Recommendations](#recommendations-scorecard--prompt). |
 | `--severity <tier>` | `auto` (prompt) · all (scorecard) | Threshold tier: `info`, `warning`, or `auto`. Repeatable for `scorecard` to show several tiers; for `prompt` it sizes the default `--top`. |
-| `--top <N>` | severity-tier size (prompt) · 15 (scorecard) | How many modules the `prompt` includes / rows the `scorecard` shows. `--top 1` = the single worst module. |
+| `--top <N>` | severity-tier size (prompt) · 15 (scorecard) | How many modules the `prompt` includes / rows the `scorecard` shows. `--top 1` = the single worst module. **For cycle presets (`ADP`) `--top` counts whole cycles, not modules** — `--top 1` (the default) prints one entire cycle (biggest `chain` first) with **all** its members; `--top 2`+ prints several separate cycles and is discouraged. |
 
 `--preset`, `--severity`, and `--top` apply only when a `prompt` or `scorecard` format is
 selected; passing them otherwise is an error.
@@ -450,9 +450,12 @@ code-split report . --preset SRP --top 1 --output.prompt.path=stdout
 ```
 
 `--top N` sets how many modules go into the prompt; without it the count is the size of
-the active severity tier (matching the viewer's recommended count). There is **no
-`--index`** — `--top 1` already yields the single worst module, so passing `--index` is
-rejected with a hint to use `--top`.
+the active severity tier (matching the viewer's recommended count). For the cycle preset
+**`ADP`, `--top N` counts whole cycles** instead: `--top 1` (the default) emits one entire
+cycle — the biggest `chain`, else the biggest `mutual` — with **all** its members listed
+(so the loop is visible as a unit); `--top 2`+ emits several separate cycles and is
+discouraged. There is **no `--index`** — `--top 1` already yields the single worst
+module/cycle, so passing `--index` is rejected with a hint to use `--top`.
 
 ## `--baseline` (comparison)
 

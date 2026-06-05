@@ -7,7 +7,11 @@ use std::path::{Path, PathBuf};
 use syn::spanned::Spanned as _;
 use syn::{Item, ItemMod, UseTree, Visibility as SynVis};
 
-pub(crate) fn contribute(metadata: &Metadata, builder: &mut GraphBuilder) -> Result<()> {
+pub(crate) fn contribute(
+    metadata: &Metadata,
+    ignore_tests: bool,
+    builder: &mut GraphBuilder,
+) -> Result<()> {
     let local: HashSet<&PackageId> = metadata.workspace_members.iter().collect();
 
     // Phase A — build every crate/module node and per-target module index, and
@@ -70,6 +74,7 @@ pub(crate) fn contribute(metadata: &Metadata, builder: &mut GraphBuilder) -> Res
                 &[],
                 pkg,
                 target,
+                ignore_tests,
                 &mut module_index,
                 &mut pending_uses,
                 builder,
@@ -297,6 +302,7 @@ fn walk_file(
     parent_mod_path: &[String],
     pkg: &Package,
     target: &Target,
+    ignore_tests: bool,
     module_index: &mut HashMap<Vec<String>, NodeId>,
     pending_uses: &mut Vec<PendingUse>,
     builder: &mut GraphBuilder,
@@ -324,8 +330,15 @@ fn walk_file(
     }
 
     // Capture bare-path references used in expressions/types without a `use`.
+    // When skipping tests, visit only non-test items so references made solely
+    // by `#[cfg(test)]` code never become edges.
     let mut collector = CratePathCollector::default();
-    syn::visit::Visit::visit_file(&mut collector, &parsed);
+    for item in &parsed.items {
+        if ignore_tests && is_test_item(item) {
+            continue;
+        }
+        syn::visit::Visit::visit_item(&mut collector, item);
+    }
     for path in collector.paths {
         pending_uses.push(PendingUse {
             from_mod_id: parent_mod_id.clone(),
@@ -345,6 +358,7 @@ fn walk_file(
         file_path,
         pkg,
         target,
+        ignore_tests,
         module_index,
         pending_uses,
         builder,
@@ -360,12 +374,18 @@ fn walk_items(
     enclosing_file: &Path,
     pkg: &Package,
     target: &Target,
+    ignore_tests: bool,
     module_index: &mut HashMap<Vec<String>, NodeId>,
     pending_uses: &mut Vec<PendingUse>,
     builder: &mut GraphBuilder,
     visited_files: &mut HashSet<PathBuf>,
 ) -> Result<()> {
     for item in items {
+        // Skip `#[cfg(test)]` / `#[test]` / `#[bench]` items entirely when
+        // requested — their modules, `use`s and bare paths are test-only.
+        if ignore_tests && is_test_item(item) {
+            continue;
+        }
         match item {
             Item::Mod(m) => {
                 process_mod(
@@ -375,6 +395,7 @@ fn walk_items(
                     enclosing_file,
                     pkg,
                     target,
+                    ignore_tests,
                     module_index,
                     pending_uses,
                     builder,
@@ -412,6 +433,7 @@ fn process_mod(
     enclosing_file: &Path,
     pkg: &Package,
     target: &Target,
+    ignore_tests: bool,
     module_index: &mut HashMap<Vec<String>, NodeId>,
     pending_uses: &mut Vec<PendingUse>,
     builder: &mut GraphBuilder,
@@ -466,6 +488,7 @@ fn process_mod(
             enclosing_file,
             pkg,
             target,
+            ignore_tests,
             module_index,
             pending_uses,
             builder,
@@ -478,6 +501,7 @@ fn process_mod(
             &sub_path,
             pkg,
             target,
+            ignore_tests,
             module_index,
             pending_uses,
             builder,
@@ -984,6 +1008,54 @@ fn module_node_id(
     } else {
         format!("{ns}::{}", path.join("::"))
     }
+}
+
+/// True for a top-level item gated to tests (`#[cfg(test)]` module,
+/// `#[test]`/`#[bench]`/`#[cfg(test)]` fn, etc). Mirrors the line-stripping in
+/// `code-split-complexity` so the graph and the metrics agree on what is test.
+fn is_test_item(item: &Item) -> bool {
+    let attrs: &[syn::Attribute] = match item {
+        Item::Mod(i) => &i.attrs,
+        Item::Fn(i) => &i.attrs,
+        Item::Impl(i) => &i.attrs,
+        Item::Struct(i) => &i.attrs,
+        Item::Enum(i) => &i.attrs,
+        Item::Trait(i) => &i.attrs,
+        Item::Type(i) => &i.attrs,
+        Item::Const(i) => &i.attrs,
+        Item::Static(i) => &i.attrs,
+        Item::Use(i) => &i.attrs,
+        Item::Macro(i) => &i.attrs,
+        Item::Union(i) => &i.attrs,
+        _ => return false,
+    };
+    attrs.iter().any(is_test_attr)
+}
+
+/// True if an attribute gates an item to tests: `#[test]`, `#[bench]`, or a
+/// `cfg(...)` whose predicate contains a bare `test` identifier
+/// (`#[cfg(test)]`, `#[cfg(all(test, …))]`). `cfg(feature = "test")` does not
+/// match — only the `test` *identifier* does.
+fn is_test_attr(attr: &syn::Attribute) -> bool {
+    if attr.path().is_ident("test") || attr.path().is_ident("bench") {
+        return true;
+    }
+    if attr.path().is_ident("cfg")
+        && let Ok(list) = attr.meta.require_list()
+    {
+        return tokens_have_test_ident(list.tokens.clone());
+    }
+    false
+}
+
+/// Recursively scan a token stream for a bare `test` identifier (descends into
+/// `all(...)` / `any(...)` / `not(...)` groups).
+fn tokens_have_test_ident(ts: proc_macro2::TokenStream) -> bool {
+    ts.into_iter().any(|tt| match tt {
+        proc_macro2::TokenTree::Ident(i) => i == "test",
+        proc_macro2::TokenTree::Group(g) => tokens_have_test_ident(g.stream()),
+        _ => false,
+    })
 }
 
 fn count_items(items: &[Item]) -> usize {

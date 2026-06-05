@@ -56,8 +56,11 @@ a structural `api::Graph` + the plugin's `Level`s. It then runs the orchestrator
 pipeline (see [§3.6 in the main DESIGN](../DESIGN.md#36-interactions--sequences)):
 `code-split-complexity::annotate` (central metrics, while
 ids are still absolute paths), `finalize_graph`, `relativize_graph` against the
-detected roots, `config::apply_ignore` (path globs, `tests` test-file stripping,
-and `dev_only_crates` via `cargo metadata`), then `annotate_cycles` +
+detected roots, `config::apply_ignore` (language-agnostic path globs and
+`dev_only_crates` via `cargo metadata`; **test-file skipping is the plugin's
+job** — the CLI passes `PluginInput::ignore_tests` and each plugin drops its own
+tests during the walk, since what counts as a test is language-specific), then
+`annotate_cycles` +
 `config::apply_cycle_rules`, `annotate_hk` and `compute_stats` over the level's
 flow edges. Finally it assembles the `LevelGraph` — merging the plugin's
 structural attribute specs with `code-split-complexity::metric_specs` and

@@ -271,11 +271,18 @@ impl LanguagePlugin for RustPlugin {
         defaults
     }
 
-    fn analyze(&self, workspace: &Path, _level: &str, _input: &PluginInput) -> Result<Graph> {
+    fn analyze(&self, workspace: &Path, _level: &str, input: &PluginInput) -> Result<Graph> {
         let mut builder = GraphBuilder::new();
-        syn_analyze(workspace, &mut builder)?;
+        syn_analyze(workspace, input.ignore_tests, &mut builder)?;
         let internal = builder.build();
         Ok(collapse_to_files(internal))
+    }
+
+    fn is_test_path(&self, rel_path: &str) -> bool {
+        // Cargo's integration-test / bench targets live under top-level
+        // `tests/` and `benches/` dirs. (Inline `#[cfg(test)]` modules are a
+        // separate, attribute-based notion handled during the syn walk.)
+        matches!(rel_path.split('/').next(), Some("tests") | Some("benches"))
     }
 
     fn versions(&self, _workspace: &Path, _input: &PluginInput) -> Vec<(String, String)> {
@@ -287,7 +294,7 @@ impl LanguagePlugin for RustPlugin {
 
 /// Syntactic stage: resolve the workspace via `cargo metadata` and build the
 /// internal crate + module/use graphs.
-fn syn_analyze(workspace: &Path, builder: &mut GraphBuilder) -> Result<()> {
+fn syn_analyze(workspace: &Path, ignore_tests: bool, builder: &mut GraphBuilder) -> Result<()> {
     let manifest = workspace.join("Cargo.toml");
     // code-split is an offline tool: it never fetches from the network. See the
     // comment in the original lib.rs for the research notes on --offline vs
@@ -302,7 +309,7 @@ fn syn_analyze(workspace: &Path, builder: &mut GraphBuilder) -> Result<()> {
     .map_err(|err| offline_metadata_error(&manifest, err))?;
 
     crate_graph::contribute(&metadata, builder);
-    module_graph::contribute(&metadata, builder)?;
+    module_graph::contribute(&metadata, ignore_tests, builder)?;
     Ok(())
 }
 

@@ -355,8 +355,12 @@ prelude adds no `fan_out` / HK to the root.
 `LanguagePlugin` is a **pure parser** contract — `name`, `detect(ws, input)`
 (can-parse, replacing markers), `levels` (the levels + their semantics
 dictionaries), `analyze(ws, level, input) -> Graph` (**structure only**, no
-metrics), `versions` (e.g. `rustc`). `PluginInput` carries `ignore` globs +
-free-form `options`, so input can grow without trait changes.
+metrics), `is_test_path(rel)` (does this path name a test file, in this
+language's conventions), `versions` (e.g. `rustc`). `PluginInput` carries
+`ignore` globs, the `ignore_tests` flag (when set, the plugin drops its own test
+files during the walk — test detection is language-specific, so it lives in the
+plugin, not the CLI), and free-form `options`, so input can grow without trait
+changes.
 
 The CLI works **only** against `dyn LanguagePlugin`. The single place that names
 concrete plugins is `code-split-cli`'s `plugin::registry() -> Vec<Box<dyn
@@ -646,7 +650,7 @@ See [§3.7 Plugin System](#37-plugin-system).
 | `code-split-cli` | `code-split-complexity` | `annotate()` (central metrics) + `metric_specs()` |
 | `code-split-cli` | `code-split-graph` | `Snapshot`/`LevelGraph`, `annotate_cycles`/`annotate_hk`/`compute_stats`, `relativize_graph`, `finalize_graph`, `coupling_specs`, canonical serialization |
 | `code-split-cli` | `code-split-viewer` | `render_html_viewer()`, `extract_embedded_snapshot()` |
-| `code-split-plugin-{rust,python,javascript,typescript}` | `code-split-plugin-api` | `impl LanguagePlugin` (name/detect/levels/analyze/versions) |
+| `code-split-plugin-{rust,python,javascript,typescript}` | `code-split-plugin-api` | `impl LanguagePlugin` (name/detect/levels/analyze/is_test_path/versions) |
 | `code-split-plugin-typescript` | `code-split-plugin-javascript` | shared ECMAScript walker/resolver (`analyze_ecmascript`, `ecmascript_level`, …) |
 | `code-split-complexity` | `code-split-plugin-api`, `code-split-graph` | the model; `num_attr` |
 | `code-split-graph` | `code-split-plugin-api` | the generic model it operates on |
@@ -708,13 +712,13 @@ sequenceDiagram
     participant FS as Filesystem
 
     User ->> CLI: code-split report . --plugin rust --output.json
-    CLI ->> Plugin: analyze(ws, "files", input)
+    CLI ->> Plugin: analyze(ws, "files", input)  (input.ignore_tests → plugin drops test files)
     Note over Plugin: syn + cargo metadata → collapse to files (STRUCTURE ONLY)
     Plugin -->> CLI: api::Graph (abs-path file ids, ext:* nodes) + Level specs
     CLI ->> Cx: annotate(&mut graph)  (central metrics, by extension)
     Cx -->> CLI: N nodes annotated (flat attrs written by id)
     CLI ->> G: finalize_graph + relativize_graph (abs → {target}/{registry})
-    CLI ->> CLI: apply_ignore (globs / tests / dev-only)
+    CLI ->> CLI: apply_ignore (globs / dev-only; tests already dropped by the plugin)
     CLI ->> G: annotate_cycles + annotate_hk + compute_stats (flow edges)
     CLI ->> CLI: assemble LevelGraph (merge + prune specs) → graphs["files"]
     CLI ->> FS: write {ts}-{git-hash-3}.json (metadata + timings + files level)

@@ -61,6 +61,7 @@ pub(crate) fn analyze_directory(
 
     let input = PluginInput {
         ignore: cfg.ignore.paths.clone(),
+        ignore_tests: cfg.ignore.tests,
         options: BTreeMap::new(),
     };
 

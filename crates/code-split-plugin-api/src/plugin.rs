@@ -20,9 +20,13 @@ pub type Options = BTreeMap<String, String>;
 /// Everything the orchestrator feeds a plugin from config + CLI input.
 #[derive(Debug, Clone, Default)]
 pub struct PluginInput {
-    /// Glob patterns for paths to skip during analysis (config + CLI + the
-    /// test-files toggle). The plugin must not emit nodes/edges for ignored paths.
+    /// Glob patterns for paths to skip during analysis (config + CLI).
     pub ignore: Vec<String>,
+    /// When `true`, the plugin must skip its own **test files** during the walk
+    /// (mirrors `[ignore] tests`). What counts as a test is language-specific —
+    /// see [`LanguagePlugin::is_test_path`] — so the detection lives in the
+    /// plugin, not the CLI.
+    pub ignore_tests: bool,
     /// Free-form key/value options. A plugin reads its own keys, ignores the rest.
     pub options: Options,
 }
@@ -66,8 +70,17 @@ pub trait LanguagePlugin {
 
     /// Parse the workspace into a graph AT `level` (by name). **Structure only**:
     /// nodes (with their structural attributes) + edges. Metrics are added
-    /// downstream.
+    /// downstream. When `input.ignore_tests` is set, the plugin must drop its
+    /// own test files here (it knows the language's conventions; see
+    /// [`is_test_path`](Self::is_test_path)).
     fn analyze(&self, workspace: &Path, level: &str, input: &PluginInput) -> Result<Graph>;
+
+    /// Does this workspace-relative path (forward-slashed, no leading `./`) name
+    /// a **test** file in this language? Used to drop tests during the walk when
+    /// `PluginInput::ignore_tests` is set. Default: nothing is a test.
+    fn is_test_path(&self, _rel_path: &str) -> bool {
+        false
+    }
 
     /// Toolchain versions to record in the snapshot, e.g. `[("rustc", "1.88.0")]`.
     fn versions(&self, _workspace: &Path, _input: &PluginInput) -> Vec<(String, String)> {

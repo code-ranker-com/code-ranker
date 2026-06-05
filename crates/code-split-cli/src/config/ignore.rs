@@ -1,5 +1,6 @@
-//! Graph filtering before cycles/metrics: ignore globs, the test-file
-//! heuristic, and dev-only crates. Owns the external-node predicate.
+//! Graph filtering before cycles/metrics: ignore globs and dev-only crates.
+//! Owns the external-node predicate. Test files are dropped earlier, by the
+//! language plugin during its walk (see `PluginInput::ignore_tests`).
 
 use super::model::IgnoreConfig;
 use anyhow::{Context, Result};
@@ -12,9 +13,14 @@ pub(crate) fn is_external(node: &Node) -> bool {
     node.kind == "external" || matches!(node.attrs.get("external"), Some(AttrValue::Bool(true)))
 }
 
-/// Strip nodes/edges matching ignore globs, the test-file heuristic, or
-/// dev-only crates from the structural graph (before cycles/metrics).
+/// Strip nodes/edges matching ignore globs or dev-only crates from the
+/// structural graph (before cycles/metrics). Test files are already gone —
+/// dropped by the language plugin during its walk.
 pub fn apply_ignore(graph: &mut Graph, ignore: &IgnoreConfig, target: &Path) -> Result<usize> {
+    // Test files are dropped earlier — by the language plugin during its walk,
+    // which knows the language's test conventions (see `PluginInput::ignore_tests`
+    // / `LanguagePlugin::is_test_path`). Here we only apply the language-agnostic
+    // glob filter and dev-only-crate pruning of external nodes.
     let gs = if ignore.paths.is_empty() {
         None
     } else {
@@ -25,31 +31,10 @@ pub fn apply_ignore(graph: &mut Graph, ignore: &IgnoreConfig, target: &Path) -> 
     } else {
         HashSet::new()
     };
-    if gs.is_none() && !ignore.tests && dev_only.is_empty() {
+    if gs.is_none() && dev_only.is_empty() {
         return Ok(0);
     }
-    Ok(filter_graph(graph, gs.as_ref(), ignore.tests, &dev_only))
-}
-
-fn looks_like_test(name: &str, path: &str) -> bool {
-    let mut stem = name.to_ascii_lowercase();
-    for ext in [".rs", ".py", ".ts", ".tsx", ".js", ".jsx"] {
-        if let Some(s) = stem.strip_suffix(ext) {
-            stem = s.to_string();
-            break;
-        }
-    }
-    if matches!(stem.as_str(), "tests" | "test" | "conftest")
-        || stem.starts_with("test_")
-        || stem.ends_with("_test")
-        || stem.ends_with("_tests")
-        || stem.ends_with(".test")
-        || stem.ends_with(".spec")
-    {
-        return true;
-    }
-    let p = path.replace('\\', "/");
-    p.contains("/tests/") || p.contains("/__tests__/") || p.contains("/test/")
+    Ok(filter_graph(graph, gs.as_ref(), &dev_only))
 }
 
 fn collect_dev_only_crates(target: &Path) -> HashSet<String> {
@@ -143,12 +128,7 @@ fn strip_root_prefix(id: &str) -> &str {
     id
 }
 
-fn filter_graph(
-    graph: &mut Graph,
-    gs: Option<&GlobSet>,
-    tests: bool,
-    dev_only: &HashSet<String>,
-) -> usize {
+fn filter_graph(graph: &mut Graph, gs: Option<&GlobSet>, dev_only: &HashSet<String>) -> usize {
     let removed: HashSet<String> = graph
         .nodes
         .iter()
@@ -165,9 +145,6 @@ fn filter_graph(
             if let Some(gs) = gs
                 && gs.is_match(strip_root_prefix(&n.id))
             {
-                return true;
-            }
-            if tests && looks_like_test(&n.name, &n.id) {
                 return true;
             }
             false
@@ -204,21 +181,40 @@ mod tests {
     }
 
     #[test]
-    fn apply_ignore_strips_test_files() {
+    fn strip_root_prefix_token_and_external() {
+        assert_eq!(strip_root_prefix("{target}/src/a.rs"), "src/a.rs");
+        assert_eq!(strip_root_prefix("ext:serde"), "ext:serde");
+        assert_eq!(strip_root_prefix("plain/path.rs"), "plain/path.rs");
+    }
+
+    #[test]
+    fn build_glob_set_rejects_invalid_pattern() {
+        assert!(build_glob_set(&["generated/**".into()]).is_ok());
+        assert!(build_glob_set(&["a[".into()]).is_err());
+    }
+
+    #[test]
+    fn apply_ignore_strips_glob_matches_and_their_edges() {
         let mut g = Graph {
             nodes: vec![
-                file_node("{target}/src/a.js", &[]),
-                file_node("{target}/src/a.test.js", &[]),
+                file_node("{target}/src/keep.rs", &[]),
+                file_node("{target}/generated/gen.rs", &[]),
             ],
-            edges: vec![],
+            edges: vec![code_split_plugin_api::edge::Edge {
+                source: "{target}/src/keep.rs".into(),
+                target: "{target}/generated/gen.rs".into(),
+                kind: "uses".into(),
+                line: None,
+                attrs: Default::default(),
+            }],
         };
         let ignore = IgnoreConfig {
-            tests: true,
+            paths: vec!["generated/**".into()],
             ..Default::default()
         };
         let removed = apply_ignore(&mut g, &ignore, Path::new("/x")).unwrap();
         assert_eq!(removed, 1);
         assert_eq!(g.nodes.len(), 1);
-        assert_eq!(g.nodes[0].id, "{target}/src/a.js");
+        assert!(g.edges.is_empty(), "edge into a removed node is dropped");
     }
 }

@@ -30,7 +30,9 @@ paths = [
   "**/generated/**",
   "crates/*/benches/**",
 ]
-tests = true             # strip test files from the graph (legacy alias: test_modules)
+tests = true             # skip the language's test files — ON BY DEFAULT; set false to keep them
+                         # (the plugin decides what is a test: Rust #[cfg(test)] modules,
+                         #  Python test_*.py / tests/, JS/TS *.test.* …; legacy alias: test_modules)
 
 [rules.cycles]
 # each kind: false = off, true = strict (any cycle fails, same as 0),

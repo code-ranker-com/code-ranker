@@ -94,10 +94,11 @@ pub fn analyze_ecmascript(
     exts: &[&str],
     lang_for_ext: impl Fn(&str) -> Option<tree_sitter::Language>,
     candidate_exts_order: &[&str],
+    ignore_tests: bool,
 ) -> Result<Graph> {
     let source_root = find_source_root(workspace);
     let alias_root = source_root.clone();
-    let files = collect_files(&source_root, exts);
+    let files = collect_files(&source_root, exts, ignore_tests);
     let file_index = build_file_index(workspace, &files);
 
     let mut nodes: Vec<Node> = Vec::new();
@@ -219,7 +220,7 @@ fn find_source_root(workspace: &Path) -> PathBuf {
 // File discovery
 // ─────────────────────────────────────────────────────────────────────────────
 
-fn collect_files(root: &Path, exts: &[&str]) -> Vec<PathBuf> {
+fn collect_files(root: &Path, exts: &[&str], ignore_tests: bool) -> Vec<PathBuf> {
     WalkDir::new(root)
         .into_iter()
         .filter_map(|e| e.ok())
@@ -229,9 +230,33 @@ fn collect_files(root: &Path, exts: &[&str]) -> Vec<PathBuf> {
                     .extension()
                     .is_some_and(|x| exts.contains(&x.to_str().unwrap_or("")))
                 && !is_skip_path(e.path(), root)
+                && !(ignore_tests && is_test_file(e.path(), root))
         })
         .map(|e| e.into_path())
         .collect()
+}
+
+/// ECMAScript test conventions, shared by the JS and TS plugins: `*.test.*` /
+/// `*.spec.*` files and anything under `__tests__`, `__mocks__`, `tests` or
+/// `test` directories.
+pub fn ecmascript_is_test_path(rel_path: &str) -> bool {
+    let file = rel_path.rsplit('/').next().unwrap_or(rel_path);
+    let stem = file.split('.').next().unwrap_or(file);
+    rel_path
+        .split('/')
+        .any(|c| matches!(c, "__tests__" | "__mocks__" | "tests" | "test"))
+        || file.contains(".test.")
+        || file.contains(".spec.")
+        || stem.ends_with("_test")
+        || stem.ends_with("_spec")
+}
+
+/// Workspace-relative test check used during the walk.
+fn is_test_file(path: &Path, root: &Path) -> bool {
+    path.strip_prefix(root)
+        .ok()
+        .map(|rel| ecmascript_is_test_path(&rel.to_string_lossy().replace('\\', "/")))
+        .unwrap_or(false)
 }
 
 fn is_skip_path(path: &Path, workspace: &Path) -> bool {
@@ -480,7 +505,7 @@ impl LanguagePlugin for JavascriptPlugin {
         vec![ecmascript_level("files")]
     }
 
-    fn analyze(&self, workspace: &Path, _level: &str, _input: &PluginInput) -> Result<Graph> {
+    fn analyze(&self, workspace: &Path, _level: &str, input: &PluginInput) -> Result<Graph> {
         analyze_ecmascript(
             workspace,
             JS_EXTS,
@@ -489,7 +514,12 @@ impl LanguagePlugin for JavascriptPlugin {
                 _ => None,
             },
             &["js", "jsx", "mjs", "cjs"],
+            input.ignore_tests,
         )
+    }
+
+    fn is_test_path(&self, rel_path: &str) -> bool {
+        ecmascript_is_test_path(rel_path)
     }
 }
 
@@ -582,6 +612,7 @@ mod tests {
                 _ => None,
             },
             &["ts", "tsx", "js", "jsx"],
+            false,
         )
         .expect("analyze_ecmascript should succeed");
 
@@ -613,6 +644,23 @@ mod tests {
                 .any(|e| e.source == a_id && e.target == "ext:react"),
             "external edge a.ts → react"
         );
+    }
+
+    #[test]
+    fn ecmascript_is_test_path_matches_conventions() {
+        for p in [
+            "src/a.test.ts",
+            "src/a.spec.tsx",
+            "__tests__/a.js",
+            "src/__mocks__/fs.js",
+            "test/helper.ts",
+            "src/foo_test.js",
+        ] {
+            assert!(ecmascript_is_test_path(p), "should be a test: {p}");
+        }
+        for p in ["src/a.ts", "src/latest.ts", "src/contest.js"] {
+            assert!(!ecmascript_is_test_path(p), "should not be a test: {p}");
+        }
     }
 
     #[test]

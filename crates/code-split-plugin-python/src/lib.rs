@@ -63,20 +63,34 @@ impl LanguagePlugin for PythonPlugin {
         }]
     }
 
-    fn analyze(&self, workspace: &Path, _level: &str, _input: &PluginInput) -> Result<Graph> {
-        analyze(workspace)
+    fn analyze(&self, workspace: &Path, _level: &str, input: &PluginInput) -> Result<Graph> {
+        analyze(workspace, input.ignore_tests)
     }
+
+    fn is_test_path(&self, rel_path: &str) -> bool {
+        py_is_test_path(rel_path)
+    }
+}
+
+/// Python test conventions: pytest/unittest files (`test_*.py`, `*_test.py`,
+/// `conftest.py`) and anything under a `tests/` directory.
+fn py_is_test_path(rel_path: &str) -> bool {
+    let file = rel_path.rsplit('/').next().unwrap_or(rel_path);
+    rel_path.split('/').any(|c| c == "tests" || c == "test")
+        || file == "conftest.py"
+        || (file.starts_with("test_") && file.ends_with(".py"))
+        || file.ends_with("_test.py")
 }
 
 // ---------------------------------------------------------------------------
 // Core analysis
 // ---------------------------------------------------------------------------
 
-fn analyze(workspace: &Path) -> Result<Graph> {
+fn analyze(workspace: &Path, ignore_tests: bool) -> Result<Graph> {
     let mut nodes: Vec<Node> = Vec::new();
     let mut edges: Vec<Edge> = Vec::new();
 
-    let py_files = collect_py_files(workspace);
+    let py_files = collect_py_files(workspace, ignore_tests);
     let module_index = build_module_index(workspace, &py_files);
 
     // Track external nodes already added (by id) to avoid duplicates.
@@ -103,7 +117,7 @@ fn analyze(workspace: &Path) -> Result<Graph> {
 // File discovery
 // ---------------------------------------------------------------------------
 
-fn collect_py_files(workspace: &Path) -> Vec<PathBuf> {
+fn collect_py_files(workspace: &Path, ignore_tests: bool) -> Vec<PathBuf> {
     WalkDir::new(workspace)
         .into_iter()
         .filter_map(|e| e.ok())
@@ -111,9 +125,18 @@ fn collect_py_files(workspace: &Path) -> Vec<PathBuf> {
             e.file_type().is_file()
                 && e.path().extension().is_some_and(|x| x == "py")
                 && !is_skip_path(e.path(), workspace)
+                && !(ignore_tests && is_test_file(e.path(), workspace))
         })
         .map(|e| e.into_path())
         .collect()
+}
+
+/// Workspace-relative test check used during the walk.
+fn is_test_file(path: &Path, workspace: &Path) -> bool {
+    path.strip_prefix(workspace)
+        .ok()
+        .map(|rel| py_is_test_path(&rel.to_string_lossy().replace('\\', "/")))
+        .unwrap_or(false)
 }
 
 fn is_skip_path(path: &Path, workspace: &Path) -> bool {
@@ -522,6 +545,22 @@ mod tests {
         // dunder names (e.g. __init__) are not "private" (they have trailing __)
         // but they start with '_' so they are "restricted" by the heuristic.
         assert_eq!(py_visibility_str("__init__"), "restricted");
+    }
+
+    #[test]
+    fn py_is_test_path_matches_pytest_conventions() {
+        for p in [
+            "tests/test_foo.py",
+            "pkg/test_bar.py",
+            "pkg/bar_test.py",
+            "conftest.py",
+            "pkg/tests/helper.py",
+        ] {
+            assert!(py_is_test_path(p), "should be a test: {p}");
+        }
+        for p in ["pkg/app.py", "pkg/latest.py", "pkg/contest.py"] {
+            assert!(!py_is_test_path(p), "should not be a test: {p}");
+        }
     }
 
     // ── end-to-end: a tiny package through analyze() ────────────────────────

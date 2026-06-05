@@ -9,7 +9,9 @@ use code_split_plugin_api::{
     level::Level,
     plugin::{LanguagePlugin, PluginInput},
 };
-use code_split_plugin_javascript::{analyze_ecmascript, detect_with_marker, ecmascript_level};
+use code_split_plugin_javascript::{
+    analyze_ecmascript, detect_with_marker, ecmascript_is_test_path, ecmascript_level,
+};
 use std::path::Path;
 
 /// The TypeScript language plugin (handles .ts / .tsx / .mts / .cts).
@@ -30,7 +32,7 @@ impl LanguagePlugin for TypescriptPlugin {
         vec![ecmascript_level("files")]
     }
 
-    fn analyze(&self, workspace: &Path, _level: &str, _input: &PluginInput) -> Result<Graph> {
+    fn analyze(&self, workspace: &Path, _level: &str, input: &PluginInput) -> Result<Graph> {
         analyze_ecmascript(
             workspace,
             TS_EXTS,
@@ -41,7 +43,12 @@ impl LanguagePlugin for TypescriptPlugin {
             },
             // Resolve imports TS-first, then JS fallbacks.
             &["ts", "tsx", "mts", "cts", "js", "jsx"],
+            input.ignore_tests,
         )
+    }
+
+    fn is_test_path(&self, rel_path: &str) -> bool {
+        ecmascript_is_test_path(rel_path)
     }
 }
 

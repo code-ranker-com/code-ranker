@@ -261,4 +261,83 @@ mod tests {
         assert_eq!(cfg.rules.thresholds.file.cognitive, Some(25.0));
         assert_eq!(cfg.rules.thresholds.file.hk, Some(1000.0));
     }
+
+    #[test]
+    fn inline_overrides_set_each_key() {
+        let mut cfg = Config::default();
+        apply_inline_overrides(
+            &mut cfg,
+            &[
+                "plugin=rust",
+                "ignore.tests=on",
+                "ignore.dev_only_crates=true",
+                "ignore.paths=a/**, b/**",
+                "output.json.path=out.json",
+                "output.html.path=out.html",
+                "output.json.enabled=off",
+                "output.html.enabled=true",
+                "rules.cycles.chain=7",
+                "rules.thresholds.file.loc=800",
+            ],
+        )
+        .unwrap();
+        assert_eq!(cfg.plugin.as_deref(), Some("rust"));
+        assert!(cfg.ignore.tests && cfg.ignore.dev_only_crates);
+        assert_eq!(cfg.ignore.paths, ["a/**", "b/**"]);
+        assert_eq!(cfg.output.json.path.as_deref(), Some("out.json"));
+        assert_eq!(cfg.output.html.path.as_deref(), Some("out.html"));
+        assert_eq!(cfg.output.json.enabled, Some(false));
+        assert_eq!(cfg.output.html.enabled, Some(true));
+        assert_eq!(cfg.rules.cycles.chain, CycleRule::Max(7));
+        assert_eq!(cfg.rules.thresholds.file.loc, Some(800.0));
+    }
+
+    #[test]
+    fn inline_overrides_reject_bad_input() {
+        let mut cfg = Config::default();
+        assert!(apply_inline_overrides(&mut cfg, &["no_equals_sign"]).is_err());
+        assert!(apply_inline_overrides(&mut cfg, &["totally.unknown=1"]).is_err());
+    }
+
+    #[test]
+    fn parse_cycle_rule_variants() {
+        assert_eq!(parse_cycle_rule("on").unwrap(), CycleRule::Max(0));
+        assert_eq!(parse_cycle_rule("true").unwrap(), CycleRule::Max(0));
+        assert_eq!(parse_cycle_rule("off").unwrap(), CycleRule::Off);
+        assert_eq!(parse_cycle_rule("false").unwrap(), CycleRule::Off);
+        assert_eq!(parse_cycle_rule("7").unwrap(), CycleRule::Max(7));
+        assert!(parse_cycle_rule("-1").is_err());
+        assert!(parse_cycle_rule("nope").is_err());
+    }
+
+    #[test]
+    fn parse_threshold_path_shape() {
+        assert_eq!(parse_threshold_path("file.loc").unwrap(), ("file", "loc"));
+        assert!(parse_threshold_path("loc").is_err());
+        assert!(parse_threshold_path("a.b.c").is_err());
+    }
+
+    #[test]
+    fn set_metric_each_then_unknown() {
+        let mut b = MetricThresholds::default();
+        for m in ["hk", "cyclomatic", "cognitive", "fan_in", "fan_out", "loc"] {
+            set_metric(&mut b, m, 1.0).unwrap();
+        }
+        assert!(set_metric(&mut b, "bogus", 1.0).is_err());
+    }
+
+    #[test]
+    fn set_threshold_and_cycle_reject_unknowns() {
+        let mut cfg = Config::default();
+        assert!(set_threshold(&mut cfg, "function", "loc", 1.0).is_err());
+        set_threshold(&mut cfg, "file", "hk", 5.0).unwrap();
+        assert_eq!(cfg.rules.thresholds.file.hk, Some(5.0));
+        assert!(set_cycle(&mut cfg, "weird", CycleRule::Off).is_err());
+    }
+
+    #[test]
+    fn split_kv_requires_equals() {
+        assert_eq!(split_kv("a=b", "x").unwrap(), ("a", "b"));
+        assert!(split_kv("noeq", "x").is_err());
+    }
 }

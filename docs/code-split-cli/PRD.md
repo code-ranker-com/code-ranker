@@ -132,7 +132,7 @@ plugin = "auto"          # default plugin; "auto" detects by project markers, ov
 
 [ignore]
 paths        = ["**/generated/**"]  # glob patterns matched against node path
-tests        = true      # strip test files from the graph (legacy alias: test_modules)
+tests        = true      # skip the language's test files; ON BY DEFAULT (legacy alias: test_modules)
 dev_only_crates = true   # strip crates reachable only via [dev-dependencies]
                          # (uses `cargo metadata` for transitive accuracy)
 

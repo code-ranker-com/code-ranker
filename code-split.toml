@@ -22,8 +22,10 @@ path = ".code-split/{project-dir}-{ts}.html"
 [ignore]
 # Glob patterns (repo-relative) to drop from the graph.
 paths = []
-# Strip test files (test_*.rs, *_test.rs, tests/ …) from the graph.
-tests = false
+# Skip the language's test files (the plugin decides what counts as a test:
+# Rust `#[cfg(test)]` modules, Python `test_*.py`/`tests/`, JS/TS `*.test.*` …).
+# On by default — metrics and cycles describe production code. Set false to keep.
+tests = true
 # Strip crates that appear only in [dev-dependencies].
 dev_only_crates = false
 

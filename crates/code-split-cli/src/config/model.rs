@@ -31,15 +31,28 @@ pub struct OutputArtifact {
     pub enabled: Option<bool>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct IgnoreConfig {
     pub paths: Vec<String>,
-    /// Strip test files from the graph.
+    /// Skip the language's test files during analysis. **On by default** —
+    /// metrics and cycles describe production code unless you opt back in with
+    /// `tests = false`. The plugin decides what counts as a test (see
+    /// `LanguagePlugin::is_test_path`).
     #[serde(alias = "test_modules", alias = "test-modules")]
     pub tests: bool,
     /// Strip crates that appear only in [dev-dependencies].
     pub dev_only_crates: bool,
+}
+
+impl Default for IgnoreConfig {
+    fn default() -> Self {
+        Self {
+            paths: Vec::new(),
+            tests: true,
+            dev_only_crates: false,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Default)]

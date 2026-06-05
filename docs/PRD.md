@@ -647,7 +647,12 @@ external/dynamic plugin loading.
 Each plugin implements the `LanguagePlugin` trait (`code-split-plugin-api`) as a
 **pure parser**: `analyze(workspace, level, input)` returns a structural `Graph`
 (nodes + edges, **no metrics**), and `levels()` declares the level's semantics
-dictionaries. The orchestrator computes all metrics centrally
+dictionaries. When `input.ignore_tests` is set (`[ignore] tests`, **on by
+default**), the plugin skips its own test files during the walk — what counts as
+a test is language-specific (Rust `#[cfg(test)]` modules, Python
+`test_*.py`/`tests/`, JS/TS `*.test.*`/`__tests__`), so the detection
+(`is_test_path`) lives in the plugin, not the CLI. The orchestrator computes all
+metrics centrally
 (`code-split-complexity` by file extension; cycles / Henry-Kafura / stats in
 `code-split-graph` over the level's flow edges), writing them into node
 attributes by id, and assembles the snapshot. Adding a language means adding a

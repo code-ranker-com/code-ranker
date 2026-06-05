@@ -23,7 +23,8 @@ the known blind spots**, documented in the source comments and pinned in its
 ## How it works
 
 - `crates/code-split-plugin-<lang>/sample/code-split.toml` — a self-contained
-  config (plugin pinned, `ignore.tests = false` so test files stay in the graph).
+  config (plugin pinned, `ignore.tests = false` to override the **on-by-default**
+  test skipping so test files stay in the graph and the fixture exercises them).
 - `crates/code-split-plugin-<lang>/sample/code-split-report.json` — the **golden**
   JSON report (`schema_version: "2"`). The graph is already relativized to the
   `{target}` placeholder (machine-independent). The header (`generated_at`,

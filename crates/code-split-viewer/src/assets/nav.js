@@ -1,29 +1,64 @@
 function getNavParams() {
   const p = new URLSearchParams(location.search);
-  return { level: p.get('level'), node: p.get('node'), side: p.get('side') };
+  return {
+    level: p.get('level'),
+    node:  p.get('node'),
+    side:  p.get('side'),
+    group: p.get('group'),
+    mode:  p.get('mode'),
+  };
 }
 // The active diff side carried in the URL — only in diff mode (a current snapshot
 // exists); review mode has a single view and omits the param.
 function navSide() {
   return window.CURRENT && window.viewSide ? window.viewSide : null;
 }
+
+function navViewState() {
+  return {
+    level: currentLevel() ?? null,
+    side:  navSide(),
+    group: window.drillGroup  || null,
+    mode:  window.nodeSizeMode || null,
+  };
+}
+function navViewUrl(st) {
+  const p = new URLSearchParams();
+  if (st.level) p.set('level', st.level);
+  if (st.side)  p.set('side',  st.side);
+  if (st.group) p.set('group', st.group);
+  if (st.mode)  p.set('mode',  st.mode);
+  return p.toString() ? '?' + p : location.pathname;
+}
+// Drill navigation (in/out of a group) — adds a history entry so Back works.
+window.navPushView = function() {
+  const st = navViewState();
+  history.pushState(st, '', navViewUrl(st));
+};
+// Mode/side change — updates URL in-place (no new history entry, but refresh restores).
+window.navReplaceView = function() {
+  const st = navViewState();
+  history.replaceState(st, '', navViewUrl(st));
+};
+
+// Open a node modal: push level + group + mode + node to history.
 window.navPush = function(level, nodeId) {
   const p = new URLSearchParams();
-  if (level)     p.set('level', level);
+  if (level)  p.set('level', level);
   const side = navSide();
-  if (side)      p.set('side', side);
-  if (nodeId)    p.set('node', nodeId);
+  if (side)   p.set('side',  side);
+  const grp = window.drillGroup || null;
+  if (grp)    p.set('group', grp);
+  const mode = window.nodeSizeMode || null;
+  if (mode)   p.set('mode',  mode);
+  if (nodeId) p.set('node',  nodeId);
   const url = p.toString() ? '?' + p : location.pathname;
-  history.pushState({ level: level ?? null, node: nodeId ?? null, side }, '', url);
+  history.pushState({ level: level ?? null, node: nodeId ?? null, side, group: grp, mode }, '', url);
 };
-// Update only the `side` param in place (Baseline/Current toggle), preserving the
-// level / node / Prompt-Generator params already in the URL.
+// Update only the `side` param in place (Baseline/Current toggle).
 window.navSetSide = function() {
-  const p = new URLSearchParams(location.search);
-  const side = navSide();
-  if (side) p.set('side', side); else p.delete('side');
-  const url = p.toString() ? '?' + p : location.pathname;
-  history.replaceState({ ...(history.state || {}), side }, '', url);
+  const st = { ...(history.state || {}), ...navViewState() };
+  history.replaceState(st, '', navViewUrl(st));
 };
 function currentLevel() {
   return document.querySelector('.view.active')?.dataset.view ?? null;

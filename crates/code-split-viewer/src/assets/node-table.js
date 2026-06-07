@@ -401,6 +401,17 @@ function renderNodeTooltip(node, level) {
          (body ? `<div class="tt-desc">${body}</div>` : '');
 }
 
+function renderGroupTooltip(stats) {
+  const rows = [
+    ['files', String(stats.files)],
+    ['sloc',  stats.sloc > 0 ? fmtMetricShort(stats.sloc) : null],
+    ['hk',    stats.hk   > 0 ? fmtMetricShort(stats.hk)   : null],
+  ].filter(([, v]) => v !== null);
+  const body = rows.map(([k, v]) => `<b>${k}:</b> ${escHtml(v)}`).join('<br>');
+  return `<div class="tt-title">${escHtml(stats.name)}</div>` +
+         (body ? `<div class="tt-desc">${body}</div>` : '');
+}
+
 function setupTooltip() {
   const tt = document.getElementById('tt');
   let current = null;
@@ -432,6 +443,10 @@ function setupTooltip() {
     // A node on the main map (SVG `g.node` tagged with its id in setupTooltips):
     // show its basic fields. Native graphviz `<title>` is removed there, so this
     // is the only tooltip on the map.
+    const mapGroup = e.target.closest('g.node[data-group-id]');
+    if (mapGroup?.dataset.groupStats) {
+      return { el: mapGroup, html: renderGroupTooltip(JSON.parse(mapGroup.dataset.groupStats)) };
+    }
     const mapNode = e.target.closest('g.node[data-node-id]');
     if (mapNode) {
       const lv = mapNode.closest('[data-view]')?.dataset.view || 'files';

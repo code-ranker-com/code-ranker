@@ -136,38 +136,29 @@ diff between the baseline snapshot and the current `[input]`: nodes and
 edges added, removed, or affected. The diff includes an overall
 verdict: `improved`, `degraded`, or `neutral`. The interactive
 diff HTML uses Graphviz WASM (bundled in the binary) for client-side
-DOT→SVG layout with directory cluster grouping; there is a single Files
-view (no level switcher). The map is laid out **once** from the **union**
-of both snapshots (Graphviz computes a single set of node positions); the
-`[data-side]` Baseline/Current buttons are then a pure CSS visibility flip —
-current-only (added) elements are hidden on the Baseline side, baseline-only
-(removed) elements on the Current side — so every file present on both sides
-keeps its exact position and never moves when toggling. **Current is shown by
-default.** In the metric node-size modes (SLOC/HK) each circle is resized
-to the active side's value around its fixed centre (a file that grew or
-shrank changes size, not position). The active side is reflected
-throughout: the `side=baseline|current` URL parameter, the node-table title
-(`Details` / `Details Baseline` / `Details Current`), and a `Baseline` /
-`Current` badge on the node-popup and Prompt-Generator headers. The two header
-slots are the **current** (right) — the primary snapshot the report is
-about, always present and **not removable** — and an optional **baseline**
-(left, editable, removable). With no baseline it is
-single-snapshot **review** mode: the baseline slot is an empty, editable
-placeholder (`↑ Set baseline`) and the Baseline/Current buttons are hidden;
-loading a baseline turns the report into a diff. Each header slot's hover
-tooltip is labelled `Baseline` / `Current` and notes which side is currently
-shown; that slot is also highlighted in the header. Two buttons swap in a
-different snapshot from disk (each accepts a `.json` snapshot or an `.html`
-report): **↑ Replace current** changes the evaluated snapshot, **↑ Set
-baseline** loads a reference to diff against. Cycle membership comes from each
-snapshot's backend-computed `cycles` (Kosaraju SCC over flow edges; the viewer
-does not re-detect cycles); the viewer derives the per-side status and annotates
-nodes/edges for red-stroke highlighting (solid red, no dasharray). The highlight
-is **side-aware** —
-a `baseline-only` cycle is red only on the Baseline side, `current-only` only
-on Current, `both` on either, so a cycle removed in the current snapshot
-stops being red once you switch to Current. Internal `file` nodes render
-blue; `external` library nodes render amber with dashed edges. The node
+DOT→SVG layout; there is a single Files view (no level switcher). The map
+opens in **group view** — one node per group (e.g. per-crate, from
+`ui.grouping.key`), with deduped inter-group edges. **Clicking a group node
+drills into it**: the map re-renders showing only that group's files in
+directory sub-clusters, plus two neighbor clusters — **callers** (left, green
+background) listing other groups whose files call into this group, and
+**dependencies** (right, orange background) listing groups this group calls
+out to; clicking a neighbor group navigates into it. A `← all` breadcrumb
+badge (top-left of the diagram) returns to the group overview. The drill
+state is reflected in the `group=` URL parameter so browser Back / Forward /
+Refresh work correctly; mode changes update the URL via `replaceState`.
+The map is laid out **once** from the **union** of both snapshots; the
+`[data-side]` Baseline/Current buttons are a pure CSS visibility flip. **Current
+is shown by default.** The display mode is controlled by **three buttons** —
+`■` (box/label mode), `SLOC` (circles sized by source lines), `HK` (circles
+sized by Henry-Kafura) — reflected in the `mode=` URL parameter. In metric
+modes (SLOC/HK): in group view circles are sized by the aggregate value across
+the group's files (`max(baselineAgg, currentAgg)`); in drilled file view each
+circle is resized to the active side's value around its fixed centre. The
+active side is reflected in `side=baseline|current`, the node-table title, and
+header badges. Header slots, review mode, snapshot swap, cycle annotation
+(side-aware red stroke from backend `cycles`), internal blue nodes, and amber
+external nodes behave as before. The node
 table column order is: checkbox, Name, Kind, Cycle, Status, LOC, HK,
 Fan-in, Fan-out, H.vol, H.bugs, H.effort, H.time, H.len, H.vocab,
 Cyclomatic, Cognitive, MI, MI SEI, Logical, Comments, Blank. A checkbox column

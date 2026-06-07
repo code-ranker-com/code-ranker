@@ -35,6 +35,8 @@ body.mode-review #meta-mode { order: 4; }   /* review: place "view" after the co
 .snap-group { display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
               border: 1px solid rgba(255,255,255,.18); border-radius: 6px; padding: 6px 11px;
               transition: border-color .15s, box-shadow .15s; }
+/* In review mode there is only one snapshot — clicking the body is a no-op. */
+body.mode-review .snap-group { cursor: default; }
 /* The snapshot input currently shown on the map / tables (active Baseline/Current side). */
 .snap-group.snap-active { border-color: #1abc9c; background: rgba(26,188,156,.20);
                           box-shadow: 0 0 0 1px rgba(26,188,156,.5) inset; }
@@ -230,15 +232,27 @@ text.sn-hint, tspan.sn-hint, g.sn-hint { cursor: inherit; }
               pointer-events: none; }
 
 .size-controls { position: absolute; top: 12px; right: 12px; z-index: 10;
-                 display: flex; gap: 4px;
+                 display: flex; flex-direction: column; gap: 4px;
                  opacity: 0; transition: opacity .15s; pointer-events: none; }
+.size-row { display: flex; gap: 4px; justify-content: flex-end; }
 .frame-wrap.show-zoom .size-controls  { opacity: 1; pointer-events: auto; }
 .size-mode-btn { width: 52px; height: 52px; border: 1px solid #bbb; border-radius: 8px;
                  background: rgba(255,255,255,.95); color: #555; font-size: 12px; font-weight: 600;
                  cursor: pointer; display: flex; align-items: center; justify-content: center;
                  box-shadow: 0 1px 4px rgba(0,0,0,.12); user-select: none; }
-.size-mode-btn:hover { background: #f0f0f0; border-color: #999; }
+.size-mode-btn:hover:not(:disabled) { background: #f0f0f0; border-color: #999; }
 .size-mode-btn.active { border-color: #1abc9c; color: #1abc9c; }
+.size-mode-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.drill-breadcrumb { position: absolute; top: 12px; left: 12px; z-index: 10;
+                    display: flex; align-items: center; gap: 8px;
+                    background: rgba(255,255,255,.95); border: 1px solid #ddd;
+                    border-radius: 8px; padding: 6px 12px;
+                    box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+.drill-back { background: none; border: none; cursor: pointer; font-size: 13px;
+              font-weight: 600; color: #1abc9c; padding: 0; line-height: 1; }
+.drill-back:hover { text-decoration: underline; }
+.drill-group-name { font-size: 13px; font-weight: 600; color: #444; }
 
 .frame-wrap:fullscreen .size-controls { z-index: 250; transition: opacity .15s, top .18s ease; }
 
@@ -510,6 +524,7 @@ text.sn-hint, tspan.sn-hint, g.sn-hint { cursor: inherit; }
                     letter-spacing: .07em; color: #aaa; margin: 10px 0 4px; }
 .sp-section-label:first-child { margin-top: 0; }
 .sp-gen-diff { color: #888; font-size: 11px; }
+.sp-origin { word-break: break-all; }
 /* Snapshot actions, moved out of the header into the popup. */
 .sp-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
 .sp-action { background: #2c3e50; color: #fff; border: 0; border-radius: 4px;

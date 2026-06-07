@@ -71,8 +71,10 @@ function applySideVisibility(frame) {
 // fixed boxes, identical on both sides, so it needs no per-side resize.
 function applySideSizing(frame, level) {
   if (!frame) return;
-  const mode = window.nodeSizeMode || 'default';
-  if (mode === 'default') return;
+  const sizeMode  = window.nodeSizeMode  || null;
+  // Per-side circle resize only applies to metric modes in the drilled file view.
+  if (!sizeMode || (window.drillGroup || null) === null) return;
+  const mode = sizeMode;
   const byId = new Map((activeSnap()?.graphs?.[level]?.nodes || []).map(n => [n.id, n]));
   frame.querySelectorAll('g.node').forEach(g => {
     const n   = byId.get(g.dataset.nodeId);
@@ -226,6 +228,7 @@ function updateHeader() {
   if (!hasCurrent)       window.viewSide = 'baseline';
   else if (!hasBaseline) window.viewSide = 'current';
   updateActiveSnapGroup();
+
 }
 
 // Files is the only graph level — nothing to toggle. Kept as a no-op so callers
@@ -246,7 +249,10 @@ function recomputeAll() {
   buildSummary();
   updateFilesTab();
 
-  // Reset rendered state for all views; the active one re-renders below.
+  // Reset drill state and rendered flags for all views.
+  window.drillGroup = null;
+  document.querySelectorAll('.drill-breadcrumb').forEach(bc => { bc.style.display = 'none'; });
+  document.querySelectorAll('.svg-frame').forEach(f => { delete f.dataset.bigConfirmed; });
   document.querySelectorAll('.view').forEach(sec => { sec.dataset.rendered = 'false'; });
 
   updateHeader();
@@ -337,14 +343,20 @@ function buildSnapPopupHTML(snap, refSnap, sideLabel) {
     sections.push(`<div class="sp-section-label">General</div>${genRows.join('')}`);
 
   // Git
-  if (snap.git) {
-    const { branch, commit, dirty_files } = snap.git;
-    const gitRows = [];
-    if (branch)              gitRows.push(`<div class="sp-row"><span class="sp-lbl">Branch</span><span>${escHtml(branch)}</span></div>`);
-    if (commit)              gitRows.push(`<div class="sp-row"><span class="sp-lbl">Commit hash</span><span>${escHtml(commit)}</span></div>`);
-    if (dirty_files != null) gitRows.push(`<div class="sp-row"><span class="sp-lbl">Dirty files</span><span>${dirty_files > 0 ? dirty_files : '0 (clean)'}</span></div>`);
-    if (gitRows.length)
-      sections.push(`<div class="sp-section-label">Git</div>${gitRows.join('')}`);
+  if (snap.git && Object.keys(snap.git).length) {
+    const gitRows = Object.entries(snap.git).map(([k, v]) => {
+      const cls = k === 'origin' ? ' class="sp-origin"' : '';
+      return `<div class="sp-row"><span class="sp-lbl">${escHtml(k)}</span><span${cls}>${escHtml(String(v ?? ''))}</span></div>`;
+    }).join('');
+    sections.push(`<div class="sp-section-label">Git</div>${gitRows}`);
+  }
+
+  // Versions
+  if (snap.versions && Object.keys(snap.versions).length) {
+    const vrows = Object.entries(snap.versions).map(([k, v]) =>
+      `<div class="sp-row"><span class="sp-lbl">${escHtml(k)}</span><span>${escHtml(v)}</span></div>`
+    ).join('');
+    sections.push(`<div class="sp-section-label">Versions</div>${vrows}`);
   }
 
   // Duration
@@ -516,7 +528,8 @@ function setupFileControls() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  window.nodeSizeMode = 'default';
+  window.nodeSizeMode = null;
+  window.drillGroup   = null;
 
   // Read the snapshots embedded inline in the page (cs-baseline / cs-current script tags).
   window.BASELINE = readEmbeddedSnapshot('cs-baseline');
@@ -562,12 +575,46 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   renderView(active);
 
+  // Helper: apply group+mode from a state object, update UI and re-render if needed.
+  function applyViewState(st, { rerender = false } = {}) {
+    const grp  = st.group || null;
+    const mode = st.mode  || null;
+    let changed = false;
+    if (window.drillGroup   !== grp)  { window.drillGroup   = grp;  changed = true; }
+    if (window.nodeSizeMode !== mode) { window.nodeSizeMode = mode; changed = true; }
+    // Sync breadcrumb
+    const lvl = st.level ?? currentLevel();
+    document.querySelectorAll('.drill-breadcrumb').forEach(bc => {
+      if (grp) {
+        bc.style.display = '';
+        const grpKey = levelUi(lvl).grouping?.key || 'group';
+        bc.querySelector('.drill-group-name').textContent = `${grpKey}: ${grp}`;
+      } else {
+        bc.style.display = 'none';
+      }
+    });
+    // Sync metric buttons
+    document.querySelectorAll('.size-row[data-row="metric"] .size-mode-btn').forEach(b => {
+      const bMode = b.dataset.size === 'dot' ? null : b.dataset.size;
+      b.classList.toggle('active', bMode === mode);
+    });
+    if ((changed || rerender) && window.gv) {
+      document.querySelectorAll('.view').forEach(sec => { sec.dataset.rendered = 'false'; });
+      const active = document.querySelector('.view.active');
+      if (active) renderView(active, { preserve: false });
+    }
+  }
+
   // Restore state from URL, then set initial history entry
-  const { level: urlLevel, node: urlNode } = getNavParams();
+  const { level: urlLevel, node: urlNode, group: urlGroup, mode: urlMode } = getNavParams();
   if (urlLevel && urlLevel !== currentLevel()) switchToLevel(urlLevel);
+  applyViewState({ level: urlLevel, group: urlGroup, mode: urlMode }, { rerender: !!(urlGroup || urlMode) });
   if (urlNode) openModalForNode(urlNode, urlLevel ?? currentLevel());
   // Replace initial history state so popstate can restore it
-  history.replaceState({ level: currentLevel(), node: urlNode ?? null }, '', location.href);
+  history.replaceState(
+    { level: currentLevel(), node: urlNode ?? null, group: urlGroup ?? null, mode: urlMode ?? null, side: window.viewSide },
+    '', location.href
+  );
 
   // Re-open the Prompt Generator if the URL says it was open.
   if (epState) {
@@ -576,12 +623,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   window.addEventListener('popstate', e => {
-    const st = e.state || getNavParams();
+    const st   = e.state || getNavParams();
     const lvl  = st.level;
     const nid  = st.node;
     const side = st.side;
     if (window.CURRENT && (side === 'baseline' || side === 'current')) setViewSide(side);
     if (lvl && lvl !== currentLevel()) switchToLevel(lvl);
+    applyViewState({ level: lvl ?? currentLevel(), group: st.group, mode: st.mode }, { rerender: true });
     if (nid) {
       openModalForNode(nid, lvl ?? currentLevel());
     } else {

@@ -105,19 +105,33 @@ function setupPanZoom(frame, svg) {
 
     wrap.addEventListener('mousemove', e => {
       const r = wrap.getBoundingClientRect();
-      wrap.classList.toggle('show-zoom', e.clientX >= r.right - 248);
+      const sc = wrap.querySelector('.size-controls');
+      const zoneW = sc ? sc.offsetWidth + 24 : 248;
+      wrap.classList.toggle('show-zoom', e.clientX >= r.right - zoneW);
     });
     wrap.addEventListener('mouseleave', () => wrap.classList.remove('show-zoom'));
 
-    wrap.querySelectorAll('.size-mode-btn').forEach(btn => {
+    // Metric row: ■ (dot=null) | SLOC (loc) | HK (hk).
+    // Clicking the active SLOC/HK deselects back to ■ (null).
+    const modeFor = size => (size === 'dot' ? null : size);
+    wrap.querySelectorAll('.size-row[data-row="metric"] .size-mode-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        window.nodeSizeMode = btn.dataset.size;
-        document.querySelectorAll('.size-mode-btn').forEach(b =>
-          b.classList.toggle('active', b.dataset.size === window.nodeSizeMode));
+        const clicked  = modeFor(btn.dataset.size);
+        const newMode  = (window.nodeSizeMode === clicked && clicked !== null) ? null : clicked;
+        window.nodeSizeMode = newMode;
+        btn.closest('.size-row').querySelectorAll('.size-mode-btn').forEach(b =>
+          b.classList.toggle('active', modeFor(b.dataset.size) === newMode));
+        window.navReplaceView?.();
         document.querySelectorAll('.view').forEach(sec => { sec.dataset.rendered = 'false'; });
         const active = document.querySelector('.view.active');
         if (active && window.gv) renderView(active, { preserve: true });
       });
+    });
+
+    // Drill back button: return from file view to group view.
+    wrap.querySelector('[data-drill="back"]')?.addEventListener('click', () => {
+      const lv = wrap.closest('.view')?.dataset.view || 'files';
+      drillOutOfGroup(lv);
     });
 
     document.addEventListener('fullscreenchange', () => {
@@ -163,7 +177,9 @@ function setupPanZoom(frame, svg) {
       const topPx = topShow ? (barH + 12) + 'px' : '';
       wrap.querySelector('.size-controls')?.style.setProperty('top', topPx || null);
       const r = wrap.getBoundingClientRect();
-      wrap.classList.toggle('show-zoom', topShow || e.clientX >= r.right - 248);
+      const sc2 = wrap.querySelector('.size-controls');
+      const zoneW2 = sc2 ? sc2.offsetWidth + 24 : 248;
+      wrap.classList.toggle('show-zoom', topShow || e.clientX >= r.right - zoneW2);
     };
     document.addEventListener('mousemove', fsMoveHandler);
   }

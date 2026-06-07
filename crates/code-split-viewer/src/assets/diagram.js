@@ -791,54 +791,127 @@ window.kbdHintsHtml = kbdHintsHtml;
   window.addEventListener('blur', () => { setShift(false); setSrc(false); });
 })();
 
+function drillIntoGroup(groupId, level) {
+  window.drillGroup = groupId;
+  const frameWrap = document.querySelector(`.view[data-view="${level}"] .frame-wrap`);
+  const bc = frameWrap?.querySelector('.drill-breadcrumb');
+  if (bc) {
+    bc.style.display = '';
+    const grpKey = levelUi(level).grouping?.key || 'group';
+    bc.querySelector('.drill-group-name').textContent = `${grpKey}: ${groupId}`;
+  }
+  window.navPushView?.();
+  document.querySelectorAll('.view').forEach(sec => { sec.dataset.rendered = 'false'; });
+  const active = document.querySelector('.view.active');
+  if (active && window.gv) renderView(active, { preserve: false });
+}
+
+function drillOutOfGroup(level) {
+  window.drillGroup = null;
+  const frameWrap = document.querySelector(`.view[data-view="${level}"] .frame-wrap`);
+  const bc = frameWrap?.querySelector('.drill-breadcrumb');
+  if (bc) bc.style.display = 'none';
+  window.navPushView?.();
+  document.querySelectorAll('.view').forEach(sec => { sec.dataset.rendered = 'false'; });
+  const active = document.querySelector('.view.active');
+  if (active && window.gv) renderView(active, { preserve: false });
+}
+
 function setupTooltips(svgFrame, level) {
   svgFrame.querySelectorAll('g.edge title, g.cluster title').forEach(t => t.remove());
 
-  // The SVG is the union (baseline+current) layout, so map EVERY union node — not just
-  // the active side's — or baseline-only (removed) / current-only (added) nodes would
-  // lack click handlers and a `_gNodeMap` entry on the side where they're visible.
-  const nodeMap  = new Map(unionGraph(level).nodes.map(n => [n.id, n]));
-  const section  = svgFrame.closest('.view');
-  const gNodeMap = new Map();
+  const drillGroup = window.drillGroup || null;
+  const section    = svgFrame.closest('.view');
+  const gNodeMap   = new Map();
 
-  svgFrame.querySelectorAll('g.node').forEach(g => {
-    const titleEl = g.querySelector('title');
-    const nodeId  = titleEl?.textContent?.trim();
-    titleEl?.remove();
+  if (drillGroup !== null) {
+    // ── Drilled file view: wire up individual file nodes ─────────────────────────
+    // Map EVERY union node so baseline-only / current-only nodes get handlers too.
+    const nodeMap = new Map(unionGraph(level).nodes.map(n => [n.id, n]));
 
-    const node = nodeMap.get(nodeId);
-    if (!node) return;
+    svgFrame.querySelectorAll('g.node').forEach(g => {
+      const titleEl = g.querySelector('title');
+      const nodeId  = titleEl?.textContent?.trim();
+      titleEl?.remove();
 
-    g.dataset.nodeId = nodeId;
-    gNodeMap.set(nodeId, g);
-
-    g.style.cursor = 'pointer';
-    g.addEventListener('click', e => {
-      e.stopPropagation();
-      // ⌘ (mac) / Ctrl = "open source": jump to the file on the git host.
-      if (isOpenSrcClick(e)) {
-        const url = nodeSourceUrl(node, level);
-        if (url) window.open(url, '_blank', 'noopener');
+      // External neighbor node (caller / dependency from another group)?
+      const neighborPrefix = nodeId?.startsWith('IN\x01') ? 'IN\x01'
+                           : nodeId?.startsWith('OUT\x01') ? 'OUT\x01' : null;
+      if (neighborPrefix) {
+        const neighborGroup = nodeId.slice(neighborPrefix.length);
+        g.style.cursor = 'pointer';
+        g.addEventListener('click', e => {
+          e.stopPropagation();
+          drillIntoGroup(neighborGroup, level);
+        });
+        g.addEventListener('mouseenter', () => g.classList.add('node-hl'));
+        g.addEventListener('mouseleave', () => g.classList.remove('node-hl'));
         return;
       }
-      // Shift = "select mode": toggle this node's selection.
-      if (e.shiftKey) { toggleNodeSelected(node, level, section); return; }
-      // Route through openModalForNode so the modal show / header flyout / open-node
-      // tracking all live in one place.
-      if (window.openModalForNode?.(node.id, level)) window.navPush?.(level, node.id);
+
+      const node = nodeMap.get(nodeId);
+      if (!node) return;
+
+      g.dataset.nodeId = nodeId;
+      gNodeMap.set(nodeId, g);
+      g.style.cursor = 'pointer';
+
+      g.addEventListener('click', e => {
+        e.stopPropagation();
+        if (isOpenSrcClick(e)) {
+          const url = nodeSourceUrl(node, level);
+          if (url) window.open(url, '_blank', 'noopener');
+          return;
+        }
+        if (e.shiftKey) { toggleNodeSelected(node, level, section); return; }
+        if (window.openModalForNode?.(node.id, level)) window.navPush?.(level, node.id);
+      });
+
+      g.addEventListener('mouseenter', () => {
+        g.classList.add('node-hl');
+        section?.querySelector(`tr[data-node-id="${nodeId.replace(/\\/g,'\\\\').replace(/"/g,'\\"')}"]`)
+                ?.classList.add('row-hl');
+      });
+      g.addEventListener('mouseleave', () => {
+        g.classList.remove('node-hl');
+        section?.querySelector(`tr[data-node-id="${nodeId.replace(/\\/g,'\\\\').replace(/"/g,'\\"')}"]`)
+                ?.classList.remove('row-hl');
+      });
     });
 
-    g.addEventListener('mouseenter', () => {
-      g.classList.add('node-hl');
-      const row = section?.querySelector(`tr[data-node-id="${nodeId.replace(/\\/g,'\\\\').replace(/"/g,'\\"')}"]`);
-      row?.classList.add('row-hl');
+  } else {
+    // ── Group view: tag group nodes and wire up drill-in click ───────────────────
+    const gOf = makeGroupOf(level);
+    const groupStats = new Map();
+    for (const n of unionGraph(level).nodes) {
+      const grp = gOf(n);
+      if (!groupStats.has(grp)) groupStats.set(grp, { name: grp, files: 0, sloc: 0, hk: 0 });
+      const s = groupStats.get(grp);
+      s.files++;
+      s.sloc += Number(n.sloc ?? n.loc ?? 0);
+      s.hk   += Number(n.hk ?? 0);
+    }
+
+    svgFrame.querySelectorAll('g.node').forEach(g => {
+      const titleEl = g.querySelector('title');
+      const groupId = titleEl?.textContent?.trim();
+      titleEl?.remove();
+      if (!groupId) return;
+      const stats = groupStats.get(groupId);
+      if (!stats) return;
+
+      g.dataset.groupId    = groupId;
+      g.dataset.groupStats = JSON.stringify(stats);
+      g.style.cursor = 'pointer';
+
+      g.addEventListener('click', e => {
+        e.stopPropagation();
+        drillIntoGroup(groupId, level);
+      });
+      g.addEventListener('mouseenter', () => g.classList.add('node-hl'));
+      g.addEventListener('mouseleave', () => g.classList.remove('node-hl'));
     });
-    g.addEventListener('mouseleave', () => {
-      g.classList.remove('node-hl');
-      section?.querySelector(`tr[data-node-id="${nodeId.replace(/\\/g,'\\\\').replace(/"/g,'\\"')}"]`)
-              ?.classList.remove('row-hl');
-    });
-  });
+  }
 
   if (section) section._gNodeMap = gNodeMap;
 }
@@ -848,32 +921,40 @@ function setupTooltips(svgFrame, level) {
 const SVG_NODE_LIMIT = 500;
 
 function drawSVG(svgFrame, nodes, edges, level) {
-  if (nodes.length > SVG_NODE_LIMIT && svgFrame.dataset.bigConfirmed !== '1') {
-    svgFrame.innerHTML =
-      `<div class="too-many">` +
-        `<div class="too-many-title">too many nodes: ${nodes.length}</div>` +
-        `<div class="too-many-sub">Rendering the full diagram may be slow. Render it anyway?</div>` +
-        `<button class="too-many-btn" type="button">Render diagram</button>` +
-      `</div>`;
-    svgFrame.querySelector('.too-many-btn').addEventListener('click', () => {
-      svgFrame.dataset.bigConfirmed = '1';
-      // Show the same "Computing layout…" indicator as a mode switch, and defer
-      // the (slow, blocking) graphviz layout one tick so the indicator actually
-      // paints before the main thread is busy.
-      const loading = svgFrame.closest('[data-view]')?.querySelector('.loading-indicator');
-      if (loading) { loading.textContent = 'Computing layout…'; loading.classList.add('on'); }
-      setTimeout(() => {
-        renderSVGNow(svgFrame, nodes, edges, level);
-        if (loading) loading.classList.remove('on');
-      }, 30);
-    });
-    return;
+  const drillGroup = window.drillGroup || null;
+
+  // Group view (drillGroup=null) is always fast — just one node per group.
+  // Only warn when drilled into a very large group.
+  if (drillGroup !== null) {
+    const gOf = makeGroupOf(level);
+    const drillCount = nodes.filter(n => gOf(n) === drillGroup).length;
+    if (drillCount > SVG_NODE_LIMIT && svgFrame.dataset.bigConfirmed !== '1') {
+      svgFrame.innerHTML =
+        `<div class="too-many">` +
+          `<div class="too-many-title">too many nodes: ${drillCount}</div>` +
+          `<div class="too-many-sub">Rendering the full diagram may be slow. Render it anyway?</div>` +
+          `<button class="too-many-btn" type="button">Render diagram</button>` +
+        `</div>`;
+      svgFrame.querySelector('.too-many-btn').addEventListener('click', () => {
+        svgFrame.dataset.bigConfirmed = '1';
+        const loading = svgFrame.closest('[data-view]')?.querySelector('.loading-indicator');
+        if (loading) { loading.textContent = 'Computing layout…'; loading.classList.add('on'); }
+        setTimeout(() => {
+          renderSVGNow(svgFrame, nodes, edges, level);
+          if (loading) loading.classList.remove('on');
+        }, 30);
+      });
+      return;
+    }
   }
   renderSVGNow(svgFrame, nodes, edges, level);
 }
 
 function renderSVGNow(svgFrame, nodes, edges, level) {
-  const dot = buildDOT(nodes, edges, level);
+  const vpW = svgFrame.offsetWidth  || svgFrame.clientWidth  || 0;
+  const vpH = svgFrame.offsetHeight || svgFrame.clientHeight || 0;
+  const viewport = (vpW > 0 && vpH > 0) ? { w: vpW, h: vpH } : null;
+  const dot = buildDOT(nodes, edges, level, viewport);
   const svgStr = window.gv.dot(dot);
   svgFrame.innerHTML = svgStr;
   const svg = svgFrame.querySelector('svg');

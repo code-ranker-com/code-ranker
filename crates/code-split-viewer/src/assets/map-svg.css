@@ -1,12 +1,6 @@
 /* map-svg.css: graphviz nodes/edges, visibility, cycle, selection, hover, status bar, edge highlight — part of the split stylesheet; concatenated in lib.rs in source order to preserve the cascade. */
 /* ── Graphviz nodes / edges ──────────────────────────────────────────────────── */
 g.node polygon, g.node ellipse { stroke-width: 1; }
-/* Keep stroke widths (node borders, cluster frames, edges) a CONSTANT on-screen
-   thickness regardless of how much the SVG is scaled to fit the frame — without
-   this, a single collapsed node blown up ~19× shows a ~19px-thick border. */
-.svg-frame svg polygon,
-.svg-frame svg ellipse,
-.svg-frame svg path { vector-effect: non-scaling-stroke; }
 
 /* ── Visibility toggles (class on .svg-frame → CSS hides matching SVG elements) ── */
 .hide-nodes-added    g.node.status-added    { display: none; }
@@ -123,10 +117,7 @@ g.node.node-selected > ellipse { fill: #fffde7 !important; stroke: #f9a825 !impo
 /* ── Hover: last → wins over selection when both classes present ─────────────── */
 .node-table tr.row-hl td { background: rgb(210,235,248); }
 .node-table tr.row-hl td[data-col="name"] { background: rgb(210,235,248); }
-/* Blur radii scaled by the SVG fit factor `--zk` (set in map-render.js) so the
-   blue hover halo stays ~constant on screen instead of ballooning when a small
-   graph is blown up to fill the frame. */
-g.node.node-hl { filter: drop-shadow(0 0 calc(28px * var(--zk,1)) rgba(30,160,220,1)) drop-shadow(0 0 calc(14px * var(--zk,1)) rgba(30,160,220,.85)) drop-shadow(0 0 calc(6px * var(--zk,1)) rgba(30,160,220,.6)); }
+g.node.node-hl { filter: drop-shadow(0 0 28px rgba(30,160,220,1)) drop-shadow(0 0 14px rgba(30,160,220,.85)) drop-shadow(0 0 6px rgba(30,160,220,.6)); }
 
 /* ── SVG status bar (bottom of frame-wrap, replaces tooltip on map nodes) ─── */
 .svg-status-bar {

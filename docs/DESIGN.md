@@ -1099,7 +1099,7 @@ code-split/
           grouping.js      # Grouping ladder for relative dig (grouperForDig, crateRoots/crateDirs, groupLabel, crateRelDir, aggCycleStatus)
           diff.js          # Browser-side diff + per-side cycle status
           layout.js        # buildDOT — DOT graph construction (dig-aware grouping, cycle classes, node-count labels)
-          map-render.js    # drawSVG / renderSVGNow (DOT→SVG, wires pan/zoom + interactions); normalizeArrows (constant arrow size)
+          map-render.js    # drawSVG / renderSVGNow (DOT→SVG, wires pan/zoom + interactions)
           map-interactions.js # Map selection, drill + relative-dig nav, status bar, edge highlight, tooltips
           panzoom.js       # Pan/zoom + zoom-lod / size / drill buttons
           node-popup.js    # buildDiagramSVG — popup fan-in/fan-out SVG diagram (column layout)

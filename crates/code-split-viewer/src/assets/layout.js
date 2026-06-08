@@ -71,7 +71,6 @@ function buildDOT(nodes, edges, level, viewport) {
   } else {
     dot += '  node  [shape=box style=filled fontname="Helvetica" fontsize=11 margin="0.044,0.022" height=0 width=0]\n\n';
   }
-  dot += '  edge  [arrowsize=2]\n';   // bigger arrowheads (normalizeArrows keeps them constant on screen)
 
   // ── Group view: one node per group, deduped inter-group edges ─────────────────
   if (drillGroup === null) {
@@ -176,6 +175,7 @@ function buildDOT(nodes, edges, level, viewport) {
   const inGrpFiles  = new Map(); // group → Set<our-file-id>
   const outGrpFiles = new Map(); // group → Set<our-file-id>
   for (const e of edges) {
+    if (!edgeIsFlow(level, e.kind)) continue;   // map shows only flow connections
     const sIn = drillIds.has(e.source), tIn = drillIds.has(e.target);
     if (!sIn && tIn) {
       const src = allNodesById.get(e.source);
@@ -269,6 +269,7 @@ function buildDOT(nodes, edges, level, viewport) {
   // Internal edges (within the drilled group)
   const seenEdge = new Set();
   for (const e of edges) {
+    if (!edgeIsFlow(level, e.kind)) continue;   // map shows only flow connections
     if (!drillIds.has(e.source) || !drillIds.has(e.target)) continue;
     const key = e.source + '\x00' + e.target;
     if (seenEdge.has(key)) continue;

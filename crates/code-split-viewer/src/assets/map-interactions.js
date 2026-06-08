@@ -270,9 +270,10 @@ function setupEdgeHighlight(svgFrame, level) {
     clusterEl.addEventListener('mouseleave', () => { clearHighlight(); hideSB(); });
   }
 
-  // ── Hide IN/OUT edges when combined total > 10; reveal on cluster zone hover ──
-  // Both are hidden or both are shown — no asymmetry between in and out.
-  const hideInOut = inEdges.length + outEdges.length > 10;
+  // ── IN/OUT edges are always hidden by default; revealed on cluster/node hover ──
+  // (Previously only hidden past a count threshold; now hidden regardless so the
+  // green/orange connectors never clutter the map until you hover.)
+  const hideInOut = true;
   const hideIn = hideInOut, hideOut = hideInOut;
   if (hideInOut) {
     inEdges.forEach(e  => e.classList.add('cluster-edge-hidden'));

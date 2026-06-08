@@ -74,14 +74,14 @@ top-to-bottom). The viewer was split out of three former monoliths (`diagram.js`
 
 | File | Purpose |
 |------|---------|
-| `layout.js` | `buildDOT()` — emits the DOT for the map. Overview groups by `grouperForDig(level, window.dig)` (one node per group, deduped inter-group flow edges); each group box is labelled `name (memberCount)`, filled pink at the crate tier / white otherwise, and tagged `cycle-status-*` aggregated from its members. The drilled (focus) view filters to the focused group and renders per-file nodes (`name (fan_in+fan_out)`) with crate-relative dir sub-clusters plus **callers** (green) / **dependencies** (orange) neighbour clusters whose `edge-in`/`edge-out` edges are `constraint=false`. No `ratio=fill`/`size` (natural layout, packed spacing). The **cycle filter** (`window.cycleOnly`) drops every node not in a dependency cycle (keeping the edges between cycle nodes and the callers/dependencies clusters). Metric (SLOC/HK) sizing helpers live here too. |
-| `map-render.js` | `drawSVG()` (big-graph confirm guard, drilled views only) and `renderSVGNow()` (DOT→SVG via `window.gv`, then wires pan/zoom, the status bar, edge-highlight and tooltips); `normalizeArrows()` keeps arrowheads a constant on-screen size regardless of fit/zoom. |
+| `layout.js` | `buildDOT()` — emits the DOT for the map. Overview groups by `grouperForDig(level, window.dig)` (one node per group, deduped inter-group flow edges); each group box is labelled `name (memberCount)`, filled pink at the crate tier / white otherwise, and tagged `cycle-status-*` aggregated from its members. The drilled (focus) view filters to the focused group and renders per-file nodes (`name (fan_in+fan_out)`) with crate-relative dir sub-clusters plus **callers** (green) / **dependencies** (orange) neighbour clusters whose `edge-in`/`edge-out` edges are `constraint=false`. Only **flow** edges are drawn/counted on the map (internal edges, neighbour discovery and the overview all guard on `edgeIsFlow`); non-flow `contains`/`reexports` links are shown only in the popup. No `ratio=fill`/`size` (natural layout, packed spacing). The **cycle filter** (`window.cycleOnly`) drops every node not in a dependency cycle (keeping the edges between cycle nodes and the callers/dependencies clusters). Metric (SLOC/HK) sizing helpers live here too. |
+| `map-render.js` | `drawSVG()` (big-graph confirm guard, drilled views only) and `renderSVGNow()` (DOT→SVG via `window.gv`, then wires pan/zoom, the status bar, edge-highlight and tooltips). |
 
 ### Map interactions
 
 | File | Purpose |
 |------|---------|
-| `map-interactions.js` | All behaviour on the main SVG map: node selection + the platform open-source modifier (`isOpenSrcClick`, ⌘/Ctrl), the shortcut legend (`kbdHintsHtml`), **drill** nav (`drillIntoGroup`/`drillOutOfGroup`) and **relative-dig** (`setDig`/`updateDigLabel`), the status bar (`statusLineFor`/`statusLineForGroup`), `setupEdgeHighlight(svgFrame, level)` (must run **before** `setupTooltips`, which removes SVG `<title>`s), `setupTooltips`. |
+| `map-interactions.js` | All behaviour on the main SVG map: node selection + the platform open-source modifier (`isOpenSrcClick`, ⌘/Ctrl), the shortcut legend (`kbdHintsHtml`), **drill** nav (`drillIntoGroup`/`drillOutOfGroup`) and **relative-dig** (`setDig`/`updateDigLabel`), the status bar (`statusLineFor`/`statusLineForGroup`), `setupEdgeHighlight(svgFrame, level)` (must run **before** `setupTooltips`, which removes SVG `<title>`s; the green/orange in/out connectors are hidden by default and revealed only on cluster/node hover), `setupTooltips`. |
 | `panzoom.js` | `setupPanZoom()` — viewBox drag-to-pan, +/−/fit/fullscreen buttons, the SLOC/HK metric-size row, the drill-back button, and the **zoom-lod** (−/+) buttons that call `setZoom`. |
 
 ### Node modal / popup
@@ -89,7 +89,7 @@ top-to-bottom). The viewer was split out of three former monoliths (`diagram.js`
 | File | Purpose |
 |------|---------|
 | `modal.js` | `getModal()`/`closeModal()` overlay shell; delegated copy/select handlers; Esc/Space keys; mirrors the map's ⌘/Shift gestures inside the popup diagram; `setModalDiagram` re-attaches the shortcut legend. |
-| `node-popup.js` | `buildDiagramSVG()` — the per-node neighbourhood SVG (deduped fan-in/fan-out cards, every edge kind, abbreviated side-card metrics, cycle red, selection highlight, column budget + scroll) and `markPopupSelected()`. |
+| `node-popup.js` | `buildDiagramSVG()` — the per-node neighbourhood SVG (deduped fan-in/fan-out cards, every edge kind, abbreviated side-card metrics, cycle red, selection highlight, column budget + scroll) and `markPopupSelected()`. A neighbour linked only through non-flow edges (`contains`/`reexports`, not counted in fan_in/fan_out) gets a **dashed** card outline. |
 | `modal-content.js` | `buildModalContent()` — the modal's left field-table HTML (verbatim values via `fmtFull`, a git-host **Source** row, schema-driven metric rows/tooltips). |
 | `source-links.js` | `gitWebBase`/`gitSourceUrl`/`nodeSourceUrl`/`connSourceLine` (git blob URLs at the analysed commit, optional `#L<line>`) and `absPath` (token→on-disk path). Pure, no DOM. |
 
@@ -165,17 +165,8 @@ non-zero. Box mode only — metric (SLOC/HK) circles show the metric value.
 `size`** — the SVG viewBox scales uniformly to the frame, so nodes stay large and
 inter-node gaps small instead of being stretched. Caller/dependency (`edge-in` /
 `edge-out`) edges are `constraint=false` so they draw without dragging the layout
-vertically.
-
-**Zoom-invariant line weight**: because the SVG scales to fit the frame, a small
-graph (e.g. one collapsed node) is blown up and 1px borders/edges would balloon.
-`map-svg.css` sets `vector-effect: non-scaling-stroke` on map shapes so **stroke
-widths stay constant** on screen, and the blue hover halo's blur is scaled by a
-`--zk` custom property (the fit factor, set per render). Arrowheads are FILLED
-polygons (strokes don't apply), so `normalizeArrows` (`map-render.js`)
-counter-scales each around its tip and extends the edge line to the shrunk base —
-re-run on render and on every zoom step (`panzoom` calls it when the viewBox width
-changes).
+vertically. Strokes (node borders, edges) and arrowheads scale with the SVG fit
+like everything else.
 
 Not yet implemented: nested clusters at `dig +1` (crate clusters wrapping folder
 nodes) and the diagonal in/out cluster placement — see `REFACTOR-split-plan.md`.

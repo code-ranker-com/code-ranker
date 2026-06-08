@@ -8,13 +8,7 @@ function setupPanZoom(frame, svg) {
   let pan = null, didDrag = false, animFrame = null;
 
   function getVB() { return svg.getAttribute('viewBox').split(/[ ,]+/).map(Number); }
-  let lastVBW = ow;
-  function setVB(x, y, w, h) {
-    svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
-    // Zoom changes the fit factor → re-normalize arrowheads + hover-halo scale.
-    // (Pan keeps width, so this is skipped during drags.)
-    if (Math.abs(w - lastVBW) > 0.5) { lastVBW = w; window.normalizeArrows?.(frame, svg); }
-  }
+  function setVB(x, y, w, h) { svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`); }
 
   function animate(tx, ty, tw, th, ms) {
     if (animFrame) cancelAnimationFrame(animFrame);

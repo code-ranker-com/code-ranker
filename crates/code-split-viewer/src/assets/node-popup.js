@@ -255,12 +255,16 @@ function buildDiagramSVG(node, level) {
     const fill    = ext ? '#ececec' : '#f0f4f8';
     const stroke  = cycle ? '#c00' : ext ? '#9aa0a6' : (inMap ? '#8ba6c0' : '#bbb');
     const strokeW = cycle ? '2' : '1';
+    // Dashed outline when the neighbour is NOT counted in fan_in/fan_out — i.e. it
+    // links only through non-flow edges (contains / reexports), not a `uses` flow.
+    const isFlow  = [...(item.kinds || [])].some(k => edgeIsFlow(level, k));
+    const dash    = isFlow ? '' : ' stroke-dasharray="5,3"';
     const mono    = `font-family="ui-monospace,'SF Mono',monospace"`;
     const clipDef = `<defs><clipPath id="${clipId}"><rect x="${x+4}" y="${y}" width="${SNW-8}" height="${SNH}"/></clipPath></defs>`;
     const cls     = [ext ? 'diag-ext' : (selectedIds?.has(n.id) ? 'diag-selected' : ''),
                      cycle ? 'diag-cycle' : ''].filter(Boolean).join(' ');
     const open    = `<g data-diag-node="${esc(n.id)}"${cls ? ` class="${cls}"` : ''} style="cursor:${cursor}">` +
-      `<rect x="${x}" y="${y}" width="${SNW}" height="${SNH}" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="${strokeW}"/>`;
+      `<rect x="${x}" y="${y}" width="${SNW}" height="${SNH}" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="${strokeW}"${dash}/>`;
     const pathTip = ext ? (n.path || n.id)
                         : ((n.path || '').replace(/^\{[^}]+\}\//, '') || n.id);
 

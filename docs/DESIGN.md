@@ -604,10 +604,12 @@ visibility, and central-complexity rules as the JS plugin.
 #### HTML assets (`crates/code-split-viewer/src/assets/`)
 
 > **Moved.** The viewer assets (`cpt-code-split-component-html-assets`) — the
-> data-driven `schema.js` layer, `diff.js` / `layout.js` / `app.js` /
-> `node-table.js` / `diagram.js` / `export-popup.js` and the rest, plus the
-> affected-status / cycle-detection / offline-guarantee notes — are documented
-> in [`code-split-viewer/DESIGN.md`](code-split-viewer/DESIGN.md).
+> data-driven `schema.js` layer, the `grouping.js` ladder, the browser-side diff
+> (`diff.js`), the map render/interaction/popup/table/export/shell files (split
+> out of the former `diagram.js` / `app.js` / `node-table.js`), the concern-split
+> stylesheet, plus the relative-zoom / affected-status / cycle-detection /
+> offline-guarantee notes — are documented, layer by layer, in
+> [`code-split-viewer/DESIGN.md`](code-split-viewer/DESIGN.md).
 
 ### 3.3 API Contracts
 
@@ -1088,24 +1090,32 @@ code-split/
         plugin/            # Built-in plugins: rust.rs (incl. module→file collapse), python.rs, javascript.rs, finalize.rs (file-graph normalizer for Python/JS), mod.rs
         presets.rs         # Generic Prompt-Generator preset catalog (principles)
         recommend.rs       # Recommendation engine: scorecard + prompt formats (CLI counterpart of the viewer's Prompt Generator)
-        assets/            # HTML/CSS/JS assets embedded via include_str!
+        assets/            # HTML/CSS/JS assets embedded via include_str! (see code-split-viewer/DESIGN.md for the full layer breakdown)
           index.html       # Shell template (single Files view); cs-baseline / cs-current JSON script tags embedded inline at render time
-          index.css        # Node/edge/nav styling (external nodes amber)
+          base.css map.css modal.css tables.css export.css snap.css map-svg.css  # Concern-split stylesheet, concatenated in lib.rs in source order
           graphviz.umd.js  # Graphviz WASM (~802 KB, offline)
           snarkdown.umd.js # Markdown→HTML renderer (~2 KB, offline) for the prompt preview
-          layout.js        # buildDOT — DOT graph construction (external nodes amber/dashed)
-          panzoom.js       # Pan/zoom logic
           schema.js        # Snapshot data-access layer (specs, evalCalc/calcDisplay)
-          app.js           # Entry point, event wiring
-          diff.js          # Browser-side diff + cycle computation
+          grouping.js      # Grouping ladder for relative zoom (grouperForZoom, crateRoots, aggCycleStatus)
+          diff.js          # Browser-side diff + per-side cycle status
+          layout.js        # buildDOT — DOT graph construction (zoom-aware grouping, cycle classes)
+          map-render.js    # drawSVG / renderSVGNow (DOT→SVG, wires pan/zoom + interactions)
+          map-interactions.js # Map selection, drill + relative-zoom nav, status bar, edge highlight, tooltips
+          panzoom.js       # Pan/zoom + zoom-lod / size / drill buttons
+          node-popup.js    # buildDiagramSVG — popup fan-in/fan-out SVG diagram (column layout)
+          modal-content.js # buildModalContent — modal left field table
+          modal.js         # Node modal overlay shell
+          source-links.js  # git-host source URLs + absolute-path reconstruction
+          tooltip.js       # Shared #tt tooltip engine
           node-table.js    # Sortable node table
           summary.js       # Diff/review summary table
-          modal.js         # Node modal overlay
-          diagram.js       # Popup fan-in/fan-out SVG diagram (column layout)
           export-popup.js  # Prompt-generator popup
-          nav.js           # openModalForNode — node popup navigation
+          nav.js           # URL/history state; openModalForNode
+          view-state.js    # Side accessors, visibility/sizing, renderView, recomputeAll, applyViewState
+          snap-controls.js # Header chrome: snapshot popup, side toggle, file upload
+          app.js           # Thin DOMContentLoaded bootstrap + popstate
           utils.js         # Shared helpers
-          ui.js            # (empty — baseline/current visibility handled in app.js on the union layout)
+          ui.js            # (empty — baseline/current visibility handled in view-state.js on the union layout)
   docs/
     PRD.md                 # Product PRD (overview, actors, plugin layer, schema, NFRs)
     DESIGN.md              # Product technical design (architecture, domain model, plugins)

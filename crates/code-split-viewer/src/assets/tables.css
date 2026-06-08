@@ -1,0 +1,79 @@
+/* tables.css: summary, tooltip, node table — part of the split stylesheet; concatenated in lib.rs in source order to preserve the cascade. */
+/* ── Summary ────────────────────────────────────────────────────────────────── */
+#summary-container { max-height: none; width: fit-content; }
+.node-table.summary-table { width: auto; table-layout: fixed; }
+.summary-table .metric-cell,
+.summary-table .metric-header { width: 180px; }
+.node-table.summary-table thead th { border-bottom: none; }
+.node-table.summary-table thead tr:last-child th { border-bottom: 2px solid #ddd; }
+.node-table.summary-table td { border-bottom: none; }
+.node-table.summary-table tbody tr:nth-child(even) td { background: #f4f6f8; }
+.summary-table .level-header  { text-align: center; }
+.summary-table .metric-header { vertical-align: middle; border-right: 2px solid #d0d8e4; }
+.node-table.summary-table .metric-header { border-bottom: 2px solid #ddd; }
+.summary-table .metric-cell   { color: #555; font-weight: 500; white-space: nowrap; border-right: 2px solid #d0d8e4; }
+.summary-table .grp-start     { border-left: 2px solid #d0d8e4; }
+.summary-table td.delta-good  { color: #2a7a30; font-weight: 600; }
+.summary-table td.delta-bad   { color: #c0392b; font-weight: 600; }
+.summary-table th.num,
+.summary-table td.num { width: 66px; min-width: 66px; max-width: 66px; }
+.cycle-badge { display: inline-block; padding: 1px 9px; border-radius: 10px;
+               background: #fff0f0; border: 1px solid #f5a0a0;
+               color: #c00; font-weight: 600; font-size: 13px; }
+
+/* ── Tooltip ────────────────────────────────────────────────────────────────── */
+#tt { position: fixed; z-index: 30001; pointer-events: none;
+      background: #1e2a3a; color: #e8eef5; border-radius: 8px;
+      padding: 10px 14px; font-size: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.4); max-width: 240px;
+      border: 1px solid rgba(255,255,255,.08); }
+#tt[hidden] { display: none; }
+.tt-title { font-weight: 700; color: #7ec8e3; margin-bottom: 7px; font-size: 13px; }
+.tt-count { color: #8ba6c0; font-size: 11px; font-weight: 400; margin-left: 5px; }
+.tt-tbl { border-collapse: collapse; width: 100%; margin-top: 4px; }
+.tt-tbl th { color: #8ba6c0; font-size: 10px; text-transform: uppercase;
+             letter-spacing: .06em; text-align: center; padding: 2px 6px 4px; }
+.tt-tbl th:first-child { text-align: left; }
+.tt-tbl td { color: #e8eef5; font-weight: 600; text-align: right; padding: 3px 6px;
+             font-family: ui-monospace, 'SF Mono', monospace; font-size: 12px; }
+.tt-tbl td:first-child { color: #8ba6c0; font-weight: 400; text-align: left; font-family: inherit; }
+.tt-tbl tr:first-child td { padding-top: 0; }
+[data-tt] { cursor: help; border-bottom: 1px dashed rgba(100,120,140,.35); }
+[data-tip] { cursor: help; }
+.tt-desc { color: #c8d8e8; font-size: 12px; line-height: 1.55; margin-top: 2px; }
+/* Inline `code` spans inside a description: highlighted and never wrapped. */
+.tt-desc .tt-code { white-space: nowrap; font-family: ui-monospace, 'SF Mono', monospace;
+                    font-size: 11px; color: #e8eef5; background: rgba(126,200,227,0.16);
+                    border-radius: 3px; padding: 0 4px; }
+/* Metric formula on its own bold line, never wrapped mid-expression. */
+.tt-formula { font-weight: 700; color: #e8eef5; white-space: nowrap;
+              margin: 4px 0 6px; font-size: 11px;
+              font-family: ui-monospace, 'SF Mono', monospace; }
+/* The formula filled with the node's real values — lighter, sits under the
+   generic formula. */
+.tt-calc { font-weight: 400; color: #9fd0e8; margin-top: -3px; }
+#tt { max-width: 330px; }
+
+/* ── Node table ─────────────────────────────────────────────────────────────── */
+.node-table-wrap { margin: 10px 0 20px; }
+
+.node-table-header {
+  color: #2c3e50; border-bottom: 2px solid #1abc9c; padding-bottom: 6px; margin-top: 24px;
+  cursor: pointer; user-select: none;
+  display: flex; align-items: center; gap: 8px;
+  font-size: 1.5rem; font-weight: 700;
+}
+.node-table-header::after { content: '▾'; font-size: 14px; color: #7a92a8; font-weight: 400; }
+.node-table-wrap.collapsed .node-table-header::after { content: '▸'; }
+.node-table-badge {
+  background: #4d6f9c; color: #fff; border-radius: 10px;
+  padding: 1px 8px; font-size: 11px; font-weight: 600; min-width: 20px; text-align: center;
+}
+
+.node-table-body { margin-top: 4px; }
+.nt-search-input { padding: 2px 8px; font-size: 12px; border: 1px solid #c8d4e0;
+                   border-radius: 4px; outline: none; color: #333; background: #fff; width: 200px;
+                   font-family: inherit; }
+.nt-search-input:focus { border-color: #1abc9c; }
+.nt-search-input::placeholder { color: #aaa; font-weight: 400; }
+

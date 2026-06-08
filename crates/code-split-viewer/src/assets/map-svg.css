@@ -1,0 +1,171 @@
+/* map-svg.css: graphviz nodes/edges, visibility, cycle, selection, hover, status bar, edge highlight — part of the split stylesheet; concatenated in lib.rs in source order to preserve the cascade. */
+/* ── Graphviz nodes / edges ──────────────────────────────────────────────────── */
+g.node polygon, g.node ellipse { stroke-width: 1; }
+
+/* ── Visibility toggles (class on .svg-frame → CSS hides matching SVG elements) ── */
+.hide-nodes-added    g.node.status-added    { display: none; }
+.hide-nodes-removed  g.node.status-removed  { display: none; }
+.hide-nodes-affected g.node.status-affected { display: none; }
+.hide-nodes-unchanged g.node.status-unchanged { display: none; }
+.hide-edges-added    g.edge.status-added    { display: none; }
+.hide-edges-removed  g.edge.status-removed  { display: none; }
+.hide-edges-affected g.edge.status-affected { display: none; }
+.hide-edges-unchanged g.edge.status-unchanged { display: none; }
+/* ── Cycle visibility override (specificity 0,4,1 > hide rules 0,2,1) ──────── */
+/* When a cycle chip is active alongside any hide-* chip, cycle elements win */
+:is(.hide-nodes-added,.hide-nodes-removed,.hide-nodes-affected,.hide-nodes-unchanged).show-cycle-baseline
+  g.node:is(.status-added,.status-removed,.status-affected,.status-unchanged):is(.cycle-status-baseline-only,.cycle-status-both) { display: block; }
+:is(.hide-nodes-added,.hide-nodes-removed,.hide-nodes-affected,.hide-nodes-unchanged).show-cycle-current
+  g.node:is(.status-added,.status-removed,.status-affected,.status-unchanged):is(.cycle-status-current-only,.cycle-status-both)  { display: block; }
+:is(.hide-edges-added,.hide-edges-removed,.hide-edges-affected,.hide-edges-unchanged).show-cycle-baseline
+  g.edge:is(.status-added,.status-removed,.status-affected,.status-unchanged):is(.cycle-status-baseline-only,.cycle-status-both) { display: block; }
+:is(.hide-edges-added,.hide-edges-removed,.hide-edges-affected,.hide-edges-unchanged).show-cycle-current
+  g.edge:is(.status-added,.status-removed,.status-affected,.status-unchanged):is(.cycle-status-current-only,.cycle-status-both)  { display: block; }
+
+/* ── Cycle highlights: members of a dependency cycle are red — but only for the
+   side currently shown. `both` cycles are red on either side; `baseline-only` /
+   `current-only` only on their own side (`.side-baseline` / `.side-current` on the
+   frame), so a cycle that was removed in the current snapshot stops being red
+   when you switch to Current. ───────────────────────────────────────────────── */
+.svg-frame.side-baseline g.node:is(.cycle-status-baseline-only,.cycle-status-both) > polygon,
+.svg-frame.side-baseline g.node:is(.cycle-status-baseline-only,.cycle-status-both) > ellipse,
+.svg-frame.side-current  g.node:is(.cycle-status-current-only,.cycle-status-both)  > polygon,
+.svg-frame.side-current  g.node:is(.cycle-status-current-only,.cycle-status-both)  > ellipse {
+  stroke: #c00 !important; stroke-width: 3 !important;
+}
+.svg-frame.side-baseline g.edge:is(.cycle-status-baseline-only,.cycle-status-both) > path,
+.svg-frame.side-current  g.edge:is(.cycle-status-current-only,.cycle-status-both)  > path {
+  stroke: #c00 !important; stroke-width: 2.5 !important;
+}
+.svg-frame.side-baseline g.edge:is(.cycle-status-baseline-only,.cycle-status-both) > polygon,
+.svg-frame.side-current  g.edge:is(.cycle-status-current-only,.cycle-status-both)  > polygon {
+  stroke: #c00 !important; fill: #c00 !important;
+}
+
+/* ── Shift = "select mode" on the main map: cursor signals click-to-select ──── */
+body.shift-select .svg-frame svg { cursor: crosshair; }
+body.shift-select .svg-frame g.node { cursor: copy !important; }
+
+/* ── Ctrl/⌘ = "open source" on the main map: cursor signals click-to-open ───── */
+body.ctrl-link .svg-frame svg { cursor: default; }
+body.ctrl-link .svg-frame g.node { cursor: alias !important; }
+
+/* Same modifier cursors inside the per-node popup diagram; 3rd-party (`.diag-ext`)
+   cards are inert (not selectable, no source) so they show `not-allowed`. */
+body.shift-select #node-modal-diagram g[data-diag-node]:not(.diag-ext) { cursor: copy !important; }
+body.ctrl-link    #node-modal-diagram g[data-diag-node]:not(.diag-ext) { cursor: alias !important; }
+body.shift-select #node-modal-diagram g.diag-ext,
+body.ctrl-link    #node-modal-diagram g.diag-ext { cursor: not-allowed !important; }
+/* The central (main) card reacts to modifiers too (copy/view-source); external
+   main cards are inert. */
+body.shift-select #node-modal-diagram .mn-card:not(.diag-ext) { cursor: copy !important; }
+body.ctrl-link    #node-modal-diagram .mn-card:not(.diag-ext) { cursor: alias !important; }
+body.shift-select #node-modal-diagram .mn-card.diag-ext,
+body.ctrl-link    #node-modal-diagram .mn-card.diag-ext { cursor: not-allowed !important; }
+
+/* Popup's own shortcut legend (bottom-left of the fullscreen modal), shown while
+   a modifier is held — the map's legend is hidden behind the popup. */
+#node-modal-hints { z-index: 5; }
+body.shift-select #node-modal-hints,
+body.ctrl-link    #node-modal-hints { opacity: 1; }
+
+/* While a modifier is held, a Shift/⌘-click on a card must not drag-select the
+   SVG/label text (without a modifier, normal text selection is left intact). */
+body.shift-select, body.ctrl-link { user-select: none; -webkit-user-select: none; }
+
+/* While a map hotkey is held, reveal the same right-side controls (zoom + size)
+   that a hover into the right edge shows — visual cue that a mode is active. */
+body.shift-select .frame-wrap .zoom-controls,
+body.ctrl-link   .frame-wrap .zoom-controls,
+body.shift-select .frame-wrap .size-controls,
+body.ctrl-link   .frame-wrap .size-controls { opacity: 1; pointer-events: auto; }
+
+/* ── Shortcut legend (bottom-left): shown on the same hover/hotkey as controls ── */
+.kbd-hints { position: absolute; bottom: 12px; left: 12px; z-index: 10;
+             display: flex; gap: 8px; opacity: 0; transition: opacity .15s;
+             pointer-events: none; }
+.kbd-hint { display: inline-flex; align-items: center; gap: 5px; font-size: 11px;
+            color: #5c7a96; background: rgba(255,255,255,.95); border: 1px solid #d0dcea;
+            border-radius: 6px; padding: 3px 8px; }
+.kbd-hint kbd { font-family: ui-monospace,'SF Mono',monospace; font-size: 11px;
+                font-weight: 600; color: #2c3e50; background: #eef1f4;
+                border: 1px solid #cdd7e2; border-radius: 4px; padding: 0 5px; }
+.frame-wrap.show-zoom .kbd-hints,
+body.shift-select .frame-wrap .kbd-hints,
+body.ctrl-link   .frame-wrap .kbd-hints { opacity: 1; }
+
+/* ── Selection: persistent yellow highlight ─────────────────────────────────── */
+.node-table tr.row-selected td { background: rgb(254,245,222); }
+.node-table tr.row-selected td[data-col="name"] { background: rgb(254,245,222); }
+g.node.node-selected > polygon,
+g.node.node-selected > ellipse { fill: #fffde7 !important; stroke: #f9a825 !important; stroke-width: 2 !important; }
+/* The cycle stroke wins over selection: a selected node that is also in a cycle
+   on the shown side keeps its red outline (the yellow fill still marks it
+   selected). Side-gated, mirroring the cycle-highlight rules above. */
+.svg-frame.side-baseline g.node.node-selected:is(.cycle-status-baseline-only,.cycle-status-both) > polygon,
+.svg-frame.side-baseline g.node.node-selected:is(.cycle-status-baseline-only,.cycle-status-both) > ellipse,
+.svg-frame.side-current  g.node.node-selected:is(.cycle-status-current-only,.cycle-status-both)  > polygon,
+.svg-frame.side-current  g.node.node-selected:is(.cycle-status-current-only,.cycle-status-both)  > ellipse {
+  stroke: #c00 !important; stroke-width: 3 !important;
+}
+/* Same selection highlight inside the per-node popup diagram (side + main cards). */
+#node-modal-diagram g[data-diag-node].diag-selected > rect,
+#node-modal-diagram g.mn-card.diag-selected > rect { fill: #fffde7 !important; stroke: #f9a825 !important; stroke-width: 2 !important; }
+/* Popup: cycle red stroke wins over selection, mirroring the main map. */
+#node-modal-diagram g.diag-cycle.diag-selected > rect { stroke: #c00 !important; stroke-width: 2 !important; }
+
+/* ── Hover: last → wins over selection when both classes present ─────────────── */
+.node-table tr.row-hl td { background: rgb(210,235,248); }
+.node-table tr.row-hl td[data-col="name"] { background: rgb(210,235,248); }
+g.node.node-hl { filter: drop-shadow(0 0 28px rgba(30,160,220,1)) drop-shadow(0 0 14px rgba(30,160,220,.85)) drop-shadow(0 0 6px rgba(30,160,220,.6)); }
+
+/* ── SVG status bar (bottom of frame-wrap, replaces tooltip on map nodes) ─── */
+.svg-status-bar {
+  position: absolute; bottom: 0; left: 0; right: 0; z-index: 15;
+  background: rgba(28, 42, 57, 0.90);
+  color: #c8d8e8; font-family: ui-monospace, 'SF Mono', monospace; font-size: 11px;
+  padding: 4px 72px 4px 12px;   /* right pad: avoid zoom-controls */
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  pointer-events: none;
+  border-top: 1px solid rgba(255,255,255,.10);
+}
+/* The bar is toggled with the `hidden` attribute; no extra display rule needed. */
+
+/* ── SVG edge hover / cluster edge visibility ─────────────────────────────── */
+/* Base transition so all opacity changes animate smoothly */
+.svg-frame g.edge > path,
+.svg-frame g.edge > polygon,
+.svg-frame g.edge > text { transition: opacity 0.12s; }
+
+/* Cluster IN/OUT edges (>10): hidden until cluster zone is hovered */
+.svg-frame g.edge.cluster-edge-hidden > path,
+.svg-frame g.edge.cluster-edge-hidden > polygon,
+.svg-frame g.edge.cluster-edge-hidden > text {
+  opacity: 0; pointer-events: none;
+}
+/* Cluster zone hover reveals them */
+.svg-frame.show-in-edges  g.edge.edge-in.cluster-edge-hidden  > path,
+.svg-frame.show-in-edges  g.edge.edge-in.cluster-edge-hidden  > polygon,
+.svg-frame.show-in-edges  g.edge.edge-in.cluster-edge-hidden  > text,
+.svg-frame.show-out-edges g.edge.edge-out.cluster-edge-hidden > path,
+.svg-frame.show-out-edges g.edge.edge-out.cluster-edge-hidden > polygon,
+.svg-frame.show-out-edges g.edge.edge-out.cluster-edge-hidden > text {
+  opacity: 1; pointer-events: auto;
+}
+/* Node hover: dim non-connected edges */
+.svg-frame.node-hovered g.edge.edge-dim > path,
+.svg-frame.node-hovered g.edge.edge-dim > polygon,
+.svg-frame.node-hovered g.edge.edge-dim > text { opacity: 0.06; }
+/* Node hover: keep non-connected cluster-hidden edges fully hidden
+   (higher specificity than the cluster-zone show rule) */
+.svg-frame.node-hovered g.edge.cluster-edge-hidden.edge-dim > path,
+.svg-frame.node-hovered g.edge.cluster-edge-hidden.edge-dim > polygon,
+.svg-frame.node-hovered g.edge.cluster-edge-hidden.edge-dim > text {
+  opacity: 0; pointer-events: none;
+}
+/* Node hover: show connected edges at full opacity (overrides cluster-hidden) */
+.svg-frame.node-hovered g.edge.edge-connected > path,
+.svg-frame.node-hovered g.edge.edge-connected > polygon,
+.svg-frame.node-hovered g.edge.edge-connected > text {
+  opacity: 1; pointer-events: auto;
+}

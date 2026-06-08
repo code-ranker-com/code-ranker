@@ -44,6 +44,13 @@
       <button class="drill-back" type="button" data-drill="back">← all</button>
       <span class="drill-group-name"></span>
     </div>
+    <!-- Relative-zoom (level-of-detail) control: − coarser / + finer grouping.
+         Top-left next to the map; shown in the overview, hidden while drilled. -->
+    <div class="zoom-lod" id="zoom-lod-files">
+      <button class="zoom-lod-btn" type="button" data-lod="out" title="Zoom out — coarser grouping">−</button>
+      <span class="zoom-lod-val">crate</span>
+      <button class="zoom-lod-btn" type="button" data-lod="in" title="Zoom in — finer grouping">+</button>
+    </div>
     <div class="size-controls">
       <div class="size-row" data-row="metric">
         <button class="size-mode-btn active" data-size="dot"  title="Default box mode">■</button>
@@ -82,17 +89,25 @@
 <div id="tt" class="tt" hidden></div>
 
 <script src="./schema.js"></script>
+<script src="./grouping.js"></script>
 <script src="./diff.js"></script>
 <script src="./layout.js"></script>
 <script src="./utils.js"></script>
+<script src="./tooltip.js"></script>
 <script src="./modal.js"></script>
 <script src="./panzoom.js"></script>
-<script src="./diagram.js"></script>
+<script src="./source-links.js"></script>
+<script src="./node-popup.js"></script>
+<script src="./modal-content.js"></script>
+<script src="./map-interactions.js"></script>
+<script src="./map-render.js"></script>
 <script src="./ui.js"></script>
 <script src="./summary.js"></script>
 <script src="./export-popup.js"></script>
 <script src="./node-table.js"></script>
 <script src="./nav.js"></script>
+<script src="./view-state.js"></script>
+<script src="./snap-controls.js"></script>
 <script src="./app.js"></script>
 </body>
 </html>

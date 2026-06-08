@@ -41,31 +41,18 @@ function fmtMetricShort(v) {
 }
 const metricFontSize = d => Math.max(6, Math.round(d * 26));
 
-// Returns a `groupOf(node)` function for a given level, using the same grouping
-// spec as buildDOT. Exported as a global so diagram.js can compute group stats.
-function makeGroupOf(level) {
-  const grouping = levelUi(level).grouping || {};
-  const byKey    = grouping.key;
-  const dirGrouper = n => {
-    const p = n.id.replace(/^\{[^}]+\}\//, '');
-    const i = p.lastIndexOf('/');
-    return i > 0 ? p.slice(0, i) : '_root';
-  };
-  return n => {
-    if (isExternalNode(n, level)) return (nodeKindSpec(level, n.kind).plural || 'external').toLowerCase();
-    if (byKey) {
-      const v = n[byKey];
-      return (v === undefined || v === null || v === '') ? '(none)' : String(v);
-    }
-    return dirGrouper(n);
-  };
-}
+// `makeGroupOf` / `grouperForZoom` now live in grouping.js (the grouping ladder),
+// so layout merely consumes them.
 
 function buildDOT(nodes, edges, level, viewport) {
   const sizeMode   = window.nodeSizeMode || null;
   const drillGroup = window.drillGroup   || null;
   const isMetric   = sizeMode === 'loc' || sizeMode === 'hk';
-  const gOf        = makeGroupOf(level);
+  // Overview granularity follows the relative zoom; a drilled (focus) view filters
+  // by the zoom that was active when the user drilled in.
+  const activeZoom = drillGroup === null ? (window.zoom || 0) : (window.drillZoom ?? 0);
+  const gOf        = grouperForZoom(level, activeZoom);
+  const cycleOf    = window.CYCLES?.[level]?.nodeCycleStatus;
 
   let dot = 'digraph {\n';
   dot += '  rankdir=LR\n';
@@ -98,6 +85,13 @@ function buildDOT(nodes, edges, level, viewport) {
     const currentById  = new Map((window.CURRENT?.graphs?.[level]?.nodes  || []).map(n => [n.id, n]));
 
     for (const [g, gNodes] of groupNodes) {
+      // A group is red when any member sits in a dependency cycle (aggregated
+      // per side); reuses the same cycle-status CSS as individual nodes.
+      const gCyc = aggCycleStatus(gNodes.map(n => cycleOf?.get(n.id) || 'none'));
+      const cyc  = `class="cycle-status-${gCyc}"`;
+      // When zoomed below the crate tier the key is a path (`crate/dir`); show
+      // only the leaf segment as the label to keep boxes compact.
+      const leaf = g.includes('/') ? g.slice(g.lastIndexOf('/') + 1) : g;
       if (isMetric) {
         const aggB = gNodes.reduce((s, n) => s + metricNodeVal(baselineById.get(n.id), sizeMode), 0);
         const aggC = gNodes.reduce((s, n) => s + metricNodeVal(currentById.get(n.id),  sizeMode), 0);
@@ -105,9 +99,9 @@ function buildDOT(nodes, edges, level, viewport) {
         const d    = metricGroupDiam(agg, sizeMode);
         const lbl  = agg > 0 ? fmtMetricShort(agg) : '';
         const fs   = metricFontSize(d);
-        dot += `  ${dotId(g)} [label=${dotId(lbl)} fontsize=${fs} fontcolor="#333" fillcolor="#ffd4d4" color="${N_COLOR}" width=${d} shape=circle style=filled fixedsize=true]\n`;
+        dot += `  ${dotId(g)} [label=${dotId(lbl)} fontsize=${fs} fontcolor="#333" fillcolor="#ffd4d4" color="${N_COLOR}" width=${d} shape=circle style=filled fixedsize=true ${cyc}]\n`;
       } else {
-        dot += `  ${dotId(g)} [label=${dotId(g)} fillcolor="#ffd4d4" color="${N_COLOR}" shape=box style=filled fontname="Helvetica" fontsize=11]\n`;
+        dot += `  ${dotId(g)} [label=${dotId(leaf)} fillcolor="#ffd4d4" color="${N_COLOR}" shape=box style=filled fontname="Helvetica" fontsize=11 ${cyc}]\n`;
       }
     }
 
@@ -142,15 +136,16 @@ function buildDOT(nodes, edges, level, viewport) {
     return Math.max(db, da) || metricNodeDiam(n, sizeMode);
   };
 
+  const edgeCycleOf = window.CYCLES?.[level]?.edgeCycleStatus;
   const eAttr = e =>
-    `color="${E_COLOR}" style="solid" class="edge-${e.kind || 'unknown'} status-${e.status} cycle-status-none"`;
+    `color="${E_COLOR}" style="solid" class="edge-${e.kind || 'unknown'} status-${e.status} cycle-status-${edgeCycleOf ? edgeCycleOf(e.source, e.target) : 'none'}"`;
 
   const nAttr = n => {
     const ks   = nodeKindSpec(level, n.kind);
     const ext  = isExternalNode(n, level);
     const fill = ks.fill   || (ext ? EXT_FILL  : N_FILL);
     const col  = ks.stroke || (ext ? EXT_COLOR : N_COLOR);
-    const cls  = `class="node-${n.kind || 'unknown'} status-${n.status} cycle-status-none"`;
+    const cls  = `class="node-${n.kind || 'unknown'} status-${n.status} cycle-status-${cycleOf?.get(n.id) || 'none'}"`;
     if (isMetric) {
       const d   = layoutDiam(n);
       const v   = metricNodeVal(n, sizeMode);

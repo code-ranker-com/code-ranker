@@ -1,0 +1,125 @@
+/* modal.css: node modal, popup cards, drill breadcrumb, zoom-lod — part of the split stylesheet; concatenated in lib.rs in source order to preserve the cascade. */
+/* ── Node modal ─────────────────────────────────────────────────────────────── */
+#node-modal-overlay { display: none; position: fixed; inset: 0; z-index: 10000; }
+#node-modal { background: #fff; width: 100%; height: 100%; position: relative;
+              display: flex; flex-direction: column; overflow: hidden; }
+#node-modal-hdr { display: flex; align-items: center; gap: 12px;
+                  padding: 14px 28px 12px; flex-shrink: 0;
+                  border-bottom: 2px solid #1abc9c; background: #fff; }
+#node-modal-hdr-title { display: flex; align-items: center; gap: 10px;
+                        flex: 1; min-width: 0; }
+#node-modal-close { flex-shrink: 0; background: none; border: none;
+                    font-size: 22px; color: #aaa; cursor: pointer; line-height: 1; padding: 0; }
+.nm-cb-wrap { display: flex; align-items: center; flex-shrink: 0; cursor: pointer; padding: 2px 4px; }
+.nm-cb-wrap .nt-cb { width: 16px; height: 16px; cursor: pointer; }
+#node-modal-close:hover { color: #333; }
+#node-modal-main { display: flex; flex: 1; overflow: hidden; }
+#node-modal-body { overflow-y: auto; flex: 1; padding: 0 28px 24px; border-right: 1px solid #eee; }
+/* Shown when the opened node does not exist on the side now toggled to. */
+.nm-absent { padding: 28px 4px; color: #888; font-size: 14px; font-style: italic; }
+/* The diagram panel is a non-scrolling positioning frame (so the shortcut legend,
+   absolutely placed here, stays put). Scrolling happens in the inner wrapper. */
+#node-modal-diagram { flex: 2; position: relative; overflow: hidden; background: #f8fafc; }
+.nm-diagram-scroll { width: 100%; height: 100%; box-sizing: border-box; padding: 32px;
+                     overflow-y: auto; overflow-x: hidden;
+                     display: flex; align-items: center; justify-content: center; }
+/* `margin:auto` (not align-items) centres a short diagram yet keeps a tall one
+   fully reachable when it overflows and scrolls. */
+.nm-diagram-scroll > svg { margin: auto; }
+.nm-title { font-size: 18px; font-weight: 700; color: #2c3e50;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nm-badge { display: inline-block; flex-shrink: 0; padding: 2px 10px; border-radius: 12px;
+            font-size: 12px; font-weight: 600; background: #dbe9f4; color: #2980b9; }
+.nm-side { display: inline-block; flex-shrink: 0; padding: 2px 10px; border-radius: 12px;
+           font-size: 12px; font-weight: 600; background: #eef0f3; color: #6b7c8d;
+           text-transform: uppercase; letter-spacing: .04em; }
+.nm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; margin-top: 12px; }
+.nm-col { min-width: 0; }
+.nm-sect-label { font-weight: 700; font-size: 11px; text-transform: uppercase;
+                 letter-spacing: .08em; color: #999; padding: 12px 0 4px;
+                 border-top: 1px solid #eee; }
+.nm-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.nm-table .nm-key { color: #777; white-space: nowrap; padding: 4px 12px 4px 0;
+                    vertical-align: top; width: 90px; min-width: 90px; }
+.nm-table .nm-val { color: #222; word-break: break-all; padding: 4px 0; }
+.nm-table .nm-src { color: #1a73c2; text-decoration: none; white-space: nowrap; }
+.nm-table .nm-src:hover { text-decoration: underline; }
+.nm-table .nm-sep { font-weight: 700; font-size: 11px; text-transform: uppercase;
+                    letter-spacing: .08em; color: #999; padding: 12px 0 4px;
+                    border-top: 1px solid #eee; }
+.nm-has-hint { cursor: default; }
+.nm-copy-btn { display: inline-flex; align-items: center; margin-left: 6px;
+               padding: 1px 5px; background: none; border: 1px solid #d0dcea;
+               border-radius: 3px; font-size: 12px; color: #999; cursor: pointer;
+               vertical-align: middle; line-height: 1.4; }
+.nm-copy-btn:hover { background: #e8edf2; border-color: #aab; color: #555; }
+/* SVG main card: click anywhere on it to copy the path (id for libraries). The
+   `copy` cursor signals this; a successful copy flashes the card border green. */
+.mn-card { cursor: default; }
+/* Only the individual labels copy on click (title + each `key: value` row). */
+#node-modal-diagram .mn-copy { cursor: copy; }
+/* On copy: hide the card body and show a centred "copied" message for ~1s. */
+.mn-copied-msg { display: none; }
+.mn-card.copied .mn-card-body { display: none; }
+.mn-card.copied .mn-copied-msg { display: block; }
+/* Popup side cards: simplified by default (bare hk / loc), full detail (labelled
+   values + connection-kind row) revealed on hover. */
+g[data-diag-node] .sn-detail { display: none; }
+g[data-diag-node]:hover .sn-simple { display: none; }
+g[data-diag-node]:hover .sn-detail { display: inline; }
+/* Hoverable metric / connection-kind labels inside popup cards.
+   Keep the card's own cursor — don't switch to a help cursor over a tooltip
+   label (overrides the global `[data-tip] { cursor: help }`). The text/fill is
+   intentionally NOT changed on hover (no highlight): only the tooltip appears. */
+text.sn-hint, tspan.sn-hint, g.sn-hint { cursor: inherit; }
+#nm-tooltip { display: none; position: fixed; z-index: 30000;
+              background: #2c3e50; color: #ecf0f1;
+              font-size: 12px; line-height: 1.45;
+              padding: 6px 10px; border-radius: 6px;
+              max-width: 280px; white-space: pre-wrap;
+              box-shadow: 0 3px 12px rgba(0,0,0,.28);
+              pointer-events: none; }
+
+.size-controls { position: absolute; top: 12px; right: 12px; z-index: 10;
+                 display: flex; flex-direction: column; gap: 4px;
+                 opacity: 0; transition: opacity .15s; pointer-events: none; }
+.size-row { display: flex; gap: 4px; justify-content: flex-end; }
+.frame-wrap.show-zoom .size-controls  { opacity: 1; pointer-events: auto; }
+.size-mode-btn { width: 52px; height: 52px; border: 1px solid #bbb; border-radius: 8px;
+                 background: rgba(255,255,255,.95); color: #555; font-size: 12px; font-weight: 600;
+                 cursor: pointer; display: flex; align-items: center; justify-content: center;
+                 box-shadow: 0 1px 4px rgba(0,0,0,.12); user-select: none; }
+.size-mode-btn:hover:not(:disabled) { background: #f0f0f0; border-color: #999; }
+.size-mode-btn.active { border-color: #1abc9c; color: #1abc9c; }
+.size-mode-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.drill-breadcrumb { position: absolute; top: 12px; left: 12px; z-index: 10;
+                    display: flex; align-items: center; gap: 8px;
+                    background: rgba(255,255,255,.95); border: 1px solid #ddd;
+                    border-radius: 8px; padding: 6px 12px;
+                    box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+.drill-back { background: none; border: none; cursor: pointer; font-size: 13px;
+              font-weight: 600; color: #1abc9c; padding: 0; line-height: 1; }
+.drill-back:hover { text-decoration: underline; }
+.drill-group-name { font-size: 13px; font-weight: 600; color: #444; }
+
+/* Relative-zoom (level-of-detail) control: top-left next to the map, mirroring
+   the drill breadcrumb. − coarser / + finer grouping, with the current tier in
+   the middle. Shown in the overview; hidden (inline style) while drilled. */
+.zoom-lod { position: absolute; top: 12px; left: 12px; z-index: 10;
+            display: flex; align-items: center; gap: 6px;
+            background: rgba(255,255,255,.95); border: 1px solid #ddd;
+            border-radius: 8px; padding: 4px 6px;
+            box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+.zoom-lod-btn { background: none; border: 1px solid #d5d5d5; border-radius: 6px;
+                cursor: pointer; font-size: 14px; font-weight: 700; color: #555;
+                width: 22px; height: 22px; line-height: 1; padding: 0;
+                display: flex; align-items: center; justify-content: center; }
+.zoom-lod-btn:hover:not([disabled]) { background: #f0f0f0; border-color: #bbb; }
+.zoom-lod-btn[disabled] { opacity: .35; cursor: default; }
+.zoom-lod-val { font-size: 12px; font-weight: 600; color: #444; min-width: 48px;
+                text-align: center; white-space: nowrap; }
+
+.frame-wrap:fullscreen .size-controls { z-index: 250; transition: opacity .15s, top .18s ease; }
+
+

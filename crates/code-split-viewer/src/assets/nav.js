@@ -6,6 +6,7 @@ function getNavParams() {
     side:  p.get('side'),
     group: p.get('group'),
     mode:  p.get('mode'),
+    zoom:  p.get('zoom'),
   };
 }
 // The active diff side carried in the URL — only in diff mode (a current snapshot
@@ -20,6 +21,7 @@ function navViewState() {
     side:  navSide(),
     group: window.drillGroup  || null,
     mode:  window.nodeSizeMode || null,
+    zoom:  window.zoom || 0,
   };
 }
 function navViewUrl(st) {
@@ -28,6 +30,7 @@ function navViewUrl(st) {
   if (st.side)  p.set('side',  st.side);
   if (st.group) p.set('group', st.group);
   if (st.mode)  p.set('mode',  st.mode);
+  if (st.zoom)  p.set('zoom',  st.zoom);
   return p.toString() ? '?' + p : location.pathname;
 }
 // Drill navigation (in/out of a group) — adds a history entry so Back works.
@@ -51,9 +54,11 @@ window.navPush = function(level, nodeId) {
   if (grp)    p.set('group', grp);
   const mode = window.nodeSizeMode || null;
   if (mode)   p.set('mode',  mode);
+  const zoom = window.zoom || 0;
+  if (zoom)   p.set('zoom',  zoom);
   if (nodeId) p.set('node',  nodeId);
   const url = p.toString() ? '?' + p : location.pathname;
-  history.pushState({ level: level ?? null, node: nodeId ?? null, side, group: grp, mode }, '', url);
+  history.pushState({ level: level ?? null, node: nodeId ?? null, side, group: grp, mode, zoom }, '', url);
 };
 // Update only the `side` param in place (Baseline/Current toggle).
 window.navSetSide = function() {

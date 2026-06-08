@@ -134,6 +134,14 @@ function setupPanZoom(frame, svg) {
       drillOutOfGroup(lv);
     });
 
+    // Relative-zoom (level-of-detail) buttons: + finer / − coarser grouping.
+    wrap.querySelector('.zoom-lod [data-lod="in"]')?.addEventListener('click', () => {
+      window.setZoom?.(1, wrap.closest('.view')?.dataset.view || 'files');
+    });
+    wrap.querySelector('.zoom-lod [data-lod="out"]')?.addEventListener('click', () => {
+      window.setZoom?.(-1, wrap.closest('.view')?.dataset.view || 'files');
+    });
+
     document.addEventListener('fullscreenchange', () => {
       if (document.fullscreenElement === wrap) enterFS();
       else if (fsBarEl) exitFS();

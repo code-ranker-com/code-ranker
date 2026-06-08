@@ -58,6 +58,30 @@ refactoring. Surfacing them first reduces the time to actionable insight.
 
 **Actors**: `cpt-code-split-actor-developer`, `cpt-code-split-actor-tech-lead`
 
+### Map navigation — semantic zoom & cycle visibility
+
+- [x] `p1` - **ID**: `cpt-code-split-fr-map-zoom-cycles`
+
+The map MUST support **semantic (level-of-detail) zoom** independent of pixel
+zoom: a relative level centred on the default grouping (crates), where the user
+can step coarser (group crates by their workspace folder) or finer (crate →
+folders within). Stepping re-groups the whole overview; **clicking a group**
+drills into just that group's files. The current level MUST be shown and the
+state MUST round-trip through the URL.
+
+Cycle membership MUST be **visible at every level**: file nodes and edges in a
+dependency cycle are drawn red, and a collapsed group (crate/folder) is marked
+when it contains cycle members. Cycle data is sourced solely from the backend
+(`graph.cycles`); per-language thresholds are kept in
+`principles/<lang>/metric-thresholds.md`.
+
+**Rationale**: A flat per-file map does not scale to large workspaces. Semantic
+zoom lets a developer start at the crate level and drill toward the files that
+matter, while cycles — the highest-priority structural smell — stay visible at
+the level they are reasoning about.
+
+**Actors**: `cpt-code-split-actor-developer`, `cpt-code-split-actor-tech-lead`
+
 ### AI Prompt Generator (P2)
 
 - [x] `p2` - **ID**: `cpt-code-split-fr-ai-prompts`

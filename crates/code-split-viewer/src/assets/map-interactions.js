@@ -338,7 +338,6 @@ function setupTooltips(svgFrame, level) {
                            : nodeId?.startsWith('OUT\x01') ? 'OUT\x01' : null;
       if (neighborPrefix) {
         const neighborGroup = nodeId.slice(neighborPrefix.length);
-        g.style.cursor = 'pointer';
         g.addEventListener('click', e => {
           e.stopPropagation();
           drillIntoGroup(neighborGroup, level);
@@ -359,7 +358,6 @@ function setupTooltips(svgFrame, level) {
 
       g.dataset.nodeId = nodeId;
       gNodeMap.set(nodeId, g);
-      g.style.cursor = 'pointer';
 
       g.addEventListener('click', e => {
         e.stopPropagation();
@@ -412,7 +410,6 @@ function setupTooltips(svgFrame, level) {
 
       g.dataset.groupId    = groupId;
       g.dataset.groupStats = JSON.stringify(stats);
-      g.style.cursor = 'pointer';
 
       g.addEventListener('click', e => {
         e.stopPropagation();

@@ -25,7 +25,7 @@
                    border: 1px solid #c8d4e0; border-radius: 4px; padding: 3px 6px; background: #fff; }
 /* Count emphasis: warning zone gets a calm text-colour highlight (no alarming
    red); the info zone is left plain (no class added) to keep the UI low-key. */
-.exp-rec-warn { color: #2c3e50 !important; font-weight: 700; background: rgba(44,62,80,.10);
+.exp-rec-warn { color: #2c3e50; font-weight: 700; background: rgba(44,62,80,.10);
                 border-radius: 4px; }
 .exp-source-or { font-size: 11px; font-weight: 700; color: #aaa; letter-spacing: .06em;
                  white-space: nowrap; }
@@ -152,7 +152,7 @@
 .cell-s-affected  { color: #6b7280; }
 .cell-s-unchanged { color: #aaa; }
 
-.nt-empty { text-align: center !important; color: #aaa; font-style: italic; padding: 16px !important; }
+.node-table td.nt-empty { text-align: center; color: #aaa; font-style: italic; padding: 16px; }
 
 /* ── Collapsible Diff summary ───────────────────────────────────────────────── */
 .summary.collapsed .node-table-body { display: none; }

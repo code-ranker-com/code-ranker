@@ -31,37 +31,43 @@ g.node polygon, g.node ellipse { stroke-width: 1; }
 .svg-frame.side-baseline g.node:is(.cycle-status-baseline-only,.cycle-status-both) > ellipse,
 .svg-frame.side-current  g.node:is(.cycle-status-current-only,.cycle-status-both)  > polygon,
 .svg-frame.side-current  g.node:is(.cycle-status-current-only,.cycle-status-both)  > ellipse {
-  stroke: #c00 !important;   /* red, normal weight (the colour already marks it) */
+  stroke: #c00;   /* red, normal weight (the colour already marks it) */
 }
 .svg-frame.side-baseline g.edge:is(.cycle-status-baseline-only,.cycle-status-both) > path,
 .svg-frame.side-current  g.edge:is(.cycle-status-current-only,.cycle-status-both)  > path {
-  stroke: #c00 !important;   /* red, but normal weight — a thick line hid the arrowhead */
+  stroke: #c00;   /* red, but normal weight — a thick line hid the arrowhead */
 }
 .svg-frame.side-baseline g.edge:is(.cycle-status-baseline-only,.cycle-status-both) > polygon,
 .svg-frame.side-current  g.edge:is(.cycle-status-current-only,.cycle-status-both)  > polygon {
-  stroke: #c00 !important; fill: #c00 !important;
+  stroke: #c00; fill: #c00;
 }
+
+/* Base cursors set via CSS (no inline styles in JS) so the modifier rules below
+   win by specificity — no `!important` needed. */
+.svg-frame g.node { cursor: pointer; }
+#node-modal-diagram g[data-diag-node] { cursor: pointer; }
+#node-modal-diagram g[data-diag-node].sn-static { cursor: default; }   /* neighbour not in the graph */
 
 /* ── Shift = "select mode" on the main map: cursor signals click-to-select ──── */
 body.shift-select .svg-frame svg { cursor: crosshair; }
-body.shift-select .svg-frame g.node { cursor: copy !important; }
+body.shift-select .svg-frame g.node { cursor: copy; }
 
 /* ── Ctrl/⌘ = "open source" on the main map: cursor signals click-to-open ───── */
 body.ctrl-link .svg-frame svg { cursor: default; }
-body.ctrl-link .svg-frame g.node { cursor: alias !important; }
+body.ctrl-link .svg-frame g.node { cursor: alias; }
 
 /* Same modifier cursors inside the per-node popup diagram; 3rd-party (`.diag-ext`)
    cards are inert (not selectable, no source) so they show `not-allowed`. */
-body.shift-select #node-modal-diagram g[data-diag-node]:not(.diag-ext) { cursor: copy !important; }
-body.ctrl-link    #node-modal-diagram g[data-diag-node]:not(.diag-ext) { cursor: alias !important; }
+body.shift-select #node-modal-diagram g[data-diag-node]:not(.diag-ext) { cursor: copy; }
+body.ctrl-link    #node-modal-diagram g[data-diag-node]:not(.diag-ext) { cursor: alias; }
 body.shift-select #node-modal-diagram g.diag-ext,
-body.ctrl-link    #node-modal-diagram g.diag-ext { cursor: not-allowed !important; }
+body.ctrl-link    #node-modal-diagram g.diag-ext { cursor: not-allowed; }
 /* The central (main) card reacts to modifiers too (copy/view-source); external
    main cards are inert. */
-body.shift-select #node-modal-diagram .mn-card:not(.diag-ext) { cursor: copy !important; }
-body.ctrl-link    #node-modal-diagram .mn-card:not(.diag-ext) { cursor: alias !important; }
+body.shift-select #node-modal-diagram .mn-card:not(.diag-ext) { cursor: copy; }
+body.ctrl-link    #node-modal-diagram .mn-card:not(.diag-ext) { cursor: alias; }
 body.shift-select #node-modal-diagram .mn-card.diag-ext,
-body.ctrl-link    #node-modal-diagram .mn-card.diag-ext { cursor: not-allowed !important; }
+body.ctrl-link    #node-modal-diagram .mn-card.diag-ext { cursor: not-allowed; }
 
 /* Popup's own shortcut legend (bottom-left of the fullscreen modal), shown while
    a modifier is held — the map's legend is hidden behind the popup. */
@@ -98,7 +104,7 @@ body.ctrl-link   .frame-wrap .kbd-hints { opacity: 1; }
 .node-table tr.row-selected td { background: rgb(254,245,222); }
 .node-table tr.row-selected td[data-col="name"] { background: rgb(254,245,222); }
 g.node.node-selected > polygon,
-g.node.node-selected > ellipse { fill: #fffde7 !important; stroke: #f9a825 !important; stroke-width: 2 !important; }
+g.node.node-selected > ellipse { fill: #fffde7; stroke: #f9a825; stroke-width: 2; }
 /* The cycle stroke wins over selection: a selected node that is also in a cycle
    on the shown side keeps its red outline (the yellow fill still marks it
    selected). Side-gated, mirroring the cycle-highlight rules above. */
@@ -106,13 +112,13 @@ g.node.node-selected > ellipse { fill: #fffde7 !important; stroke: #f9a825 !impo
 .svg-frame.side-baseline g.node.node-selected:is(.cycle-status-baseline-only,.cycle-status-both) > ellipse,
 .svg-frame.side-current  g.node.node-selected:is(.cycle-status-current-only,.cycle-status-both)  > polygon,
 .svg-frame.side-current  g.node.node-selected:is(.cycle-status-current-only,.cycle-status-both)  > ellipse {
-  stroke: #c00 !important;
+  stroke: #c00;
 }
 /* Same selection highlight inside the per-node popup diagram (side + main cards). */
 #node-modal-diagram g[data-diag-node].diag-selected > rect,
-#node-modal-diagram g.mn-card.diag-selected > rect { fill: #fffde7 !important; stroke: #f9a825 !important; stroke-width: 2 !important; }
+#node-modal-diagram g.mn-card.diag-selected > rect { fill: #fffde7; stroke: #f9a825; stroke-width: 2; }
 /* Popup: cycle red stroke wins over selection, mirroring the main map. */
-#node-modal-diagram g.diag-cycle.diag-selected > rect { stroke: #c00 !important; stroke-width: 2 !important; }
+#node-modal-diagram g.diag-cycle.diag-selected > rect { stroke: #c00; stroke-width: 2; }
 
 /* ── Hover: last → wins over selection when both classes present ─────────────── */
 .node-table tr.row-hl td { background: rgb(210,235,248); }

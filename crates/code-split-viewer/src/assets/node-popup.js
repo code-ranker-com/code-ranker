@@ -250,7 +250,6 @@ function buildDiagramSVG(node, level) {
     const inMap   = nodeMap.has(n.id);
     const cycle   = isCycleNode(n.id);
     const ext     = item.ext || isExternalNode(n, level);
-    const cursor  = inMap ? 'pointer' : 'default';
     const clipId  = `sn-clip-${_snIdx++}`;
     const fill    = ext ? '#ececec' : '#f0f4f8';
     const stroke  = cycle ? '#c00' : ext ? '#9aa0a6' : (inMap ? '#8ba6c0' : '#bbb');
@@ -262,8 +261,9 @@ function buildDiagramSVG(node, level) {
     const mono    = `font-family="ui-monospace,'SF Mono',monospace"`;
     const clipDef = `<defs><clipPath id="${clipId}"><rect x="${x+4}" y="${y}" width="${SNW-8}" height="${SNH}"/></clipPath></defs>`;
     const cls     = [ext ? 'diag-ext' : (selectedIds?.has(n.id) ? 'diag-selected' : ''),
-                     cycle ? 'diag-cycle' : ''].filter(Boolean).join(' ');
-    const open    = `<g data-diag-node="${esc(n.id)}"${cls ? ` class="${cls}"` : ''} style="cursor:${cursor}">` +
+                     cycle ? 'diag-cycle' : '',
+                     inMap ? '' : 'sn-static'].filter(Boolean).join(' ');   // cursor via CSS
+    const open    = `<g data-diag-node="${esc(n.id)}"${cls ? ` class="${cls}"` : ''}>` +
       `<rect x="${x}" y="${y}" width="${SNW}" height="${SNH}" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="${strokeW}"${dash}/>`;
     const pathTip = ext ? (n.path || n.id)
                         : ((n.path || '').replace(/^\{[^}]+\}\//, '') || n.id);

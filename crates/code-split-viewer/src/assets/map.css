@@ -8,7 +8,7 @@
 /* Drag-to-pan, GitHub-style: open hand at rest, closed hand while dragging
    (the closed hand wins over a node's `pointer` cursor for the whole drag). */
 .svg-frame.panning svg { cursor: grabbing; }
-.svg-frame.panning svg g.node { cursor: grabbing !important; }
+.svg-frame.panning svg g.node { cursor: grabbing; }
 
 .zoom-controls { position: absolute; bottom: 12px; right: 12px;
                  display: flex; flex-direction: column; gap: 5px;
@@ -24,7 +24,7 @@
 
 /* Fullscreen mode */
 .frame-wrap:fullscreen { background: #fff; display: flex; align-items: stretch; position: relative; }
-.frame-wrap:fullscreen .svg-frame { flex: 1; height: 100% !important; border-radius: 0; border: none; min-height: unset; }
+.frame-wrap:fullscreen .svg-frame { flex: 1; height: 100%; border-radius: 0; border: none; min-height: unset; }
 .frame-wrap:fullscreen .zoom-btn[data-zoom="fullscreen"]::before { content: '✕'; }
 .frame-wrap:fullscreen .zoom-btn[data-zoom="fullscreen"] { font-size: 14px; color: #666; }
 

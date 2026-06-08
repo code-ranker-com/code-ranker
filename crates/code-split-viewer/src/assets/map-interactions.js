@@ -74,7 +74,7 @@ function drillIntoGroup(groupId, level) {
   window.drillGroup = groupId;
   // The drilled view filters by the grouper that produced this group key, so
   // remember the zoom that was active at drill time.
-  window.drillZoom  = window.zoom || 0;
+  window.drillDig  = window.dig || 0;
   const frameWrap = document.querySelector(`.view[data-view="${level}"] .frame-wrap`);
   const bc = frameWrap?.querySelector('.drill-breadcrumb');
   if (bc) {
@@ -83,7 +83,7 @@ function drillIntoGroup(groupId, level) {
     bc.querySelector('.drill-group-name').textContent = `${grpKey}: ${groupId}`;
   }
   // The relative-zoom control applies to the overview only — hide it while focused.
-  frameWrap?.querySelector('.zoom-lod')?.style.setProperty('display', 'none');
+  frameWrap?.querySelector('.dig-lod')?.style.setProperty('display', 'none');
   window.navPushView?.();
   document.querySelectorAll('.view').forEach(sec => { sec.dataset.rendered = 'false'; });
   const active = document.querySelector('.view.active');
@@ -95,50 +95,136 @@ function drillOutOfGroup(level) {
   const frameWrap = document.querySelector(`.view[data-view="${level}"] .frame-wrap`);
   const bc = frameWrap?.querySelector('.drill-breadcrumb');
   if (bc) bc.style.display = 'none';
-  frameWrap?.querySelector('.zoom-lod')?.style.removeProperty('display');
-  updateZoomLabel(level);
+  frameWrap?.querySelector('.dig-lod')?.style.removeProperty('display');
+  updateDigLabel(level);
   window.navPushView?.();
   document.querySelectorAll('.view').forEach(sec => { sec.dataset.rendered = 'false'; });
   const active = document.querySelector('.view.active');
   if (active && window.gv) renderView(active, { preserve: false });
 }
 
-// Relative-zoom (level-of-detail) controls for the overview. `delta` is +1 (in,
-// finer) or -1 (out, coarser). Zoom acts on the whole overview; if currently
-// focused into a group, stepping zoom leaves focus so the new LOD is visible
-// across the map. See grouping.js for the tier ladder.
-function setZoom(delta, level) {
+// Relative "dig" (level-of-detail) control for the overview. `delta` is +1 (dig
+// IN — descend into folders) or -1 (dig OUT — collapse the deepest crates into
+// folders). Dig acts on the whole overview; if currently focused into a group,
+// stepping dig leaves focus so the new LOD is visible across the map. See
+// grouping.js for the tier ladder.
+function setDig(delta, level) {
   level = level || currentLevel();
-  const z = clampZoom((window.zoom || 0) + delta);
-  if (z === (window.zoom || 0) && window.drillGroup === null) return;
-  window.zoom = z;
+  const z = clampDig((window.dig || 0) + delta);
+  if (z === (window.dig || 0) && window.drillGroup === null) return;
+  window.dig = z;
   if (window.drillGroup !== null) {
     window.drillGroup = null;
     document.querySelectorAll('.drill-breadcrumb').forEach(bc => { bc.style.display = 'none'; });
-    document.querySelectorAll('.zoom-lod').forEach(el => el.style.removeProperty('display'));
+    document.querySelectorAll('.dig-lod').forEach(el => el.style.removeProperty('display'));
   }
-  updateZoomLabel(level);
+  updateDigLabel(level);
   window.navReplaceView?.();
   document.querySelectorAll('.view').forEach(sec => { sec.dataset.rendered = 'false'; });
   const active = document.querySelector('.view.active');
   if (active && window.gv) renderView(active, { preserve: false });
 }
-window.setZoom = setZoom;
+window.setDig = setDig;
 
-// Sync the zoom-control label + button disabled-state for a level. zoom 0 shows
-// the grouping key (e.g. "crate"); ±n shows the offset.
-function updateZoomLabel(level) {
+// Sync the dig-control label + button disabled-state for a level. dig 0 shows the
+// grouping key (e.g. "crate"); otherwise shows the signed dig level. "Out" is
+// disabled once the overview has collapsed to a single root group (dig reaches
+// -maxCrateDepth); "in" at the static DIG_MAX.
+function updateDigLabel(level) {
   level = level || currentLevel();
-  const root = document.querySelector(`.view[data-view="${level}"] .zoom-lod`);
+  const root = document.querySelector(`.view[data-view="${level}"] .dig-lod`);
   if (!root) return;
-  const z  = window.zoom || 0;
-  const gk = levelUi(level).grouping?.key || 'group';
-  const val = root.querySelector('.zoom-lod-val');
-  if (val) val.textContent = z === 0 ? gk : (z > 0 ? `${gk} +${z}` : `${gk} ${z}`);
-  root.querySelector('[data-lod="out"]')?.toggleAttribute('disabled', z <= ZOOM_MIN);
-  root.querySelector('[data-lod="in"]') ?.toggleAttribute('disabled', z >= ZOOM_MAX);
+  const z   = window.dig || 0;
+  const gk  = levelUi(level).grouping?.key || 'group';
+  const val = root.querySelector('.dig-lod-val');
+  if (val) val.textContent = z === 0 ? gk : `dig ${z > 0 ? '+' : ''}${z}`;
+  const maxD = window.maxCrateDepth?.(level) ?? 0;
+  root.querySelector('[data-lod="out"]')?.toggleAttribute('disabled', z <= -maxD || z <= DIG_MIN);
+  root.querySelector('[data-lod="in"]') ?.toggleAttribute('disabled', z >= DIG_MAX);
 }
-window.updateZoomLabel = updateZoomLabel;
+window.updateDigLabel = updateDigLabel;
+
+// Debug dump: prints the current view state, the generated DOT, the rendered
+// graphviz node geometry (box size in SVG units) and the underlying node data to
+// the console. Wired to the `debug` button.
+function dumpDebug(level) {
+  level = level || currentLevel();
+  const frame = document.querySelector(`.view[data-view="${level}"] .svg-frame`);
+  const svg   = frame?.querySelector('svg');
+  const state = {
+    level, dig: window.dig, drillGroup: window.drillGroup, drillDig: window.drillDig,
+    nodeSizeMode: window.nodeSizeMode,
+    viewBox: svg?.getAttribute('viewBox'),
+    framePx: frame ? { w: frame.clientWidth, h: frame.clientHeight } : null,
+  };
+  // Rendered node boxes (size in SVG user units, from the polygon points).
+  const rendered = [...(svg?.querySelectorAll('g.node') || [])].map(g => {
+    const poly = g.querySelector('polygon');
+    let box = null;
+    if (poly) {
+      const pts = poly.getAttribute('points').trim().split(/\s+/).map(p => p.split(',').map(Number));
+      const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+      box = { w: +(Math.max(...xs) - Math.min(...xs)).toFixed(1), h: +(Math.max(...ys) - Math.min(...ys)).toFixed(1) };
+    }
+    return { node: g.dataset.nodeId || g.dataset.groupId || '?', label: g.querySelector('text')?.textContent ?? '', box };
+  });
+  // Rendered edges: class + vertical extent (y / height in SVG units) so we can
+  // see which edges span far up/down. Edge <title>s are gone (setupTooltips
+  // removed them), so identify by CSS class.
+  const svgEdges = [...(svg?.querySelectorAll('g.edge') || [])].map(g => {
+    let bb = null;
+    try { bb = g.querySelector('path')?.getBBox(); } catch { /* not renderable */ }
+    return {
+      cls: (g.getAttribute('class') || '').replace(/\bedge\b\s*/, '').trim(),
+      y: bb ? +bb.y.toFixed(1) : null,
+      h: bb ? +bb.height.toFixed(1) : null,
+    };
+  });
+  // Underlying data of the nodes on the active side.
+  const data = (activeGraph(level).nodes || []).map(n => ({
+    id: n.id, name: n.name, crate: n.crate, fan_in: n.fan_in, fan_out: n.fan_out, sloc: n.sloc ?? n.loc, hk: n.hk,
+  }));
+  // Console (rich) output.
+  console.log('%c=== code-split debug ===', 'font-weight:bold');
+  console.log('state:', state);
+  console.log('DOT:\n' + (window._lastDOT || '(none)'));
+  console.log('rendered nodes:'); console.table(rendered);
+  console.log('rendered edges (y / height in SVG units):'); console.table(svgEdges);
+  console.log('node data:'); console.table(data);
+
+  // Plain-text dump → clipboard (so it can be pasted whole).
+  const text = [
+    '=== code-split debug ===',
+    'state: ' + JSON.stringify(state, null, 2),
+    '',
+    'rendered nodes (box in SVG units):',
+    ...rendered.map(r => `  ${r.node}\t${r.label}\tbox=${r.box ? `${r.box.w}x${r.box.h}` : '?'}`),
+    '',
+    'rendered edges (cls / y / height in SVG units):',
+    ...svgEdges.map(e => `  ${e.cls}\ty=${e.y}\th=${e.h}`),
+    '',
+    'node data:',
+    ...data.map(d => '  ' + JSON.stringify(d)),
+    '',
+    'DOT:',
+    window._lastDOT || '(none)',
+  ].join('\n');
+  navigator.clipboard?.writeText(text)
+    .then(() => console.log('%c(debug copied to clipboard)', 'color:#1abc9c'))
+    .catch(() => console.warn('clipboard write failed — copy from the console above'));
+
+  return { state, rendered, edges: svgEdges, data, dot: window._lastDOT };
+}
+window.dumpDebug = dumpDebug;
+
+// Press `d` to dump + copy the debug for the active view (ignored while typing
+// in an input / textarea / contenteditable, or with a modifier held).
+window.addEventListener('keydown', e => {
+  if ((e.key !== 'd' && e.key !== 'D') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const t = e.target;
+  if (t && (/^(input|textarea|select)$/i.test(t.tagName) || t.isContentEditable)) return;
+  dumpDebug();
+});
 
 // Format a single status-bar line for a file node.
 function statusLineFor(node, level) {
@@ -174,10 +260,13 @@ function statusLineForGroup(stats) {
 // Build edge-highlight behaviour: on node/cluster hover dim unrelated edges and
 // show connected ones; if IN/OUT cluster edges exceed 10, hide them until the
 // cluster zone is hovered. Must be called BEFORE setupTooltips (reads titles).
-function setupEdgeHighlight(svgFrame) {
+function setupEdgeHighlight(svgFrame, level) {
   const allEdgeEls = [...svgFrame.querySelectorAll('g.edge')];
   const allNodeEls = [...svgFrame.querySelectorAll('g.node')];
   if (allEdgeEls.length === 0) return;
+  // Node lookup so a dir sub-cluster's edges can be matched by the same
+  // crate-relative dir label ("/src/…") that layout.js prints.
+  const nodeById = new Map((typeof unionGraph === 'function' ? unionGraph(level).nodes : []).map(n => [n.id, n]));
 
   const sb = svgFrame._statusBar;
   const showSB = text => { if (sb) { sb.textContent = text; sb.hidden = false; } };
@@ -240,11 +329,10 @@ function setupEdgeHighlight(svgFrame) {
       edges = new Set(outEdges);
       nc = outEdges.length;
     } else {
-      // Directory sub-cluster: label is the dir path (or '_root' for top-level).
+      // Directory sub-cluster: label is the crate-relative dir ("/src/…").
       const matchIds = [...edgeMap.keys()].filter(k => {
-        const s = k.replace(/^\{[^}]+\}\//, '');
-        const dir = s.lastIndexOf('/') > 0 ? s.slice(0, s.lastIndexOf('/')) : '_root';
-        return dir === label;
+        const node = nodeById.get(k);
+        return node ? crateRelDir(level, node) === label : false;
       });
       edges = new Set();
       for (const id of matchIds) {
@@ -381,7 +469,7 @@ function setupTooltips(svgFrame, level) {
 
   } else {
     // ── Group view: tag group nodes and wire up drill-in click ───────────────────
-    const gOf = grouperForZoom(level, window.zoom || 0);
+    const gOf = grouperForDig(level, window.dig || 0);
     const cyc = window.CYCLES?.[level]?.nodeCycleStatus;
     const groupStats = new Map();
     for (const n of unionGraph(level).nodes) {

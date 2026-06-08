@@ -607,7 +607,7 @@ visibility, and central-complexity rules as the JS plugin.
 > data-driven `schema.js` layer, the `grouping.js` ladder, the browser-side diff
 > (`diff.js`), the map render/interaction/popup/table/export/shell files (split
 > out of the former `diagram.js` / `app.js` / `node-table.js`), the concern-split
-> stylesheet, plus the relative-zoom / affected-status / cycle-detection /
+> stylesheet, plus the relative-dig / affected-status / cycle-detection /
 > offline-guarantee notes — are documented, layer by layer, in
 > [`code-split-viewer/DESIGN.md`](code-split-viewer/DESIGN.md).
 
@@ -1096,11 +1096,11 @@ code-split/
           graphviz.umd.js  # Graphviz WASM (~802 KB, offline)
           snarkdown.umd.js # Markdown→HTML renderer (~2 KB, offline) for the prompt preview
           schema.js        # Snapshot data-access layer (specs, evalCalc/calcDisplay)
-          grouping.js      # Grouping ladder for relative zoom (grouperForZoom, crateRoots, aggCycleStatus)
+          grouping.js      # Grouping ladder for relative dig (grouperForDig, crateRoots/crateDirs, groupLabel, crateRelDir, aggCycleStatus)
           diff.js          # Browser-side diff + per-side cycle status
-          layout.js        # buildDOT — DOT graph construction (zoom-aware grouping, cycle classes)
-          map-render.js    # drawSVG / renderSVGNow (DOT→SVG, wires pan/zoom + interactions)
-          map-interactions.js # Map selection, drill + relative-zoom nav, status bar, edge highlight, tooltips
+          layout.js        # buildDOT — DOT graph construction (dig-aware grouping, cycle classes, node-count labels)
+          map-render.js    # drawSVG / renderSVGNow (DOT→SVG, wires pan/zoom + interactions; stashes window._lastDOT)
+          map-interactions.js # Map selection, drill + relative-dig nav, status bar, edge highlight, tooltips, dumpDebug
           panzoom.js       # Pan/zoom + zoom-lod / size / drill buttons
           node-popup.js    # buildDiagramSVG — popup fan-in/fan-out SVG diagram (column layout)
           modal-content.js # buildModalContent — modal left field table

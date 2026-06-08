@@ -1,8 +1,8 @@
 document.addEventListener('DOMContentLoaded', async () => {
   window.nodeSizeMode = null;
   window.drillGroup   = null;
-  window.zoom         = 0;   // relative LOD on the overview (see grouping.js)
-  window.drillZoom    = 0;
+  window.dig         = 0;   // relative LOD on the overview (see grouping.js)
+  window.drillDig    = 0;
 
   // Read the snapshots embedded inline in the page (cs-baseline / cs-current script tags).
   window.BASELINE = readEmbeddedSnapshot('cs-baseline');
@@ -50,13 +50,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
   // Restore state from URL, then set initial history entry
-  const { level: urlLevel, node: urlNode, group: urlGroup, mode: urlMode, zoom: urlZoom } = getNavParams();
+  const { level: urlLevel, node: urlNode, group: urlGroup, mode: urlMode, dig: urlDig } = getNavParams();
   if (urlLevel && urlLevel !== currentLevel()) switchToLevel(urlLevel);
-  applyViewState({ level: urlLevel, group: urlGroup, mode: urlMode, zoom: urlZoom }, { rerender: !!(urlGroup || urlMode || urlZoom) });
+  applyViewState({ level: urlLevel, group: urlGroup, mode: urlMode, dig: urlDig }, { rerender: !!(urlGroup || urlMode || urlDig) });
   if (urlNode) openModalForNode(urlNode, urlLevel ?? currentLevel());
   // Replace initial history state so popstate can restore it
   history.replaceState(
-    { level: currentLevel(), node: urlNode ?? null, group: urlGroup ?? null, mode: urlMode ?? null, zoom: window.zoom || 0, side: window.viewSide },
+    { level: currentLevel(), node: urlNode ?? null, group: urlGroup ?? null, mode: urlMode ?? null, dig: window.dig || 0, side: window.viewSide },
     '', location.href
   );
 
@@ -73,7 +73,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const side = st.side;
     if (window.CURRENT && (side === 'baseline' || side === 'current')) setViewSide(side);
     if (lvl && lvl !== currentLevel()) switchToLevel(lvl);
-    applyViewState({ level: lvl ?? currentLevel(), group: st.group, mode: st.mode, zoom: st.zoom }, { rerender: true });
+    applyViewState({ level: lvl ?? currentLevel(), group: st.group, mode: st.mode, dig: st.dig }, { rerender: true });
     if (nid) {
       openModalForNode(nid, lvl ?? currentLevel());
     } else {

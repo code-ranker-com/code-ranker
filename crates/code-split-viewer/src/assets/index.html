@@ -44,12 +44,13 @@
       <button class="drill-back" type="button" data-drill="back">← all</button>
       <span class="drill-group-name"></span>
     </div>
-    <!-- Relative-zoom (level-of-detail) control: − coarser / + finer grouping.
+    <!-- Relative "dig" (level-of-detail) control: − dig out (collapse the deepest
+         crates into folders) / + dig in (descend into folders within crates).
          Top-left next to the map; shown in the overview, hidden while drilled. -->
-    <div class="zoom-lod" id="zoom-lod-files">
-      <button class="zoom-lod-btn" type="button" data-lod="out" title="Zoom out — coarser grouping">−</button>
-      <span class="zoom-lod-val">crate</span>
-      <button class="zoom-lod-btn" type="button" data-lod="in" title="Zoom in — finer grouping">+</button>
+    <div class="dig-lod" id="dig-lod-files">
+      <button class="dig-lod-btn" type="button" data-lod="out" title="Dig out — collapse the deepest crates into folders">−</button>
+      <span class="dig-lod-val">crate</span>
+      <button class="dig-lod-btn" type="button" data-lod="in" title="Dig in — descend into folders within crates">+</button>
     </div>
     <div class="size-controls">
       <div class="size-row" data-row="metric">
@@ -66,6 +67,8 @@
     </div>
     <!-- Keyboard-shortcut legend; key labels are filled per-platform in JS. -->
     <div class="kbd-hints" id="kbd-hints"></div>
+    <!-- Debug: dump current node values / DOT / rendered geometry to the console. -->
+    <button class="dbg-btn" type="button" data-debug title="Dump node values to the console">debug</button>
   </div>
 </section>
 

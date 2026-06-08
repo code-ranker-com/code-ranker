@@ -135,11 +135,18 @@ function setupPanZoom(frame, svg) {
     });
 
     // Relative-zoom (level-of-detail) buttons: + finer / − coarser grouping.
-    wrap.querySelector('.zoom-lod [data-lod="in"]')?.addEventListener('click', () => {
-      window.setZoom?.(1, wrap.closest('.view')?.dataset.view || 'files');
+    wrap.querySelector('.dig-lod [data-lod="in"]')?.addEventListener('click', () => {
+      window.setDig?.(1, wrap.closest('.view')?.dataset.view || 'files');
     });
-    wrap.querySelector('.zoom-lod [data-lod="out"]')?.addEventListener('click', () => {
-      window.setZoom?.(-1, wrap.closest('.view')?.dataset.view || 'files');
+    wrap.querySelector('.dig-lod [data-lod="out"]')?.addEventListener('click', () => {
+      window.setDig?.(-1, wrap.closest('.view')?.dataset.view || 'files');
+    });
+
+    // Debug button: dump current node values / DOT / geometry to console + clipboard.
+    wrap.querySelector('[data-debug]')?.addEventListener('click', e => {
+      window.dumpDebug?.(wrap.closest('.view')?.dataset.view || 'files');
+      const b = e.currentTarget, t = b.textContent;
+      b.textContent = 'copied'; setTimeout(() => { b.textContent = t; }, 1000);
     });
 
     document.addEventListener('fullscreenchange', () => {

@@ -12,7 +12,7 @@ function drawSVG(svgFrame, nodes, edges, level) {
   // Group view (drillGroup=null) is always fast — just one node per group.
   // Only warn when drilled into a very large group.
   if (drillGroup !== null) {
-    const gOf = grouperForZoom(level, window.drillZoom ?? 0);
+    const gOf = grouperForDig(level, window.drillDig ?? 0);
     const drillCount = nodes.filter(n => gOf(n) === drillGroup).length;
     if (drillCount > SVG_NODE_LIMIT && svgFrame.dataset.bigConfirmed !== '1') {
       svgFrame.innerHTML =
@@ -41,6 +41,9 @@ function renderSVGNow(svgFrame, nodes, edges, level) {
   const vpH = svgFrame.offsetHeight || svgFrame.clientHeight || 0;
   const viewport = (vpW > 0 && vpH > 0) ? { w: vpW, h: vpH } : null;
   const dot = buildDOT(nodes, edges, level, viewport);
+  // Keep the last DOT + render context for the debug button.
+  window._lastDOT = dot;
+  window._lastRender = { level, dig: window.dig, drillGroup: window.drillGroup, viewport };
   const svgStr = window.gv.dot(dot);
   svgFrame.innerHTML = svgStr;
   const svg = svgFrame.querySelector('svg');
@@ -60,7 +63,7 @@ function renderSVGNow(svgFrame, nodes, edges, level) {
     statusBar.hidden = true;
     statusBar.textContent = '';
     svgFrame._statusBar = statusBar;
-    setupEdgeHighlight(svgFrame);   // reads titles before setupTooltips removes them
+    setupEdgeHighlight(svgFrame, level);   // reads titles before setupTooltips removes them
     setupTooltips(svgFrame, level);
   }
 }

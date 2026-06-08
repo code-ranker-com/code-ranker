@@ -2,7 +2,7 @@
 
 The technical design of the offline HTML viewer: the `code-split-viewer` crate
 and its static assets (embedded into the `code-split` binary), the data-driven
-rendering layer, the browser-side diff and cycle computation, the relative-zoom
+rendering layer, the browser-side diff and cycle computation, the relative-dig
 navigation, and the offline guarantee. This is a component slice of the technical
 design — for the architecture overview, principles, domain model, the
 plugin/extraction crates and the plugin system see the main
@@ -13,7 +13,7 @@ plugin/extraction crates and the plugin system see the main
 
 - [HTML assets (`crates/code-split-viewer/src/assets/`)](#html-assets-cratescode-split-viewersrcassets)
 - [Asset layers](#asset-layers)
-- [Relative zoom (level-of-detail)](#relative-zoom-level-of-detail)
+- [Relative dig (level-of-detail)](#relative-dig-level-of-detail)
 - [Affected status](#affected-status)
 - [Cycle detection](#cycle-detection)
 - [Offline guarantee](#offline-guarantee)
@@ -66,7 +66,7 @@ top-to-bottom). The viewer was split out of three former monoliths (`diagram.js`
 | File | Purpose |
 |------|---------|
 | `schema.js` | The single data-access layer over the snapshot dictionaries (readers for `node_attributes` / `edge_kinds` / `node_kinds` / `cycle_kinds` / `attribute_groups` / `ui` / `presets`, plus `evalCalc`/`calcDisplay`). |
-| `grouping.js` | The **grouping ladder** for relative zoom: `grouperForZoom(level, zoom)` (zoom 0 = the crate tier, reproducing the legacy `makeGroupOf`), `groupKeyAtZoom`, the memoised `crateRoots`, `aggCycleStatus`, `clampZoom`. Derives every tier from file-id paths + the crate attribute — no extra backend data. |
+| `grouping.js` | The **grouping ladder** for relative dig: `grouperForDig(level, dig)` / `groupKeyAtDig` (dig 0 = crate tier; +N folders under the crate; −N progressive deepest-first collapse via `crateRoots`/`crateDirs`/`maxCrateDepth`), plus `groupLabel` (box label), `crateRelDir` (drilled sub-cluster / neighbour labels), `aggCycleStatus`, `clampDig`. Derives every tier from file-id paths + the crate attribute — no extra backend data. |
 | `diff.js` | Browser-side diff: `computeDiff()` (node/edge status), `computeCycles()` (reads cycle membership **solely** from the backend `graph.cycles`; derives per-side status + `edgeCycleStatus`), `computeMeta()`. |
 | `utils.js` | Shared formatting/escaping/DOM helpers (`fmtNum`, `fmtFull`, `fmtDate`, `escHtml`, …). |
 
@@ -74,14 +74,14 @@ top-to-bottom). The viewer was split out of three former monoliths (`diagram.js`
 
 | File | Purpose |
 |------|---------|
-| `layout.js` | `buildDOT()` — emits the DOT for the map. Overview groups by `grouperForZoom(level, window.zoom)` (one node per group, deduped inter-group flow edges) with each group node tagged `cycle-status-*` aggregated from its members; the drilled (focus) view filters to the focused group and renders per-file nodes with dir sub-clusters plus **callers** (left, green) / **dependencies** (right, orange) neighbour clusters. Metric (SLOC/HK) sizing helpers live here too. |
-| `map-render.js` | `drawSVG()` (big-graph confirm guard, drilled views only) and `renderSVGNow()` (DOT→SVG via `window.gv`, then wires pan/zoom, the status bar, edge-highlight and tooltips). |
+| `layout.js` | `buildDOT()` — emits the DOT for the map. Overview groups by `grouperForDig(level, window.dig)` (one node per group, deduped inter-group flow edges); each group box is labelled `name (memberCount)`, filled pink at the crate tier / white otherwise, and tagged `cycle-status-*` aggregated from its members. The drilled (focus) view filters to the focused group and renders per-file nodes (`name (fan_in+fan_out)`) with crate-relative dir sub-clusters plus **callers** (green) / **dependencies** (orange) neighbour clusters whose `edge-in`/`edge-out` edges are `constraint=false`. No `ratio=fill`/`size` (natural layout, packed spacing). Metric (SLOC/HK) sizing helpers live here too. |
+| `map-render.js` | `drawSVG()` (big-graph confirm guard, drilled views only) and `renderSVGNow()` (DOT→SVG via `window.gv`, then wires pan/zoom, the status bar, edge-highlight and tooltips; stashes the DOT in `window._lastDOT` for the debug dump). |
 
 ### Map interactions
 
 | File | Purpose |
 |------|---------|
-| `map-interactions.js` | All behaviour on the main SVG map: node selection + the platform open-source modifier (`isOpenSrcClick`, ⌘/Ctrl), the shortcut legend (`kbdHintsHtml`), **drill** nav (`drillIntoGroup`/`drillOutOfGroup`) and **relative-zoom** (`setZoom`/`updateZoomLabel`), the status bar (`statusLineFor`/`statusLineForGroup`), `setupEdgeHighlight` (must run **before** `setupTooltips`, which removes SVG `<title>`s) and `setupTooltips`. |
+| `map-interactions.js` | All behaviour on the main SVG map: node selection + the platform open-source modifier (`isOpenSrcClick`, ⌘/Ctrl), the shortcut legend (`kbdHintsHtml`), **drill** nav (`drillIntoGroup`/`drillOutOfGroup`) and **relative-dig** (`setDig`/`updateDigLabel`), the status bar (`statusLineFor`/`statusLineForGroup`), `setupEdgeHighlight(svgFrame, level)` (must run **before** `setupTooltips`, which removes SVG `<title>`s), `setupTooltips`, and the `dumpDebug` console+clipboard dump (`debug` button / `d` key). |
 | `panzoom.js` | `setupPanZoom()` — viewBox drag-to-pan, +/−/fit/fullscreen buttons, the SLOC/HK metric-size row, the drill-back button, and the **zoom-lod** (−/+) buttons that call `setZoom`. |
 
 ### Node modal / popup
@@ -126,29 +126,53 @@ top-to-bottom). The viewer was split out of three former monoliths (`diagram.js`
 
 | File | Purpose |
 |------|---------|
-| `index.html` | The shell: one `<header>` row (brand, title, two snapshot controls + a toggle), the single Files `.view` with `.frame-wrap` (svg frame, drill breadcrumb, **zoom-lod** control top-left, zoom/size controls, kbd legend), and the collapsible summary. |
+| `index.html` | The shell: one `<header>` row (brand, title, two snapshot controls + a toggle), the single Files `.view` with `.frame-wrap` (svg frame, drill breadcrumb, **dig** control (`.dig-lod`) top-left, zoom/size controls, kbd legend, `debug` button), and the collapsible summary. |
 | `base.css` · `map.css` · `modal.css` · `tables.css` · `export.css` · `snap.css` · `map-svg.css` | The former `index.css` split by concern; concatenated in `lib.rs` **in source order** into one inlined `<style>` (preserving the cascade, no extra requests → keeps the offline guarantee). `map-svg.css` holds the graphviz node/edge state rules: visibility toggles, **cycle red stroke** (side-gated), selection, hover, status bar and edge highlight. |
 
-## Relative zoom (level-of-detail)
+## Relative dig (level-of-detail)
 
-Two orthogonal navigation axes over the single Files graph:
+Two orthogonal navigation axes over the single Files graph (the control is the
+−/+ **dig** buttons top-left of the map, calling `setDig`):
 
-- **`window.zoom`** — a relative LOD on the **overview**. `0` = the default crate
-  tier; `+1` descends one directory level (crate/folder groups); `-1` ascends to
-  the file's top-level workspace folder (so everything under `crates/` merges).
-  The −/+ **zoom-lod** buttons (top-left of the map) call `setZoom`. The whole
-  map re-groups; the user is not focused on one crate.
+- **`window.dig`** — a relative LOD on the **overview**:
+  - `0` — every crate is its own node (the default; reproduces the legacy crate
+    grouping byte-for-byte). Crate group boxes are pink; any non-crate grouping
+    is a neutral white.
+  - `+N` — **dig in**: descend N directory levels inside crates. Folder groups are
+    labelled with the path under the crate, leading slash + absorbed source dir,
+    e.g. `/src`, `/src/services` (`groupLabel`).
+  - `-N` — **dig out**: progressively collapse the **deepest** crates into their
+    parent folder, one depth level per step (`crateDirs` + `maxCrateDepth`), until
+    a single root group remains. The "−" button disables at that point.
 - **focus (`window.drillGroup`)** — **clicking a group** drills into just that
-  group's files (the existing drill); clicking a leaf file opens the popup.
-  `window.drillZoom` records the zoom at drill time so the focused view filters by
-  the matching grouper.
+  group's files; clicking a leaf file opens the popup. `window.drillDig` records
+  the dig at drill time so the focused view filters by the matching grouper. In
+  the focused view, directory sub-cluster labels are crate-relative (`crateRelDir`
+  → `/src/services`); caller/dependency neighbour boxes drop the crate prefix when
+  every neighbour shares the drilled crate (`/services`), else keep the full key.
 
-The tier ladder lives in `grouping.js` and is derived entirely from file-id paths
-plus the `crate` grouping attribute (no extra backend data). `zoom = 0` reproduces
-the legacy crate grouping byte-for-byte. Both axes are carried in the URL
-(`zoom=` param) and restored on load / `popstate` via `applyViewState`.
+The tier ladder (`grouperForDig` / `groupKeyAtDig`) lives in `grouping.js`, derived
+entirely from file-id paths plus the `crate` grouping attribute — no extra backend
+data. Both axes are carried in the URL (`dig=` param) and restored on load /
+`popstate` via `applyViewState`.
 
-Not yet implemented: nested clusters at `zoom +1` (crate clusters wrapping folder
+**Node labels** carry one count after the name: a group box shows its member-node
+count `(N)` (what opens on drill-in); a file box shows `fan_in + fan_out` when
+non-zero. Box mode only — metric (SLOC/HK) circles show the metric value.
+
+**Layout density**: the map is laid out at natural size with packed spacing
+(`nodesep`/`ranksep` tiny, `height=0`/`width=0` boxes) and **no `ratio=fill` /
+`size`** — the SVG viewBox scales uniformly to the frame, so nodes stay large and
+inter-node gaps small instead of being stretched. Caller/dependency (`edge-in` /
+`edge-out`) edges are `constraint=false` so they draw without dragging the layout
+vertically.
+
+**Debug**: the `debug` button (and the `d` key) calls `window.dumpDebug`, which
+prints the view state, generated DOT, rendered node/edge geometry and node data to
+the console and copies the same text dump to the clipboard. `map-render.js` keeps
+the last DOT in `window._lastDOT`.
+
+Not yet implemented: nested clusters at `dig +1` (crate clusters wrapping folder
 nodes) and the diagonal in/out cluster placement — see `REFACTOR-split-plan.md`.
 
 ## Affected status

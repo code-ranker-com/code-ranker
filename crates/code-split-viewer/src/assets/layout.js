@@ -41,8 +41,7 @@ function fmtMetricShort(v) {
 }
 const metricFontSize = d => Math.max(6, Math.round(d * 26));
 
-// `makeGroupOf` / `grouperForZoom` now live in grouping.js (the grouping ladder),
-// so layout merely consumes them.
+// The grouping ladder (`grouperForDig`) lives in grouping.js; layout consumes it.
 
 function buildDOT(nodes, edges, level, viewport) {
   const sizeMode   = window.nodeSizeMode || null;
@@ -50,24 +49,23 @@ function buildDOT(nodes, edges, level, viewport) {
   const isMetric   = sizeMode === 'loc' || sizeMode === 'hk';
   // Overview granularity follows the relative zoom; a drilled (focus) view filters
   // by the zoom that was active when the user drilled in.
-  const activeZoom = drillGroup === null ? (window.zoom || 0) : (window.drillZoom ?? 0);
-  const gOf        = grouperForZoom(level, activeZoom);
+  const activeDig  = drillGroup === null ? (window.dig || 0) : (window.drillDig ?? 0);
+  const gOf        = grouperForDig(level, activeDig);
   const cycleOf    = window.CYCLES?.[level]?.nodeCycleStatus;
 
   let dot = 'digraph {\n';
   dot += '  rankdir=LR\n';
-  if (viewport && viewport.w > 0 && viewport.h > 0) {
-    const GV_IN = 72;
-    const sw = (viewport.w / GV_IN).toFixed(4);
-    const sh = (viewport.h / GV_IN).toFixed(4);
-    dot += `  size="${sw},${sh}"\n`;
-    dot += '  ratio=fill\n';
-  }
-  dot += '  graph [bgcolor="white" fontname="Helvetica" pad="0.5" nodesep="0.25" ranksep="1.0"]\n';
+  // No `ratio=fill` / `size`: let graphviz lay out at natural size with packed
+  // nodes (tiny nodesep/ranksep), then the SVG viewBox scales uniformly to the
+  // frame — so the gaps between nodes stay small instead of being stretched.
+  // Tighter rank/node spacing + roomier box padding so nodes occupy more of the
+  // frame relative to whitespace (edges route less prettily — an accepted trade
+  // for bigger, more legible nodes).
+  dot += '  graph [bgcolor="white" fontname="Helvetica" pad="0.1" nodesep="0.12" ranksep="0.6"]\n';
   if (isMetric) {
     dot += '  node  [shape=circle style=filled fixedsize=true width=0.3]\n\n';
   } else {
-    dot += '  node  [shape=box style=filled fontname="Helvetica" fontsize=11]\n\n';
+    dot += '  node  [shape=box style=filled fontname="Helvetica" fontsize=11 margin="0.044,0.022" height=0 width=0]\n\n';
   }
 
   // ── Group view: one node per group, deduped inter-group edges ─────────────────
@@ -84,14 +82,18 @@ function buildDOT(nodes, edges, level, viewport) {
     const baselineById = new Map((window.BASELINE?.graphs?.[level]?.nodes || []).map(n => [n.id, n]));
     const currentById  = new Map((window.CURRENT?.graphs?.[level]?.nodes  || []).map(n => [n.id, n]));
 
+    // Crate-tier groups (zoom 0) are pink; any other grouping (by folder) is a
+    // uniform neutral white, so the colour signals "these are crates".
+    const isCrateTier = activeDig === 0 && !!(levelUi(level).grouping?.key);
+    const groupFill   = isCrateTier ? '#ffd4d4' : '#ffffff';
     for (const [g, gNodes] of groupNodes) {
       // A group is red when any member sits in a dependency cycle (aggregated
       // per side); reuses the same cycle-status CSS as individual nodes.
       const gCyc = aggCycleStatus(gNodes.map(n => cycleOf?.get(n.id) || 'none'));
       const cyc  = `class="cycle-status-${gCyc}"`;
-      // When zoomed below the crate tier the key is a path (`crate/dir`); show
-      // only the leaf segment as the label to keep boxes compact.
-      const leaf = g.includes('/') ? g.slice(g.lastIndexOf('/') + 1) : g;
+      // Group label: crate name at dig 0, the `/src/services`-style folder path
+      // when digging in, the leaf segment when collapsing (see grouping.js).
+      const leaf = groupLabel(level, g, activeDig);
       if (isMetric) {
         const aggB = gNodes.reduce((s, n) => s + metricNodeVal(baselineById.get(n.id), sizeMode), 0);
         const aggC = gNodes.reduce((s, n) => s + metricNodeVal(currentById.get(n.id),  sizeMode), 0);
@@ -99,9 +101,11 @@ function buildDOT(nodes, edges, level, viewport) {
         const d    = metricGroupDiam(agg, sizeMode);
         const lbl  = agg > 0 ? fmtMetricShort(agg) : '';
         const fs   = metricFontSize(d);
-        dot += `  ${dotId(g)} [label=${dotId(lbl)} fontsize=${fs} fontcolor="#333" fillcolor="#ffd4d4" color="${N_COLOR}" width=${d} shape=circle style=filled fixedsize=true ${cyc}]\n`;
+        dot += `  ${dotId(g)} [label=${dotId(lbl)} fontsize=${fs} fontcolor="#333" fillcolor="${groupFill}" color="${N_COLOR}" width=${d} shape=circle style=filled fixedsize=true ${cyc}]\n`;
       } else {
-        dot += `  ${dotId(g)} [label=${dotId(leaf)} fillcolor="#ffd4d4" color="${N_COLOR}" shape=box style=filled fontname="Helvetica" fontsize=11 ${cyc}]\n`;
+        // Group box: name + the count of member nodes (what opens on drill-in).
+        const lbl = `${leaf} (${gNodes.length})`;
+        dot += `  ${dotId(g)} [label=${dotId(lbl)} fillcolor="${groupFill}" color="${N_COLOR}" shape=box style=filled fontname="Helvetica" fontsize=11 ${cyc}]\n`;
       }
     }
 
@@ -153,7 +157,10 @@ function buildDOT(nodes, edges, level, viewport) {
       const fs  = metricFontSize(d);
       return `label=${dotId(lbl)} fontsize=${fs} fontcolor="#333" fillcolor="${fill}" color="${col}" width=${d} ${cls}`;
     }
-    return `label=${dotId(n.name)} fillcolor="${fill}" color="${col}" ${cls}`;
+    // File box: name + total connections (fan_in + fan_out) when it has any.
+    const conns = Number(n.fan_in || 0) + Number(n.fan_out || 0);
+    const lbl   = conns > 0 ? `${n.name} (${conns})` : n.name;
+    return `label=${dotId(lbl)} fillcolor="${fill}" color="${col}" ${cls}`;
   };
 
   // ── Collect external neighbor groups (no 3rd-party) ───────────────────────────
@@ -183,6 +190,20 @@ function buildDOT(nodes, edges, level, viewport) {
   // Groups in both → remove from outGrpFiles (they appear left only)
   for (const g of inGrpFiles.keys()) outGrpFiles.delete(g);
 
+  // Neighbour (callers/dependencies) labels: when every neighbour lives in the
+  // SAME crate as the drilled group, drop the crate prefix and show just the
+  // folder ("/domain"); otherwise keep the full key so cross-crate neighbours
+  // stay distinguishable.
+  const crateOfKey  = k => { const i = k.indexOf('/'); return i >= 0 ? k.slice(0, i) : k; };
+  const drillCrate  = crateOfKey(drillGroup);
+  const neighbourKeys = [...inGrpFiles.keys(), ...outGrpFiles.keys()];
+  const singleCrate = neighbourKeys.every(k => crateOfKey(k) === drillCrate);
+  const neighborLabel = k => {
+    if (!singleCrate) return k;
+    const i = k.indexOf('/');
+    return i >= 0 ? '/' + k.slice(i + 1) : k;
+  };
+
   const IN_EDGE_COLOR  = '#88bb88';
   const OUT_EDGE_COLOR = '#ccaa77';
   const IN_FILL        = '#edf7ed';
@@ -190,32 +211,29 @@ function buildDOT(nodes, edges, level, viewport) {
 
   // Node style for external group boxes in the neighbor clusters
   // Always boxes regardless of metric mode — fixedsize/width from global node default must be reset.
-  const extNode = (g, borderColor, fillColor) =>
-    `[label=${dotId(g)} fillcolor="${fillColor}" color="${borderColor}" shape=box style=filled fixedsize=false fontname="Helvetica" fontsize=11]`;
+  const extNode = (label, borderColor, fillColor) =>
+    `[label=${dotId(label)} fillcolor="${fillColor}" color="${borderColor}" shape=box style=filled fixedsize=false fontname="Helvetica" fontsize=11]`;
   const inNodeId  = g => 'IN\x01' + g;
   const outNodeId = g => 'OUT\x01' + g;
 
   // Left cluster — callers of this group
   if (inGrpFiles.size > 0) {
     dot += `  subgraph cluster_in {\n`;
-    dot += `    label="callers" style=filled fillcolor="${IN_FILL}" color="#88bb88" fontcolor="#447744" fontname="Helvetica" fontsize=10\n`;
+    dot += `    label="callers" style=filled fillcolor="${IN_FILL}" color="#88bb88" fontcolor="#447744" fontname="Helvetica" fontsize=11\n`;
     for (const g of inGrpFiles.keys())
-      dot += `    ${dotId(inNodeId(g))} ${extNode(g, IN_EDGE_COLOR, IN_FILL)}\n`;
+      dot += `    ${dotId(inNodeId(g))} ${extNode(neighborLabel(g), IN_EDGE_COLOR, IN_FILL)}\n`;
     dot += '  }\n';
   }
 
-  // Sub-clusters by directory within the drilled group
-  const dirOf = n => {
-    const p = n.id.replace(/^\{[^}]+\}\//, '');
-    const i = p.lastIndexOf('/');
-    return i > 0 ? p.slice(0, i) : '_root';
-  };
+  // Sub-clusters by directory within the drilled group. Labels are relative to
+  // the crate dir with a leading slash (e.g. "/src", "/src/services").
+  const dirOf = n => crateRelDir(level, n);
   const subGroups = new Map();
   drillNodes.forEach(n => { const d = dirOf(n); (subGroups.get(d) || subGroups.set(d, []).get(d)).push(n); });
   let si = 0;
   for (const [label, ns] of subGroups) {
     dot += `  subgraph cluster_${si++} {\n`;
-    dot += `    label=${dotId(label)} color="#cccccc" fontcolor="#666666"\n`;
+    dot += `    label=${dotId(label)} color="#cccccc" fontcolor="#666666" fontname="Helvetica" fontsize=11\n`;
     for (const n of ns) dot += `    ${dotId(n.id)} [${nAttr(n)}]\n`;
     dot += '  }\n';
   }
@@ -223,9 +241,9 @@ function buildDOT(nodes, edges, level, viewport) {
   // Right cluster — dependencies of this group
   if (outGrpFiles.size > 0) {
     dot += `  subgraph cluster_out {\n`;
-    dot += `    label="dependencies" style=filled fillcolor="${OUT_FILL}" color="#ccaa77" fontcolor="#886633" fontname="Helvetica" fontsize=10\n`;
+    dot += `    label="dependencies" style=filled fillcolor="${OUT_FILL}" color="#ccaa77" fontcolor="#886633" fontname="Helvetica" fontsize=11\n`;
     for (const g of outGrpFiles.keys())
-      dot += `    ${dotId(outNodeId(g))} ${extNode(g, OUT_EDGE_COLOR, OUT_FILL)}\n`;
+      dot += `    ${dotId(outNodeId(g))} ${extNode(neighborLabel(g), OUT_EDGE_COLOR, OUT_FILL)}\n`;
     dot += '  }\n';
   }
 
@@ -256,18 +274,18 @@ function buildDOT(nodes, edges, level, viewport) {
   for (const [g, files] of inGrpFiles) {
     const src = dotId(inNodeId(g));
     for (const fid of files)
-      dot += `  ${src} -> ${dotId(fid)} [color="${IN_EDGE_COLOR}" style="solid" class="edge-in"]\n`;
+      dot += `  ${src} -> ${dotId(fid)} [color="${IN_EDGE_COLOR}" style="solid" constraint=false class="edge-in"]\n`;
     // If this group is also an outbound group (both roles), draw those edges too
     if (outGrpFiles.has(g)) {
       for (const fid of outGrpFiles.get(g))
-        dot += `  ${dotId(fid)} -> ${src} [color="${IN_EDGE_COLOR}" style="solid" class="edge-in"]\n`;
+        dot += `  ${dotId(fid)} -> ${src} [color="${IN_EDGE_COLOR}" style="solid" constraint=false class="edge-in"]\n`;
     }
   }
   // Our file → outbound group
   for (const [g, files] of outGrpFiles) {
     const tgt = dotId(outNodeId(g));
     for (const fid of files)
-      dot += `  ${dotId(fid)} -> ${tgt} [color="${OUT_EDGE_COLOR}" style="solid" class="edge-out"]\n`;
+      dot += `  ${dotId(fid)} -> ${tgt} [color="${OUT_EDGE_COLOR}" style="solid" constraint=false class="edge-out"]\n`;
   }
 
   dot += '}';

@@ -62,12 +62,13 @@ refactoring. Surfacing them first reduces the time to actionable insight.
 
 - [x] `p1` - **ID**: `cpt-code-split-fr-map-zoom-cycles`
 
-The map MUST support **semantic (level-of-detail) zoom** independent of pixel
-zoom: a relative level centred on the default grouping (crates), where the user
-can step coarser (group crates by their workspace folder) or finer (crate →
-folders within). Stepping re-groups the whole overview; **clicking a group**
-drills into just that group's files. The current level MUST be shown and the
-state MUST round-trip through the URL.
+The map MUST support **semantic level-of-detail navigation ("dig")** independent
+of pixel zoom: a relative level centred on the default grouping (crates, dig 0),
+where the user can **dig in** (`+N`, descend into folders within crates) or **dig
+out** (`-N`, progressively collapse the deepest crates into their parent folder
+until a single root group remains). Stepping re-groups the whole overview;
+**clicking a group** drills into just that group's files. The current level MUST
+be shown and the state MUST round-trip through the URL (`dig=`).
 
 Cycle membership MUST be **visible at every level**: file nodes and edges in a
 dependency cycle are drawn red, and a collapsed group (crate/folder) is marked

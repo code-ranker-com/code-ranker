@@ -1,27 +1,28 @@
-// grouping.js — the grouping ladder for the map's relative zoom (level-of-detail).
+// grouping.js — the grouping ladder for the map's relative "dig" (level-of-detail).
 //
 // Two orthogonal navigation axes (see docs/code-split-viewer/REFACTOR-split-plan.md):
-//   • window.zoom  — relative LOD on the OVERVIEW. 0 = the default crate tier;
-//                    +1 descends one directory level (crate/folder groups),
-//                    -1 ascends to the crate's parent folder (workspace subfolders).
+//   • window.dig  — relative LOD on the OVERVIEW.
+//       dig  0  → every crate is its own node (the default).
+//       dig +N  → dig IN: descend N directory levels inside crates (folder groups).
+//       dig -N  → dig OUT: progressively collapse the DEEPEST crates into their
+//                 parent folder, one depth level per step, until a single root
+//                 group remains.
 //   • focus (window.drillGroup) — click a group to drill into just its files.
 //
-// For Rust (group=crate, node=file) the tier sequence is, coarse → fine:
-//   …workspace-subfolders… ▸ crate ▸ …dirs under the crate… ▸ file
-// Every tier is DERIVED from the file id path plus the crate grouping attribute,
-// so no extra backend data is needed. zoom 0 reproduces the legacy crate grouping
-// exactly (so the default view is byte-for-byte unchanged).
+// For Rust (group=crate, node=file) every tier is DERIVED from file-id paths plus
+// the crate grouping attribute — no extra backend data. dig 0 reproduces the
+// legacy per-crate grouping.
 
-const ZOOM_MIN = -2, ZOOM_MAX = 4;
-function clampZoom(z) { return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, (z | 0))); }
-window.clampZoom = clampZoom;
+const DIG_MIN = -12, DIG_MAX = 6;
+function clampDig(z) { return Math.max(DIG_MIN, Math.min(DIG_MAX, (z | 0))); }
+window.clampDig = clampDig;
 
 // Strip the leading `{token}/` root marker from an id/path.
 function relPathOf(id) { return String(id || '').replace(/^\{[^}]+\}\//, ''); }
 
 // Per-level memoised crate-root directories: the common directory prefix of all
-// files sharing a crate value. Locating where a crate sits in the tree lets zoom
-// ascend above it (workspace subfolders) or descend below it (dirs under it).
+// files sharing a crate value (used by the dig-IN branch to find dirs under a
+// crate).
 const _crateRootCache = new Map();   // level -> Map<crateValue, string[] dirSegs>
 function crateRoots(level) {
   if (_crateRootCache.has(level)) return _crateRootCache.get(level);
@@ -51,56 +52,116 @@ function crateRoots(level) {
   _crateRootCache.set(level, roots);
   return roots;
 }
-// Snapshot swaps change the node set → drop the memoised roots.
-function clearGroupingCache() { _crateRootCache.clear(); }
+
+// Per-level crate DIRECTORY paths (the crate-root with trailing source dirs like
+// `src`/`tests` trimmed, so depth reflects where the crate sits in the workspace
+// tree, not its internal layout) + the deepest such depth. Drives the dig-OUT
+// progressive collapse.
+const _crateDirsCache = new Map();   // level -> { dirOf: Map<crate,string[]>, maxDepth }
+const SRC_DIRS = new Set(['src', 'tests', 'benches', 'lib', 'bin']);
+function crateDirs(level) {
+  if (_crateDirsCache.has(level)) return _crateDirsCache.get(level);
+  const dirOf = new Map();
+  let maxDepth = 0;
+  for (const [crate, segs0] of crateRoots(level)) {
+    const segs = segs0.slice();
+    while (segs.length && SRC_DIRS.has(segs[segs.length - 1])) segs.pop();
+    dirOf.set(crate, segs);
+    if (segs.length > maxDepth) maxDepth = segs.length;
+  }
+  const res = { dirOf, maxDepth };
+  _crateDirsCache.set(level, res);
+  return res;
+}
+// The dig-OUT depth at which the overview collapses to a single root group.
+function maxCrateDepth(level) { return crateDirs(level).maxDepth; }
+window.maxCrateDepth = maxCrateDepth;
+
+// Snapshot swaps change the node set → drop the memoised caches.
+function clearGroupingCache() { _crateRootCache.clear(); _crateDirsCache.clear(); }
 window.clearGroupingCache = clearGroupingCache;
 
-// Group key for a node at a given zoom. zoom 0 → the crate value (matches the
-// legacy makeGroupOf). zoom>0 appends directory segments under the crate; zoom<0
-// collapses crates into their ancestor (workspace) folders.
-function groupKeyAtZoom(level, n, zoom) {
+// Group key for a node at a given dig level. dig 0 → the crate value (matches the
+// legacy grouping); dig>0 appends directory segments under the crate; dig<0
+// collapses the deepest crates into their ancestor folders, deepest first.
+function groupKeyAtDig(level, n, dig) {
   if (isExternalNode(n, level))
     return (nodeKindSpec(level, n.kind).plural || 'external').toLowerCase();
 
-  const z    = zoom | 0;
-  const gk   = levelUi(level).grouping?.key;
+  const d     = dig | 0;
+  const gk    = levelUi(level).grouping?.key;
   const crate = gk ? n[gk] : null;
   const dirs  = relPathOf(n.id).split('/').slice(0, -1);
 
-  // No crate attribute: fall back to plain directory tiers (zoom 0 = full dir,
-  // matching the legacy dirGrouper).
+  // No crate attribute: plain directory tiers (dig 0 = full dir).
   if (crate == null || crate === '') {
-    const depth = dirs.length + z;
+    const depth = dirs.length + d;
     const keep  = dirs.slice(0, Math.max(0, depth));
     return keep.length ? keep.join('/') : '_root';
   }
 
-  if (z >= 0) {
+  if (d >= 0) {
+    // Dig IN: the crate, then folders under it.
     const root       = crateRoots(level).get(String(crate)) || [];
     const underCrate = dirs.slice(root.length);
-    return [String(crate), ...underCrate.slice(0, z)].join('/');
+    return [String(crate), ...underCrate.slice(0, d)].join('/');
   }
-  // z < 0: ascend ABOVE the crate. -1 groups crates by their top-level workspace
-  // folder (so everything under `crates/` merges into one "crates" group);
-  // anything coarser collapses to a single root group. Top-level-dir is robust
-  // from file paths alone — unlike the exact crate-root, which is fuzzy when all
-  // of a crate's files share a deeper dir (e.g. `src/`).
-  if (z === -1) return dirs[0] || '_root';
-  return '_root';
+
+  // Dig OUT (d < 0): collapse the deepest crates into their parent folder first.
+  // A crate at directory depth D keeps its full path while the cap (maxDepth + d)
+  // is ≥ D, and is truncated to `cap` segments once the cap drops below D — so
+  // the deepest branch merges at dig -1, the next at dig -2, … down to one root.
+  const { dirOf, maxDepth } = crateDirs(level);
+  const path = dirOf.get(String(crate)) || [];
+  const cap  = maxDepth + d;
+  const keep = path.slice(0, Math.max(0, cap));
+  return keep.length ? keep.join('/') : '_root';
 }
 
-// A `groupOf(node)` closure for a given zoom. grouperForZoom(level, 0) reproduces
-// makeGroupOf's crate/dir grouping.
-function grouperForZoom(level, zoom) {
-  return n => groupKeyAtZoom(level, n, zoom || 0);
+// A `groupOf(node)` closure for a given dig level. grouperForDig(level, 0)
+// reproduces the legacy per-crate grouping.
+function grouperForDig(level, dig) {
+  return n => groupKeyAtDig(level, n, dig || 0);
 }
-window.grouperForZoom = grouperForZoom;
+window.grouperForDig = grouperForDig;
 
-// Legacy entry point (zoom 0). Kept so existing callers keep working; moved here
-// from layout.js because grouping is now its own concern.
-function makeGroupOf(level) {
-  return grouperForZoom(level, 0);
+// Display label for a group node's box:
+//  • dig 0 (crate tier): the crate value.
+//  • dig IN (dig > 0): the folder path UNDER THE CRATE with a leading slash,
+//    including the common source prefix absorbed into the crate root — so a group
+//    keyed `crate/services` reads `/src/services`, not just `services`.
+//  • otherwise (dig < 0 collapse, or non-crate levels): the leaf path segment.
+function groupLabel(level, key, dig) {
+  const d = dig | 0;
+  if (d > 0) {
+    const cut     = key.indexOf('/');
+    const crate   = cut >= 0 ? key.slice(0, cut) : key;
+    const under   = cut >= 0 ? key.slice(cut + 1).split('/') : [];
+    const root    = crateRoots(level).get(crate) || [];
+    const crateD  = crateDirs(level).dirOf.get(crate) || [];
+    const srcTail = root.slice(crateD.length);   // e.g. ['src'] absorbed into the crate root
+    const full    = [...srcTail, ...under];       // crate-root files → just ['src'] → "/src"
+    return full.length ? '/' + full.join('/') : key;
+  }
+  return key.includes('/') ? key.slice(key.lastIndexOf('/') + 1) : key;
 }
+window.groupLabel = groupLabel;
+
+// A node's directory RELATIVE TO ITS CRATE directory, with a leading slash
+// (e.g. "/src/services"); "/" for a file sitting directly in the crate dir. Used
+// for the drilled-view directory sub-cluster labels so they read `/src` rather
+// than the full `crates/<crate>/src` path. Falls back to the full relativized dir
+// when the node has no crate.
+function crateRelDir(level, n) {
+  const gk    = levelUi(level).grouping?.key;
+  const segs  = relPathOf(n.id).split('/').slice(0, -1);   // dir segments
+  const crate = gk ? n[gk] : null;
+  if (crate == null || crate === '') return segs.length ? '/' + segs.join('/') : '/';
+  const cdir = crateDirs(level).dirOf.get(String(crate)) || [];
+  const rel  = segs.slice(cdir.length);
+  return rel.length ? '/' + rel.join('/') : '/';
+}
+window.crateRelDir = crateRelDir;
 
 // Aggregate the per-node cycle statuses of a group's members into one status for
 // the group node (used to red-stroke groups that contain a dependency cycle).

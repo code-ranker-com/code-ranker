@@ -159,16 +159,16 @@ function recomputeAll() {
   // Reset drill + zoom state and rendered flags for all views. The node set
   // changed, so drop the memoised crate-root grouping cache.
   window.drillGroup = null;
-  window.zoom       = 0;
-  window.drillZoom  = 0;
+  window.dig       = 0;
+  window.drillDig  = 0;
   window.clearGroupingCache?.();
   document.querySelectorAll('.drill-breadcrumb').forEach(bc => { bc.style.display = 'none'; });
-  document.querySelectorAll('.zoom-lod').forEach(el => el.style.removeProperty('display'));
+  document.querySelectorAll('.dig-lod').forEach(el => el.style.removeProperty('display'));
   document.querySelectorAll('.svg-frame').forEach(f => { delete f.dataset.bigConfirmed; });
   document.querySelectorAll('.view').forEach(sec => { sec.dataset.rendered = 'false'; });
 
   updateHeader();
-  window.updateZoomLabel?.();
+  window.updateDigLabel?.();
 
   // Re-render active view
   const active = document.querySelector('.view.active');
@@ -233,10 +233,10 @@ function renderView(section, opts = {}) {
 function applyViewState(st, { rerender = false } = {}) {
   const grp  = st.group || null;
   const mode = st.mode  || null;
-  const zoom = st.zoom != null ? (Number(st.zoom) | 0) : 0;
+  const dig = st.dig != null ? (Number(st.dig) | 0) : 0;
   let changed = false;
-  if ((window.zoom || 0)  !== zoom) { window.zoom         = zoom; changed = true; }
-  if (window.drillGroup   !== grp)  { window.drillGroup   = grp;  window.drillZoom = grp ? zoom : 0; changed = true; }
+  if ((window.dig || 0)  !== dig) { window.dig          = dig; changed = true; }
+  if (window.drillGroup   !== grp)  { window.drillGroup   = grp;  window.drillDig = grp ? dig : 0; changed = true; }
   if (window.nodeSizeMode !== mode) { window.nodeSizeMode = mode; changed = true; }
   // Sync breadcrumb (focus) and the relative-zoom control (overview only).
   const lvl = st.level ?? currentLevel();
@@ -249,8 +249,8 @@ function applyViewState(st, { rerender = false } = {}) {
       bc.style.display = 'none';
     }
   });
-  document.querySelectorAll('.zoom-lod').forEach(el => { el.style.display = grp ? 'none' : ''; });
-  window.updateZoomLabel?.(lvl);
+  document.querySelectorAll('.dig-lod').forEach(el => { el.style.display = grp ? 'none' : ''; });
+  window.updateDigLabel?.(lvl);
   // Sync metric buttons
   document.querySelectorAll('.size-row[data-row="metric"] .size-mode-btn').forEach(b => {
     const bMode = b.dataset.size === 'dot' ? null : b.dataset.size;

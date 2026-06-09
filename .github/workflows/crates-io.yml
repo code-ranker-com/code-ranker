@@ -36,7 +36,7 @@ jobs:
             echo "==> publishing $c"
             attempt=0
             until cargo publish -p "$c" --allow-dirty 2>&1 | tee /tmp/pub-$c.log | grep -qE "Published"; do
-              if grep -q "already exists" /tmp/pub-$c.log; then
+              if grep -qE "already (exists|uploaded)" /tmp/pub-$c.log; then
                 echo "    skip: $c version already on crates.io"
                 break
               fi

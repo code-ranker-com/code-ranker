@@ -156,11 +156,13 @@
 .node-table td.nt-empty { text-align: center; color: #aaa; font-style: italic; padding: 16px; }
 
 /* ── Diff summary popup (full-screen overlay) ───────────────────────────────── */
-.header-stats-btn { font: inherit; font-size: 13px; font-weight: 600; color: #fff;
-                    white-space: nowrap; background: #1abc9c;
-                    border: 0; border-radius: 4px; padding: 6px 16px; cursor: pointer;
+/* Matches the snapshot `toggle` control (.meta-mode) — same grey-blue chrome,
+   deliberately not the accent green. */
+.header-stats-btn { font: inherit; font-size: 13px; color: #ecf0f1;
+                    white-space: nowrap; background: #455a73;
+                    border: 0; border-radius: 4px; padding: 6px 14px; cursor: pointer;
                     transition: background .15s; }
-.header-stats-btn:hover { background: #16a085; }
+.header-stats-btn:hover { background: #5d7593; }
 
 /* Full-screen WHITE fill (the page header stays visible above it — its top offset
    is set in JS). The popup itself is content-width and vertically centred. */

@@ -342,11 +342,17 @@ function downloadFile(name, text, mime) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-// Base file name: `<target>-summary-<stat>` (e.g. `code-ranker-summary-avg`).
+// Name the download after the HTML report the user is viewing, swapping the
+// extension for `-report.<ext>`: `cyberfabric-core-diff.html` →
+// `cyberfabric-core-diff-report.json`. Falls back to the analysis target when
+// the page has no meaningful file name (served at `/`, `index.html`, blob:…).
 function summaryFileBase() {
+  const file = decodeURIComponent((location.pathname || '').split('/').pop() || '');
+  const stem = file.replace(/\.html?$/i, '').trim();
+  if (stem && stem.toLowerCase() !== 'index') return `${stem}-report`;
   const m = window._summaryModel || {};
   const slug = String(m.target || 'summary').replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'summary';
-  return `${slug}-summary-${m.stat || 'avg'}`;
+  return `${slug}-report`;
 }
 
 // The export TEXT builders (shared by download + copy-to-clipboard).
@@ -389,14 +395,27 @@ function summaryMarkdownText() {
 function exportSummaryJSON()     { const t = summaryJSONText();     if (t) downloadFile(`${summaryFileBase()}.json`, t, 'application/json'); }
 function exportSummaryMarkdown() { const t = summaryMarkdownText(); if (t) downloadFile(`${summaryFileBase()}.md`,   t, 'text/markdown'); }
 
-// Copy to the clipboard with a brief "copied ✓" confirmation on the button.
+// Brief checkmark shown on an icon button right after a successful copy.
+const SUMMARY_CHECK_SVG =
+  '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ' +
+  'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<path d="m5 13 4 4L19 7"/></svg>';
+
+// Copy to the clipboard, briefly swapping the button's icon for a ✓ (the icon
+// buttons have no text to swap). The `_copyReset` guard keeps a rapid second
+// click from capturing the checkmark as the "original" markup.
 function copySummaryText(text, btn) {
   if (!text) return;
   navigator.clipboard?.writeText(text).then(() => {
-    if (!btn) return;
-    const prev = btn.textContent;
-    btn.textContent = 'copied ✓';
-    setTimeout(() => { btn.textContent = prev; }, 1200);
+    if (!btn || btn._copyReset) return;
+    const prev = btn.innerHTML;
+    btn.innerHTML = SUMMARY_CHECK_SVG;
+    btn.classList.add('copied');
+    btn._copyReset = setTimeout(() => {
+      btn.innerHTML = prev;
+      btn.classList.remove('copied');
+      btn._copyReset = null;
+    }, 1200);
   });
 }
 window.exportSummaryJSON = exportSummaryJSON;

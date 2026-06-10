@@ -73,6 +73,18 @@
   <div id="summary-popup">
     <div id="summary-header">
       <span id="summary-title">Diff summary</span>
+      <span class="summary-exports">
+        <span class="summary-export-grp">
+          <span class="summary-fl">json</span>
+          <button class="summary-ibtn" id="summary-dl-json" type="button" title="Download JSON" aria-label="Download JSON"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg></button>
+          <button class="summary-ibtn" id="summary-copy-json" type="button" title="Copy JSON" aria-label="Copy JSON"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+        </span>
+        <span class="summary-export-grp">
+          <span class="summary-fl">markdown</span>
+          <button class="summary-ibtn" id="summary-dl-md" type="button" title="Download Markdown" aria-label="Download Markdown"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg></button>
+          <button class="summary-ibtn" id="summary-copy-md" type="button" title="Copy Markdown" aria-label="Copy Markdown"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+        </span>
+      </span>
       <button id="summary-close" type="button" title="Close">✕</button>
     </div>
     <div id="summary-body">
@@ -82,15 +94,6 @@
           <tbody id="summary-tbody"></tbody>
         </table>
       </div>
-    </div>
-    <div id="summary-footer">
-      <span class="summary-fl">download:</span>
-      <button class="summary-fbtn" id="summary-dl-json" type="button">json</button>
-      <button class="summary-fbtn" id="summary-dl-md"   type="button">md</button>
-      <span class="summary-footer-spacer"></span>
-      <span class="summary-fl">copy:</span>
-      <button class="summary-fbtn" id="summary-copy-json" type="button">json</button>
-      <button class="summary-fbtn" id="summary-copy-md"   type="button">md</button>
     </div>
   </div>
 </div>

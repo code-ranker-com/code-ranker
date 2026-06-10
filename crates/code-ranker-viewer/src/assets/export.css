@@ -179,21 +179,23 @@
                   border-bottom: 2px solid #1abc9c; font-size: 1.4rem; font-weight: 700;
                   color: #2c3e50; }
 #summary-title { order: 0; }
-#summary-close { order: 4; margin-left: auto; background: none; border: none;
+/* Export controls in the header: small grey-blue icon buttons grouped per
+   format (download + copy), pushed right next to the close button. The header
+   sets a large bold font for the title — reset it here for the controls. */
+.summary-exports { margin-left: auto; display: flex; align-items: center; gap: 18px;
+                   font-size: 13px; font-weight: 400; }
+.summary-export-grp { display: flex; align-items: center; gap: 5px; }
+.summary-fl { color: #5c7a96; font-weight: 600; margin-right: 3px; }
+.summary-ibtn { display: inline-flex; align-items: center; justify-content: center;
+                width: 30px; height: 28px; padding: 0; color: #2c3e50; background: #eef2f6;
+                border: 1px solid #c8d4e0; border-radius: 4px; cursor: pointer;
+                transition: background .15s, color .15s, border-color .15s; }
+.summary-ibtn:hover { background: #dfe7ef; }
+.summary-ibtn.copied { color: #1abc9c; border-color: #1abc9c; background: #eafaf6; }
+#summary-close { background: none; border: none;
                  font-size: 22px; color: #aaa; cursor: pointer; line-height: 1; padding: 0; }
 #summary-close:hover { color: #333; }
 #summary-body { flex: 1; overflow: auto; padding: 16px 28px 28px; }
-
-/* Footer: download links on the left, copy buttons on the right. */
-#summary-footer { flex-shrink: 0; display: flex; align-items: center; gap: 10px;
-                  padding: 12px 28px; border-top: 1px solid #e3e9ef; background: #fafbfc;
-                  font-size: 13px; color: #5c7a96; }
-.summary-footer-spacer { flex: 1; }
-.summary-fl { font-weight: 600; color: #5c7a96; }
-.summary-fbtn { font: inherit; font-size: 12px; font-weight: 600; color: #2c3e50;
-                background: #eef2f6; border: 1px solid #c8d4e0; border-radius: 4px;
-                padding: 5px 14px; cursor: pointer; transition: background .15s; }
-.summary-fbtn:hover { background: #dfe7ef; }
 
 /* Per-stat radio control — rendered as a full-width divider row in the table,
    between the "sum always" counts and the metric sections it drives. */

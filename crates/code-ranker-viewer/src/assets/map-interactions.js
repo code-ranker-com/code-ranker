@@ -532,6 +532,10 @@ function setupTooltips(svgFrame, level) {
   const drillGroup = window.drillGroup || null;
   const section    = svgFrame.closest('.view');
   const gNodeMap   = new Map();
+  // Maps a Details aggregate row's highlight key (`group:<crate>` / `folder:<dir>`)
+  // to its on-map SVG element, so hovering/selecting one lights up the other.
+  const gAggMap    = new Map();
+  const aggRow = key => section?.querySelector(`tr[data-agg-key="${(window.CSS?.escape ? CSS.escape(key) : key)}"]`);
 
   const sb = svgFrame._statusBar;
   const showStatus = text => { if (sb) { sb.textContent = text; sb.hidden = false; } };
@@ -632,15 +636,24 @@ function setupTooltips(svgFrame, level) {
       g.dataset.groupId    = groupId;
       g.dataset.groupStats = JSON.stringify(stats);
 
+      // Sync with the Details table's group (crate) aggregate row, when grouping by
+      // the crate tier (dig 0) — its row key is `group:<crate>`.
+      const aggKey = (window.dig || 0) === 0 ? 'group:' + groupId : null;
+      if (aggKey) {
+        gAggMap.set(aggKey, g);
+        if (section?.querySelector(`tr[data-agg-key="${(window.CSS?.escape ? CSS.escape(aggKey) : aggKey)}"].row-selected`))
+          g.classList.add('node-selected');
+      }
+
       g.addEventListener('click', e => {
         e.stopPropagation();
         drillIntoGroup(groupId, level);
       });
       wireNodeHover(g,
-        () => showStatus(statusLineForGroup(stats)),
-        e => { if (!e.relatedTarget?.closest?.('g.cluster')) hideStatus(); });
+        () => { if (aggKey) aggRow(aggKey)?.classList.add('row-hl'); showStatus(statusLineForGroup(stats)); },
+        e => { if (aggKey) aggRow(aggKey)?.classList.remove('row-hl'); if (!e.relatedTarget?.closest?.('g.cluster')) hideStatus(); });
     });
   }
 
-  if (section) section._gNodeMap = gNodeMap;
+  if (section) { section._gNodeMap = gNodeMap; section._gAggMap = gAggMap; }
 }

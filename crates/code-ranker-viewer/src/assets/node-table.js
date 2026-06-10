@@ -58,10 +58,54 @@ function setupNodeTable(section, level) {
   let cols = buildCols();
 
   function nodeVal(n, id) {
-    if (id === 'name') return n.id.replace(/^\{[^}]+\}\//, '') || n.id;
+    if (id === 'name') return n._cat ? (n.name ?? n.id) : (n.id.replace(/^\{[^}]+\}\//, '') || n.id);
     if (id === 'kind')  return n.kind  ?? '';
     if (id === 'cycle') return n.cycle ?? null;
     return nodeAttr(n, id);
+  }
+
+  // Folder / group (crate) aggregate rows: one synthetic node per directory and
+  // per grouping-key value, with each numeric column SUMMED over its member files.
+  // `_cat` marks the row category ('folder' / 'group'); files are left untagged.
+  // `kind` carries a distinct label so the Kind column and the filters tell them
+  // apart; `_sample`/`_group` drive the drill-on-click.
+  const groupKey = () => levelUi(level).grouping?.key || null;
+  function buildAggregates(files) {
+    const numCols = cols.filter(c => c.isNum).map(c => c.id);
+    const cyc = window.CYCLES?.[level]?.nodeCycleStatus;   // id → cycle status (cycle members only)
+    const mk = (id, label, kind, cat, members, extra) => {
+      const n = { id, name: label, kind, _cat: cat, _count: members.length, ...extra };
+      for (const key of numCols) {
+        let sum = 0, any = false;
+        for (const f of members) {
+          const v = nodeAttr(f, key);
+          if (typeof v === 'number' && isFinite(v)) { sum += v; any = true; }
+        }
+        n[key] = any ? sum : null;
+      }
+      // Cycle column = how many member files sit in a dependency cycle (empty at 0).
+      let inCycle = 0;
+      if (cyc) for (const f of members) { const s = cyc.get(f.id); if (s && s !== 'none') inCycle++; }
+      n.cycle = inCycle > 0 ? inCycle : null;
+      return n;
+    };
+    const byFolder = new Map();
+    for (const f of files) { const d = nodeFullDir(f); (byFolder.get(d) || byFolder.set(d, []).get(d)).push(f); }
+    const folders = [...byFolder].map(([dir, ms]) => mk(`folder${dir}`, dir, 'folder', 'folder', ms, { _sample: ms[0] }));
+
+    let groups = [];
+    const gk = groupKey();
+    if (gk) {
+      const byGroup = new Map();
+      for (const f of files) {
+        const g = nodeAttr(f, gk);
+        if (g == null || g === '') continue;
+        const key = String(g);
+        (byGroup.get(key) || byGroup.set(key, []).get(key)).push(f);
+      }
+      groups = [...byGroup].map(([g, ms]) => mk(`group${g}`, g, gk, 'group', ms, { _group: g }));
+    }
+    return { folders, groups };
   }
 
   function fmtVal(v, id) {
@@ -102,6 +146,27 @@ function setupNodeTable(section, level) {
   searchInput.placeholder = 'Search…';
   searchInput.className = 'nt-search-input';
   searchInput.addEventListener('click', e => e.stopPropagation());
+  // Kind filters (files / folders / <groups>) — shown next to search, all on by
+  // default. The groups box is labelled by the grouping key (e.g. "crates"); it is
+  // omitted when the level has no grouping.
+  const kindFilter = { file: true, folder: false, group: true };
+  const filterWrap = document.createElement('span');
+  filterWrap.className = 'nt-kind-filters';
+  filterWrap.addEventListener('click', e => e.stopPropagation());
+  const gk0 = levelUi(level).grouping?.key;
+  const filterDefs = [['file', 'files'], ['folder', 'folders']];
+  if (gk0) filterDefs.push(['group', `${gk0}s`]);
+  for (const [cat, label] of filterDefs) {
+    const lab = document.createElement('label');
+    lab.className = 'nt-kind-opt';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = kindFilter[cat];
+    cb.dataset.cat = cat;
+    cb.addEventListener('change', () => { kindFilter[cat] = cb.checked; renderRows(); });
+    lab.append(cb, document.createTextNode(label));
+    filterWrap.appendChild(lab);
+  }
   // Prompt Generator — moved here from the page header; sits right of the node count.
   const promptBtn = document.createElement('button');
   promptBtn.id = 'nav-prompt-btn';
@@ -109,7 +174,7 @@ function setupNodeTable(section, level) {
   promptBtn.innerHTML = 'Prompt Generator <span class="nav-ai-letters">AI</span>' +
                         '<span class="nav-warn-count" id="nav-warn-count"></span>';
   promptBtn.addEventListener('click', e => { e.stopPropagation(); openExportPopup(level); });
-  hdr.append(hdrTitle, hdrBadge, promptBtn, searchInput);
+  hdr.append(hdrTitle, hdrBadge, promptBtn, searchInput, filterWrap);
 
   const body = document.createElement('div');
   body.className = 'node-table-body';
@@ -210,9 +275,17 @@ function setupNodeTable(section, level) {
 
   // ── Visibility filter ─────────────────────────────────────────────────────
   function getVisible() {
-    // Show every non-external node of the active snapshot. Baseline/Current picks
-    // which snapshot; there is no per-status chip filtering anymore.
-    return activeGraph(level).nodes.filter(n => !isExternalNode(n, level));
+    // Files = every non-external node of the active snapshot (Baseline/Current
+    // picks which). Folders / groups are synthetic aggregate rows. The kind-filter
+    // checkboxes decide which categories are listed.
+    const files = activeGraph(level).nodes.filter(n => !isExternalNode(n, level));
+    const out = [];
+    const needAgg = kindFilter.folder || kindFilter.group;
+    const agg = needAgg ? buildAggregates(files) : { folders: [], groups: [] };
+    if (kindFilter.file)   out.push(...files);
+    if (kindFilter.folder) out.push(...agg.folders);
+    if (kindFilter.group)  out.push(...agg.groups);
+    return out;
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -248,59 +321,100 @@ function setupNodeTable(section, level) {
       return;
     }
     sorted.forEach(n => {
+      const agg = !!n._cat;   // folder / group aggregate row (vs a real file)
+      // Shared highlight key with the SVG (group box → `group:<crate>`, folder →
+      // `folder:<dir>`); lets a row and its map element light up together.
+      const aggKey = agg ? (n._cat === 'group' ? 'group:' + n._group : 'folder:' + n.name) : null;
       const tr = document.createElement('tr');
-      tr.className = `nrow-${n.status}`;
       tr.style.cursor = 'pointer';
-      tr.dataset.nodeId = n.id;
-      if (selectedIds.has(n.id)) tr.classList.add('row-selected');
-      tr.addEventListener('mouseenter', () => {
-        tr.classList.add('row-hl');
-        section._gNodeMap?.get(n.id)?.classList.add('node-hl');
-      });
-      tr.addEventListener('mouseleave', () => {
-        tr.classList.remove('row-hl');
-        section._gNodeMap?.get(n.id)?.classList.remove('node-hl');
-      });
-      tr.addEventListener('click', () => {
-        // Route through openModalForNode so the modal show / header flyout /
-        // open-node tracking all live in one place.
-        if (window.openModalForNode?.(n.id, level)) window.navPush(level, n.id);
-      });
+      if (agg) {
+        tr.className = `nt-agg nt-agg-${n._cat}`;
+        tr.dataset.aggKey = aggKey;
+        if (selectedIds.has(n.id)) tr.classList.add('row-selected');
+        tr.addEventListener('mouseenter', () => {
+          tr.classList.add('row-hl');
+          section._gAggMap?.get(aggKey)?.classList.add('node-hl');
+        });
+        tr.addEventListener('mouseleave', () => {
+          tr.classList.remove('row-hl');
+          section._gAggMap?.get(aggKey)?.classList.remove('node-hl');
+        });
+        // Click drills into the folder/group on the map (like clicking its SVG box).
+        tr.addEventListener('click', () => {
+          if (n._cat === 'group') window.drillIntoGroup?.(n._group, level, 0);
+          else if (n._sample && window.focusFolderTarget) {
+            const t = window.focusFolderTarget(level, n._sample);
+            window.drillIntoGroup?.(t.key, level, t.dig);
+          }
+        });
+      } else {
+        tr.className = `nrow-${n.status}`;
+        tr.dataset.nodeId = n.id;
+        if (selectedIds.has(n.id)) tr.classList.add('row-selected');
+        tr.addEventListener('mouseenter', () => {
+          tr.classList.add('row-hl');
+          section._gNodeMap?.get(n.id)?.classList.add('node-hl');
+        });
+        tr.addEventListener('mouseleave', () => {
+          tr.classList.remove('row-hl');
+          section._gNodeMap?.get(n.id)?.classList.remove('node-hl');
+        });
+        tr.addEventListener('click', () => {
+          // Route through openModalForNode so the modal show / header flyout /
+          // open-node tracking all live in one place.
+          if (window.openModalForNode?.(n.id, level)) window.navPush(level, n.id);
+        });
+      }
 
       const selTd = document.createElement('td');
       selTd.className = 'nt-sel-td';
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.className = 'nt-cb';
-      cb.checked = selectedIds.has(n.id);
-      selTd.appendChild(cb);
-      selTd.addEventListener('click', e => {
-        e.stopPropagation();
-        const rows = [...tbody.querySelectorAll('tr[data-node-id]')];
-        const currentIdx = rows.indexOf(tr);
-        const anchorIdx  = lastCheckedId ? rows.findIndex(r => r.dataset.nodeId === lastCheckedId) : -1;
+      if (agg) {   // folder / group aggregates: a plain selectable checkbox
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.className = 'nt-cb';
+        cb.checked = selectedIds.has(n.id);
+        selTd.appendChild(cb);
+        selTd.addEventListener('click', e => {
+          e.stopPropagation();
+          const isSel = tr.classList.toggle('row-selected');
+          cb.checked = isSel;
+          if (isSel) selectedIds.add(n.id); else selectedIds.delete(n.id);
+          section._gAggMap?.get(aggKey)?.classList.toggle('node-selected', isSel);
+        });
+      } else {
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.className = 'nt-cb';
+        cb.checked = selectedIds.has(n.id);
+        selTd.appendChild(cb);
+        selTd.addEventListener('click', e => {
+          e.stopPropagation();
+          const rows = [...tbody.querySelectorAll('tr[data-node-id]')];
+          const currentIdx = rows.indexOf(tr);
+          const anchorIdx  = lastCheckedId ? rows.findIndex(r => r.dataset.nodeId === lastCheckedId) : -1;
 
-        if (e.shiftKey && anchorIdx !== -1 && currentIdx !== -1) {
-          const targetState = !selectedIds.has(n.id);
-          const lo = Math.min(anchorIdx, currentIdx);
-          const hi = Math.max(anchorIdx, currentIdx);
-          rows.slice(lo, hi + 1).forEach(row => {
-            const nid = row.dataset.nodeId;
-            row.classList.toggle('row-selected', targetState);
-            const rowCb = row.querySelector('.nt-cb');
-            if (rowCb) rowCb.checked = targetState;
-            if (targetState) selectedIds.add(nid); else selectedIds.delete(nid);
-            section._gNodeMap?.get(nid)?.classList.toggle('node-selected', targetState);
-          });
-        } else {
-          const isSelected = tr.classList.toggle('row-selected');
-          cb.checked = isSelected;
-          section._gNodeMap?.get(n.id)?.classList.toggle('node-selected', isSelected);
-          if (isSelected) selectedIds.add(n.id); else selectedIds.delete(n.id);
-          lastCheckedId = n.id;
-        }
-        updateAllCb();
-      });
+          if (e.shiftKey && anchorIdx !== -1 && currentIdx !== -1) {
+            const targetState = !selectedIds.has(n.id);
+            const lo = Math.min(anchorIdx, currentIdx);
+            const hi = Math.max(anchorIdx, currentIdx);
+            rows.slice(lo, hi + 1).forEach(row => {
+              const nid = row.dataset.nodeId;
+              row.classList.toggle('row-selected', targetState);
+              const rowCb = row.querySelector('.nt-cb');
+              if (rowCb) rowCb.checked = targetState;
+              if (targetState) selectedIds.add(nid); else selectedIds.delete(nid);
+              section._gNodeMap?.get(nid)?.classList.toggle('node-selected', targetState);
+            });
+          } else {
+            const isSelected = tr.classList.toggle('row-selected');
+            cb.checked = isSelected;
+            section._gNodeMap?.get(n.id)?.classList.toggle('node-selected', isSelected);
+            if (isSelected) selectedIds.add(n.id); else selectedIds.delete(n.id);
+            lastCheckedId = n.id;
+          }
+          updateAllCb();
+        });
+      }
       tr.appendChild(selTd);
 
       cols.forEach(({ id, isNum }) => {
@@ -309,7 +423,7 @@ function setupNodeTable(section, level) {
         td.dataset.col = id;
         if (isNum) td.classList.add('num');
         td.textContent = fmtVal(v, id);
-        if (id === 'status') td.className += ` cell-s-${n.status}`;
+        if (id === 'status' && n.status) td.className += ` cell-s-${n.status}`;
         // Tooltip (description + formula + this node's computation) is derived
         // lazily on hover in `setupTooltip` — never precomputed for every cell.
         tr.appendChild(td);
@@ -317,7 +431,12 @@ function setupNodeTable(section, level) {
       tbody.appendChild(tr);
     });
 
-    // ── Summary footer: average for numeric columns, count for text columns ──
+    // ── Summary footer: average for numeric columns, count for text columns.
+    // Shown only when the displayed rows are a SINGLE kind (files-only / one
+    // aggregate category) — averaging across files + folders + groups together
+    // would be meaningless. ──
+    const cats = new Set(sorted.map(n => n._cat || 'file'));
+    if (cats.size !== 1) { updateAllCb(); return; }
     const foot = document.createElement('tr');
     foot.className = 'nt-foot';
     foot.appendChild(document.createElement('td')).className = 'nt-sel-td';

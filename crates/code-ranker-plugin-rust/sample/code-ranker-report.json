@@ -395,7 +395,7 @@
           "formula": "sloc × (fan_in × fan_out)²",
           "group": "coupling",
           "label": "HK",
-          "name": "Henry–Kafura (HK)",
+          "name": "Henry–Kafura",
           "short": "HK",
           "thresholds": {
             "info": 150000.0,
@@ -461,7 +461,7 @@
           "description": "Source lines of code — lines with at least one non-whitespace, non-comment character. Blank and comment-only lines are not counted. In Rust, lines inside `#[cfg(test)]` / `#[test]` items are excluded too, so this counts production code only (unlike `loc`, the raw file line count).",
           "group": "loc",
           "label": "Source",
-          "name": "Source lines (sloc)",
+          "name": "Source lines",
           "short": "SLOC",
           "thresholds": {
             "info": 800.0,
@@ -484,7 +484,7 @@
           "description": "Test lines of code — the lines inside `#[cfg(test)]` / `#[test]` / `#[bench]` items (Rust), removed before the production metrics are measured. The complement of `sloc`: test code never inflates a file's size, HK, or complexity.",
           "group": "loc",
           "label": "Test",
-          "name": "Test lines (tloc)",
+          "name": "Test lines",
           "short": "TLOC",
           "value_type": "int"
         },

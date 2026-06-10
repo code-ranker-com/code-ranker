@@ -75,7 +75,7 @@ pub fn coupling_specs() -> (
 
     let mut hk = AttributeSpec::new(ValueType::Float, "HK");
     hk.group = Some("coupling".into());
-    hk.name = Some("Henry–Kafura (HK)".into());
+    hk.name = Some("Henry–Kafura".into());
     hk.short = Some("HK".into());
     hk.description = Some(
         "Henry–Kafura — combines unit size with incoming/outgoing coupling (internal edges only)."

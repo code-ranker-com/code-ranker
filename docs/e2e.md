@@ -101,7 +101,8 @@ and intra-crate (`foo::run()` → a `Uses` edge `lib.rs → foo.rs`). A
 **Namespace pull → `super` edge** (`src/foo/bar.rs`): a glob `use super::*`
 that reaches *up* the module tree is emitted as the non-flow `super` kind
 (`foo/bar.rs → foo.rs`), not `uses` — kept in the JSON but excluded from
-fan-in / fan-out / HK / cycles and not drawn (like `contains` / `reexports`).
+fan-in / fan-out / HK / cycles; on the map drawn dashed on a leaf-node hover
+(like `contains` / `reexports`).
 Contrast `b.rs`'s `use super::a::alpha`: a *named* import of a sibling item is a
 real `Uses` edge — only the glob pull from an ancestor becomes `super`.
 

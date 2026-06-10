@@ -157,6 +157,19 @@ function buildDOT(nodes, edges, level, viewport) {
       seenGroupEdge.add(key);
       dot += `  ${dotId(sg)} -> ${dotId(tg)} [color="${E_COLOR}" style="solid"]\n`;
     }
+    // Non-flow inter-group edges (contains / reexports): dashed + hidden until a
+    // group hover reveals them; skip pairs already linked by a flow edge.
+    const seenGroupNF = new Set();
+    for (const e of edges) {
+      if (edgeIsFlow(level, e.kind)) continue;
+      const sg = nodeGroup.get(e.source);
+      const tg = nodeGroup.get(e.target);
+      if (!sg || !tg || sg === tg) continue;
+      const key = sg + '\x00' + tg;
+      if (seenGroupEdge.has(key) || seenGroupNF.has(key)) continue;
+      seenGroupNF.add(key);
+      dot += `  ${dotId(sg)} -> ${dotId(tg)} [color="${E_COLOR}" style="dashed" constraint=false class="edge-nonflow"]\n`;
+    }
 
     dot += '}';
     return dot;
@@ -198,8 +211,13 @@ function buildDOT(nodes, edges, level, viewport) {
   };
 
   const edgeCycleOf = window.CYCLES?.[level]?.edgeCycleStatus;
-  const eAttr = e =>
-    `color="${E_COLOR}" style="solid" class="edge-${e.kind || 'unknown'} status-${e.status} cycle-status-${edgeCycleOf ? edgeCycleOf(e.source, e.target) : 'none'}"`;
+  // Non-flow edges (contains / reexports) render DASHED and tagged `edge-nonflow`
+  // so CSS keeps them hidden until a node hover reveals the connected ones; flow
+  // edges stay solid and always visible.
+  const eAttr = e => {
+    const flow = edgeIsFlow(level, e.kind);
+    return `color="${E_COLOR}" style="${flow ? 'solid' : 'dashed'}" class="edge-${e.kind || 'unknown'} status-${e.status} cycle-status-${edgeCycleOf ? edgeCycleOf(e.source, e.target) : 'none'}${flow ? '' : ' edge-nonflow'}"`;
+  };
 
   const nAttr = n => {
     const ks   = nodeKindSpec(level, n.kind);
@@ -366,17 +384,32 @@ function buildDOT(nodes, edges, level, viewport) {
   }
 
   // ── Edges ─────────────────────────────────────────────────────────────────────
-  // Internal edges (within the drilled group)
-  const seenEdge = new Set();
+  // Internal edges (within the drilled group). Flow edges (solid) are laid out
+  // normally; non-flow edges (contains / reexports) are added DASHED with
+  // `constraint=false` (so they don't distort the layout) and hidden by CSS until
+  // a node hover reveals the connected ones. A non-flow pair already linked by a
+  // flow edge is skipped to avoid a doubled line.
+  const flowPairs = new Set();
   for (const e of edges) {
-    if (!edgeIsFlow(level, e.kind)) continue;   // map shows only flow connections
+    if (!edgeIsFlow(level, e.kind)) continue;
     if (!drillIds.has(e.source) || !drillIds.has(e.target)) continue;
     const s = renderId(e.source), t = renderId(e.target);
     if (s === t) continue;   // collapsed into the same folder box
     const key = s + '\x00' + t;
-    if (seenEdge.has(key)) continue;
-    seenEdge.add(key);
+    if (flowPairs.has(key)) continue;
+    flowPairs.add(key);
     dot += `  ${dotId(s)} -> ${dotId(t)} [${eAttr(e)}]\n`;
+  }
+  const seenNonFlow = new Set();
+  for (const e of edges) {
+    if (edgeIsFlow(level, e.kind)) continue;
+    if (!drillIds.has(e.source) || !drillIds.has(e.target)) continue;
+    const s = renderId(e.source), t = renderId(e.target);
+    if (s === t) continue;
+    const key = s + '\x00' + t;
+    if (flowPairs.has(key) || seenNonFlow.has(key)) continue;
+    seenNonFlow.add(key);
+    dot += `  ${dotId(s)} -> ${dotId(t)} [${eAttr(e)} constraint=false]\n`;
   }
 
   // Inbound group → our file (one edge per inGroup+file pair). The `status-*` class

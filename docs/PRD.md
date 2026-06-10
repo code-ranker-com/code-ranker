@@ -419,13 +419,14 @@ workspaces. The plugin MUST:
   attribute (`mutual` | `chain`) with `CycleGroup` entries, with
   any SCC that spans more than one crate dropped (Rust forbids circular crate
   dependencies); `reexports` is **non-flow** (a `pub use` facade is not a
-  dependency), so it is excluded from cycles **and** fan-in / HK and is not drawn,
-  exactly like `contains`. A glob `use` that pulls in an **enclosing** module's
+  dependency), so it is excluded from cycles **and** fan-in / HK; on the map it is
+  drawn **dashed** (revealed on a leaf-node hover), exactly like `contains`. A glob `use` that pulls in an **enclosing** module's
   namespace (`use super::*`, `use crate::<ancestor>::*`) is emitted as the
   separate **non-flow** kind `super` rather than `uses`: it is scope-sugar (a
   module split across files reaching back into itself), not a real outward
   dependency, so — like `contains`/`reexports` — it is kept in the data but
-  excluded from cycles / fan-in / fan-out / HK and not drawn. A glob that pulls
+  excluded from cycles / fan-in / fan-out / HK; on the map it is drawn **dashed**
+  (revealed on a leaf-node hover). A glob that pulls
   in a *child* module, or any **named** import of a parent item
   (`use crate::parent::Item`, `super::Item`), stays a real `uses` edge. And
   Henry-Kafura (`HK = sloc × (fan_in × fan_out)²`) — all written into the node's

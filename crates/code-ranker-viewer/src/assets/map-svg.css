@@ -180,3 +180,20 @@ g.node.node-hl { filter: drop-shadow(0 0 7px rgba(30,160,220,1)) drop-shadow(0 0
 .svg-frame.node-hovered g.edge.edge-connected > text {
   opacity: 1; pointer-events: auto;
 }
+/* Non-flow edges (contains / reexports), drawn dashed: hidden by default, revealed
+   only for the connected ones while a node is hovered. */
+.svg-frame g.edge.edge-nonflow > path,
+.svg-frame g.edge.edge-nonflow > polygon,
+.svg-frame g.edge.edge-nonflow > text { opacity: 0; pointer-events: none; }
+.svg-frame.leaf-hovered g.edge.edge-nonflow.edge-connected > path,
+.svg-frame.leaf-hovered g.edge.edge-nonflow.edge-connected > polygon,
+.svg-frame.leaf-hovered g.edge.edge-nonflow.edge-connected > text { opacity: 1; pointer-events: auto; }
+/* Hovering a CLUSTER (a folder that shows its files) must NOT reveal its members'
+   non-flow edges — keep them hidden even when marked connected (overrides the
+   generic edge-connected reveal above). */
+.svg-frame.node-hovered:not(.leaf-hovered) g.edge.edge-nonflow.edge-connected > path,
+.svg-frame.node-hovered:not(.leaf-hovered) g.edge.edge-nonflow.edge-connected > polygon,
+.svg-frame.node-hovered:not(.leaf-hovered) g.edge.edge-nonflow.edge-connected > text { opacity: 0; pointer-events: none; }
+.svg-frame.node-hovered g.edge.edge-nonflow.edge-dim > path,
+.svg-frame.node-hovered g.edge.edge-nonflow.edge-dim > polygon,
+.svg-frame.node-hovered g.edge.edge-nonflow.edge-dim > text { opacity: 0; }

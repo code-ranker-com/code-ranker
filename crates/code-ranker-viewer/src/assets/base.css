@@ -5,7 +5,9 @@ body { margin: 0; background: #fafafa; color: #222; }
 header { background: #2c3e50; color: #fff; padding: 8px 24px; }
 .header-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; min-height: 32px; }
 .header-brand { font-size: 15px; font-weight: 800; letter-spacing: .12em;
-                color: #1abc9c; text-transform: uppercase; white-space: nowrap; margin-right: 4px; }
+                color: #1abc9c; text-transform: uppercase; white-space: nowrap; margin-right: 4px;
+                text-decoration: none; }
+a.header-brand:hover { text-decoration: underline; }
 /* Project title: capped width with an ellipsis (full value in the `title` attr). */
 .header-title { font-size: 18px; font-weight: 500; white-space: nowrap; color: #d7e0ea;
                 display: inline-block; max-width: 340px; overflow: hidden;

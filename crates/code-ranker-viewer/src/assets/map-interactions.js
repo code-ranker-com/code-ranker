@@ -389,8 +389,14 @@ function setupEdgeHighlight(svgFrame, level) {
   }
 
   // ── Shared helpers ───────────────────────────────────────────────────────────
-  const applyHighlight = connected => {
+  // `isLeaf` = hovering a single leaf node (an individual file, or a collapsed
+  // folder/group box with no rendered children) — as opposed to a directory
+  // sub-cluster that already shows its files. Only a leaf hover reveals the dashed
+  // non-flow edges (gated on `.leaf-hovered` in CSS); hovering a cluster of visible
+  // files does not.
+  const applyHighlight = (connected, isLeaf = false) => {
     svgFrame.classList.add('node-hovered');
+    svgFrame.classList.toggle('leaf-hovered', !!isLeaf);
     for (const e of allEdgeEls) {
       e.classList.remove('edge-connected', 'edge-dim');
       if (connected.has(e)) e.classList.add('edge-connected');
@@ -398,7 +404,7 @@ function setupEdgeHighlight(svgFrame, level) {
     }
   };
   const clearHighlight = () => {
-    svgFrame.classList.remove('node-hovered');
+    svgFrame.classList.remove('node-hovered', 'leaf-hovered');
     for (const e of allEdgeEls) e.classList.remove('edge-connected', 'edge-dim');
   };
   // Reveal the (default-hidden) green/orange caller/dependency connector edges.
@@ -511,8 +517,9 @@ function setupEdgeHighlight(svgFrame, level) {
     if (!nodeId) continue;
 
     nodeEl.addEventListener('mouseenter', () => {
-      // Status bar is updated by setupTooltips handlers (fire after these).
-      ehSchedule(() => { applyHighlight(edgeMap.get(nodeId) ?? new Set()); setShowInOut(false, false); });
+      // Status bar is updated by setupTooltips handlers (fire after these). A node
+      // is a leaf (file / collapsed box) → reveal its dashed non-flow edges.
+      ehSchedule(() => { applyHighlight(edgeMap.get(nodeId) ?? new Set(), true); setShowInOut(false, false); });
     });
 
     nodeEl.addEventListener('mouseleave', e => {

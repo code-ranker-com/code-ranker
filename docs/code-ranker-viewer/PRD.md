@@ -60,15 +60,37 @@ refactoring. Surfacing them first reduces the time to actionable insight.
 
 ### Map navigation — semantic zoom & cycle visibility
 
-- [x] `p1` - **ID**: `cpt-code-ranker-fr-map-zoom-cycles`
+- [ ] `p1` - **ID**: `cpt-code-ranker-fr-map-zoom-cycles`
 
-The map MUST support **semantic level-of-detail navigation ("dig")** independent
-of pixel zoom: a relative level centred on the default grouping (crates, dig 0),
-where the user can **dig in** (`+N`, descend into folders within crates) or **dig
-out** (`-N`, progressively collapse the deepest crates into their parent folder
-until a single root group remains). Stepping re-groups the whole overview;
-**clicking a group** drills into just that group's files. The current level MUST
-be shown and the state MUST round-trip through the URL (`dig=`).
+The map MUST support **semantic level-of-detail navigation** independent of pixel
+zoom, surfaced in a single always-visible top-left breadcrumb:
+`[ crates ▾ ] › all › auth › domain   ⟨ ⊟ depth N ⊞ ⟩`.
+
+1. **Tier dropdown** — the leftmost chip selects the dimension being sliced —
+   **crates** (Rust modules) or **files/folders**; its label opens the menu (shown
+   only when the project has crates). Switching the tier MUST attempt to **map the
+   current focus across dimensions** (a crate ↔ its source directory) and fall back
+   to the nearest representable ancestor when no mapping exists.
+
+2. **Root element + path** — a **root** chip (`all` for crates, `root` for files)
+   returns to the whole-tree overview; each subsequent path chip drills to itself.
+   Clicking a box on the map drills the focus into it.
+
+3. **Reveal depth** — a **lens chip** at the end of the breadcrumb (`⊟ depth N ⊞`)
+   controlling how deep the current focus is expanded. `depth` reads **0 at every
+   landing** (drill-in, tier switch, overview default) and the user only moves it
+   with the buttons; `⊞` reveals one level deeper, `⊟` collapses. In a focused
+   group the view is a hybrid: files at or above the revealed level show
+   individually inside their directory cluster, while deeper subfolders show as
+   collapsed boxes. The lens is absent on a leaf file.
+
+Breadcrumb counts (revealed on hover) report the files under each chip and the
+crate/file total under the root. The tier, focus, and reveal depth MUST round-trip
+through the URL (`tier=`, `group=`, `depth=`, each omitted at its default).
+
+Deferred (P2): expanding individual collapsed boxes **in place** (a per-node
+override on top of the global depth), and revealing individual files inline in the
+**overview** (the overview currently always renders group boxes).
 
 Cycle membership MUST be **visible at every level**: file nodes and edges in a
 dependency cycle are drawn red, and a collapsed group (crate/folder) is marked
@@ -170,18 +192,19 @@ drills into it**: the map re-renders showing only that group's files in
 directory sub-clusters, plus two neighbor clusters — **callers** (left, green
 background) listing other groups whose files call into this group, and
 **dependencies** (right, orange background) listing groups this group calls
-out to; clicking a neighbor group navigates into it. When digging in (folder
-groups wrapped in crate clusters), clicking a folder box drills into that folder
-while clicking the crate cluster around it drills into the whole crate. **Inside
-a focused group**, clicking a folder (a directory sub-cluster, or a collapsed
-folder box) drills into it, and a `−`/`+` control on the last breadcrumb crumb
-collapses that group's files into folder boxes / expands them back — the same
-level-of-detail idea as the overview's dig, scoped to the focus. A **breadcrumb
-trail** (top-left of the diagram, e.g. `all crates › user-provisioning (bin) ›
-domain`) shows the path; each segment is clickable and the root returns to the
-group overview (counts per segment appear on hover). The drill
-state is reflected in the `group=` URL parameter so browser Back / Forward /
-Refresh work correctly; mode changes update the URL via `replaceState`.
+out to; clicking a neighbor group navigates into it. **Clicking a box** drills the
+focus into it (a crate, a folder, or — at the crate boundary — a whole crate). A
+single always-visible **breadcrumb** (top-left of the diagram) carries the
+navigation: a **tier dropdown** anchor (its label opens the crates ⇄ files menu), a
+**root** chip (`all`/`root`, returning to the overview), the clickable path chips
+(e.g. `[crates ▾] › all › auth › domain`), and a trailing **lens chip**
+(`⊟ depth N ⊞`) controlling how deep the focus is revealed — `depth` reads 0 at the
+landing and the focused view shows files (in dir clusters) down to the revealed
+level plus deeper subfolders as collapsed boxes. Per-chip counts (files under the
+chip; crate/file total under the root) appear on hover. The tier, focus, and reveal
+depth are reflected in URL parameters (`tier=`, `group=`, `depth=`) so browser
+Back / Forward / Refresh work correctly; mode changes update the URL via
+`replaceState`.
 The map is laid out **once** from the **union** of both snapshots; the
 `[data-side]` Baseline/Current buttons are a pure CSS visibility flip. This
 extends to the **callers / dependencies** neighbour clusters of a drilled group:

@@ -41,25 +41,10 @@
   <div class="frame-wrap">
     <div class="svg-frame" id="frame-files"></div>
     <div class="loading-indicator" id="loading-files">Loading…</div>
-    <!-- Focus breadcrumb trail — populated by renderBreadcrumb() in map-interactions.js. -->
-    <div class="drill-breadcrumb" id="drill-breadcrumb-files" style="display:none"></div>
-    <!-- Relative "dig" (level-of-detail) control: − dig out (collapse the deepest
-         crates into folders) / + dig in (descend into folders within crates).
-         Top-left next to the map; shown in the overview, hidden while drilled. -->
-    <div class="dig-lod" id="dig-lod-files">
-      <div class="dig-lod-col">
-        <button class="dig-lod-btn" type="button" data-lod="out" title="Dig out — collapse the deepest crates into folders">−</button>
-        <span class="dig-lod-count" data-count="out"></span>
-      </div>
-      <div class="dig-lod-col">
-        <span class="dig-lod-val">crate</span>
-        <span class="dig-lod-count" data-count="cur"></span>
-      </div>
-      <div class="dig-lod-col">
-        <button class="dig-lod-btn" type="button" data-lod="in" title="Dig in — descend into folders within crates">+</button>
-        <span class="dig-lod-count" data-count="in"></span>
-      </div>
-    </div>
+    <!-- Navigation breadcrumb — tier dropdown anchor + path chips + reveal-depth
+         lens chip. Always visible; populated by renderBreadcrumb() in
+         map-interactions.js. -->
+    <div class="drill-breadcrumb" id="drill-breadcrumb-files"></div>
     <div class="size-controls">
       <div class="size-row" data-row="metric">
         <button class="size-mode-btn active" data-size="dot"  title="Default box mode">■</button>

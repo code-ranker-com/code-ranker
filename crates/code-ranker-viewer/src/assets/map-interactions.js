@@ -71,66 +71,187 @@ window.kbdHintsHtml = kbdHintsHtml;
   window.addEventListener('blur', () => { setShift(false); setSrc(false); });
 })();
 
-// Focus breadcrumb: a clickable trail from the overview down to the current
-// group — e.g. "all crates › user-provisioning (bin) › domain". Each ancestor
-// segment drills to itself; the root returns to the overview. Replaces the old
-// static "← all" so the back target reflects the real hierarchy.
+// ── Navigation breadcrumb ──────────────────────────────────────────────────────
+// One always-visible trail driving two orthogonal axes (see grouping.js + docs):
+//   [tier ▾] › chip › chip … › cur      ⟨ ⊟ depth N/max ⊞ ⟩
+//   • the tier dropdown anchor switches the dimension (crates ⇄ files) and its
+//     label drills out to that tier's overview;
+//   • each path chip drills to itself;
+//   • the trailing lens chip controls the reveal depth — the overview's `window.dig`
+//     or, while focused, the focus's `window.focusDig` — through setDig.
+
+// The reveal-depth lens bounds for the current context, normalised so the lens
+// shows a non-negative `depth N / max` (0 = coarsest). Overview: depth measured
+// from the dig floor (single root) up to where digging deeper stops splitting.
+// Focus: from the most-collapsed folder view (minFz) up to individual files (0).
+function lensInfo(level) {
+  if (window.drillGroup !== null) {
+    const minFz = focusMinFz(level);
+    const fz    = window.focusDig || 0;
+    // depth 0 = the drill landing (the focus's direct children: its files in a dir
+    // cluster + immediate subfolders as boxes); ⊞ (right) reveals one level deeper,
+    // depth growing up to every file individually (fz = 0).
+    return { depth: fz - minFz, canDown: fz > minFz, canUp: fz < 0,
+             cur: focusRenderCount(level, fz),
+             down: fz > minFz ? focusRenderCount(level, fz - 1) : null,
+             up:   fz < 0     ? focusRenderCount(level, fz + 1) : null };
+  }
+  const z     = window.dig || 0;
+  const floor = digFloor(level);
+  // Ceiling: the highest dig that still increases the box count (capped at DIG_MAX).
+  let ceil = Math.max(z, 0), prev = window.groupCountAtDig(level, ceil);
+  while (ceil < DIG_MAX) {
+    const c = window.groupCountAtDig(level, ceil + 1);
+    if (c == null || c === prev) break;
+    ceil++; prev = c;
+  }
+  if (z > ceil) ceil = z;
+  // depth 0 = the overview landing (overviewBaseDig); + reveals finer, − coarser.
+  return { depth: z - overviewBaseDig(level), canDown: z > floor, canUp: z < ceil,
+           cur: window.groupCountAtDig(level, z),
+           down: z > floor ? window.groupCountAtDig(level, z - 1) : null,
+           up:   z < ceil  ? window.groupCountAtDig(level, z + 1) : null };
+}
+
+// A node's folder depth on the active tier's dig ladder (mirrors layout.js's
+// underDepth): crate tier → depth under the crate root; file tier (or crate-less)
+// → the absolute file-dig position (`dirs.length - maxFileDepth`, negative).
+function underDepthOf(level, n) {
+  const dirs  = relPathOf(n.id).split('/').slice(0, -1);
+  const gkey  = levelUi(level).grouping?.key;
+  const crate = (window.viewTier(level) !== 'file' && gkey) ? n[gkey] : null;
+  return (crate == null || crate === '')
+    ? dirs.length - maxFileDepth(level)
+    : Math.max(0, dirs.length - (crateRoots(level).get(String(crate)) || []).length);
+}
+
+// The deepest folder nesting under the current focus (mirrors layout.js's
+// maxFocusD), used to find the most-collapsed focus view without a render. Seed
+// null and take the true max — file-tier underDepth is negative, so a 0 seed wins.
+function focusMaxDepth(level) {
+  const grp = window.drillGroup;
+  if (grp == null) return 0;
+  const gOf = grouperForDig(level, window.drillDig ?? 0);
+  let m = null;
+  for (const n of unionGraph(level).nodes) {
+    if (gOf(n) !== grp) continue;
+    const ud = underDepthOf(level, n);
+    if (m === null || ud > m) m = ud;
+  }
+  return m == null ? 0 : m;
+}
+// The focus-dig of the most-collapsed focus view (reveal depth 0). focusDig ranges
+// [minFz, 0]: minFz = the focus's direct children, 0 = every file revealed.
+function focusMinFz(level) {
+  return -Math.max(0, focusMaxDepth(level) - (window.drillDig ?? 0));
+}
+window.focusMinFz = focusMinFz;
+
+// Rendered element count at a focus-dig fz — file nodes (folder level ≤ reveal
+// depth D) plus the distinct collapsed folder boxes deeper than the frontier.
+// Mirrors layout.js's hybrid view so the lens hover previews are accurate.
+function focusRenderCount(level, fz) {
+  const grp     = window.drillGroup;
+  const baseDig = window.drillDig ?? 0;
+  const D       = fz - focusMinFz(level);
+  const gOf     = grouperForDig(level, baseDig);
+  let files = 0; const boxes = new Set();
+  for (const n of unionGraph(level).nodes) {
+    if (gOf(n) !== grp) continue;
+    if (underDepthOf(level, n) - baseDig <= D) files++;
+    else boxes.add(groupKeyAtDig(level, n, baseDig + D + 1));
+  }
+  return files + boxes.size;
+}
+
+// The dig at which a focus `key` is a group key, for a tier — used as drillDig.
+function digOfKeyForTier(level, key, tier) {
+  if (tier === 'file') return key.split('/').length - maxFileDepth(level);
+  const cut = key.indexOf('/');
+  return cut >= 0 ? key.slice(cut + 1).split('/').length : 0;   // 0 = bare crate
+}
+window.digOfKeyForTier = digOfKeyForTier;
+
+// The dig a breadcrumb path chip `i` drills into (its key has i+1 segments).
+function chipDig(level, i, tier) {
+  return tier === 'file' ? (i + 1) - maxFileDepth(level) : i;
+}
+
+const esc  = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const escA = s => esc(s).replace(/"/g,'&quot;');
+
 function renderBreadcrumb(level) {
   level = level || currentLevel();
-  const grp = window.drillGroup;
-  const esc  = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const escA = s => esc(s).replace(/"/g,'&quot;');
+  const grp  = window.drillGroup;
+  const tier = window.viewTier(level);
+  const hasCrates = !!(levelUi(level).grouping?.key);
+  const uNodes = (typeof unionGraph === 'function' ? unionGraph(level).nodes : []);
+  const filesUnder = (key, dg) => uNodes.reduce((c, n) => c + (groupKeyAtDig(level, n, dg) === key ? 1 : 0), 0);
+  const col = (inner, count) =>
+    `<span class="crumb-col">${inner}<span class="crumb-count">${count == null ? '' : count}</span></span>`;
+
   document.querySelectorAll(`.view[data-view="${level}"] .drill-breadcrumb`).forEach(bc => {
-    if (grp == null) { bc.style.display = 'none'; return; }
     bc.style.display = '';
-    const grpKey = levelUi(level).grouping?.key || 'group';
-    // Focus collapse bounds: − collapses files into folders, + expands back.
-    const maxFocusD = window._FOCUS?.maxFocusD ?? 0;
-    const baseDig   = window.drillDig ?? 0;
-    const fz        = window.focusDig || 0;
-    const minFz     = -Math.max(0, maxFocusD - baseDig);
-    const canDown   = fz > minFz;   // can collapse further
-    const canUp     = fz < 0;       // can expand toward files
 
-    // Counts shown under each crumb (and each +/-), revealed on hover — the number
-    // of items in that crumb, or what +/- would yield, mirroring the dig control.
-    const uNodes     = (typeof unionGraph === 'function' ? unionGraph(level).nodes : []);
-    const filesUnder = (key, dg) => uNodes.reduce((c, n) => c + (groupKeyAtDig(level, n, dg) === key ? 1 : 0), 0);
-    const drillG     = grouperForDig(level, baseDig);
-    const focusNodes = uNodes.filter(n => drillG(n) === grp);
-    const renderCount = f => {
-      if (f >= 0) return focusNodes.length;   // files
-      const D = Math.min(maxFocusD, Math.max(baseDig + 1, maxFocusD + Math.max(minFz, f) + 1));
-      return new Set(focusNodes.map(n => groupKeyAtDig(level, n, D))).size;   // folder boxes
-    };
-    const col = (inner, count) =>
-      `<span class="crumb-col">${inner}<span class="crumb-count">${count == null ? '' : count}</span></span>`;
+    // ── Anchor: the tier dropdown (label drills out; ▾ switches dimension) ──────
+    const tierLabel = tier === 'file' ? 'files' : (levelUi(level).grouping?.key || 'crate') + 's';
+    // The whole-tree root element: "all" of the crates / the directory "root".
+    const rootLabel = tier === 'file' ? 'root' : 'all';
+    const rootCount = tier === 'crate' ? window.groupCountAtDig?.(level, 0)
+                                       : uNodes.filter(n => !isExternalNode(n, level)).length;
+    // Anchor: the tier dropdown (crates ⇄ files) — just the dimension switcher; the
+    // adjacent root element handles "go to the overview".
+    let anchor;
+    if (hasCrates) {
+      anchor = `<button class="drill-crumb tier-label" data-tier-toggle type="button" title="Switch dimension (crates ⇄ files)">${esc(tierLabel)} ▾</button>` +
+        `<span class="tier-menu" hidden>` +
+        `<button class="tier-opt${tier === 'crate' ? ' on' : ''}" data-tier="crate" type="button">crates</button>` +
+        `<button class="tier-opt${tier === 'file' ? ' on' : ''}" data-tier="file" type="button">files</button>` +
+        `</span>`;
+    } else {
+      anchor = `<span class="drill-crumb-cur tier-label">${esc(tierLabel)}</span>`;
+    }
+    const parts = [col(`<span class="crumb-tier">${anchor}</span>`, null)];
 
-    const segs = String(grp).split('/');
-    const parts = [col(`<button class="drill-crumb" data-crumb-root="1" type="button">all ${esc(grpKey)}s</button>`,
-                       window.groupCountAtDig?.(level, 0))];
-    for (let i = 0; i < segs.length; i++) {
-      const key  = segs.slice(0, i + 1).join('/');
-      const last = i === segs.length - 1;
-      parts.push('<span class="drill-sep">›</span>');
-      if (last) {
-        // Current group: the +/- collapse control flanks this last crumb; each
-        // column shows the resulting render count.
-        parts.push('<span class="crumb-dig">' +
-          col(`<button class="crumb-dig-btn" data-crumb-dig-step="-1" type="button"${canDown ? '' : ' disabled'} title="Collapse files into folders">−</button>`, canDown ? renderCount(fz - 1) : null) +
-          col(`<span class="drill-crumb-cur">${esc(segs[i])}</span>`, renderCount(fz)) +
-          col(`<button class="crumb-dig-btn" data-crumb-dig-step="1" type="button"${canUp ? '' : ' disabled'} title="Expand folders into files">+</button>`, canUp ? renderCount(fz + 1) : null) +
-          '</span>');
-      } else {
-        parts.push(col(`<button class="drill-crumb" data-crumb-key="${escA(key)}" data-crumb-dig="${i}" type="button">${esc(segs[i])}</button>`, filesUnder(key, i)));
+    // ── Root element: "all" (crates) / "root" (files) — the whole-tree overview ──
+    parts.push('<span class="drill-sep">›</span>');
+    parts.push(grp == null
+      ? col(`<span class="drill-crumb-cur">${rootLabel}</span>`, rootCount)
+      : col(`<button class="drill-crumb" data-crumb-root="1" type="button" title="Show the whole overview">${rootLabel}</button>`, rootCount));
+
+    // ── Path chips ─────────────────────────────────────────────────────────────
+    if (grp != null) {
+      const segs = String(grp).split('/');
+      for (let i = 0; i < segs.length; i++) {
+        const key  = segs.slice(0, i + 1).join('/');
+        const dg   = chipDig(level, i, tier);
+        const last = i === segs.length - 1;
+        parts.push('<span class="drill-sep">›</span>');
+        if (last) parts.push(col(`<span class="drill-crumb-cur">${esc(segs[i])}</span>`, filesUnder(key, dg)));
+        else      parts.push(col(`<button class="drill-crumb" data-crumb-key="${escA(key)}" data-crumb-dig="${dg}" type="button">${esc(segs[i])}</button>`, filesUnder(key, dg)));
       }
     }
+
+    // ── Lens chip: reveal depth (⊟ depth N/max ⊞) ──────────────────────────────
+    const li = lensInfo(level);
+    if (li.canDown || li.canUp) {
+      parts.push('<span class="crumb-lens">' +
+        col(`<button class="lens-btn" data-lens-step="-1" type="button"${li.canDown ? '' : ' disabled'} title="Collapse one level">⊟</button>`, li.canDown ? li.down : null) +
+        col(`<span class="lens-depth" title="reveal depth">depth ${li.depth}</span>`, li.cur) +
+        col(`<button class="lens-btn" data-lens-step="1" type="button"${li.canUp ? '' : ' disabled'} title="Reveal one level deeper">⊞</button>`, li.canUp ? li.up : null) +
+        '</span>');
+    }
+
     bc.innerHTML = parts.join(' ');
     if (!bc.dataset.crumbInit) {
       bc.dataset.crumbInit = '1';
       bc.addEventListener('click', e => {
-        const step = e.target.closest('.crumb-dig-btn');
-        if (step) { if (!step.disabled) setDig(Number(step.dataset.crumbDigStep), level); return; }
+        const tg = e.target.closest('[data-tier-toggle]');
+        if (tg) { tg.parentElement.querySelector('.tier-menu')?.toggleAttribute('hidden'); e.stopPropagation(); return; }
+        const opt = e.target.closest('[data-tier]');
+        if (opt) { switchTier(opt.dataset.tier, level); return; }
+        const step = e.target.closest('.lens-btn');
+        if (step) { if (!step.disabled) setDig(Number(step.dataset.lensStep), level); return; }
         const btn = e.target.closest('.drill-crumb');
         if (!btn) return;
         if (btn.dataset.crumbRoot) { drillOutOfGroup(level); return; }
@@ -141,15 +262,62 @@ function renderBreadcrumb(level) {
 }
 window.renderBreadcrumb = renderBreadcrumb;
 
+// Close any open tier menu on an outside click.
+document.addEventListener('click', e => {
+  if (e.target.closest('[data-tier-toggle]') || e.target.closest('.tier-menu')) return;
+  document.querySelectorAll('.tier-menu:not([hidden])').forEach(m => m.setAttribute('hidden', ''));
+});
+
+// Switch the grouping dimension (crates ⇄ files), mapping the current focus across
+// the crate-root boundary when possible; otherwise fall back to the nearest
+// representable ancestor, else the tier overview. Reveal depth resets at the focus
+// (per-node overrides — Stage 2 — would be dropped here too).
+function switchTier(tier, level) {
+  level = level || currentLevel();
+  document.querySelectorAll('.tier-menu:not([hidden])').forEach(m => m.setAttribute('hidden', ''));
+  if (tier === window.viewTier(level)) {   // same dimension → go to its overview
+    if (window.drillGroup !== null) drillOutOfGroup(level);
+    return;
+  }
+
+  const cur = window.drillGroup;
+  let mapped = null;
+  if (cur != null) {
+    const map = k => tier === 'file' ? crateKeyToFileKey(level, k) : fileKeyToCrateKey(level, k);
+    mapped = map(cur);
+    if (mapped == null) {   // climb ancestors until one maps
+      const segs = String(cur).split('/');
+      for (let k = segs.length - 1; k > 0 && mapped == null; k--) mapped = map(segs.slice(0, k).join('/'));
+    }
+  }
+
+  window.tier = tier;
+  if (mapped != null && mapped !== '_root') {
+    window.drillGroup = mapped;
+    window.drillDig   = digOfKeyForTier(level, mapped, tier);
+    window.focusDig   = focusMinFz(level);   // land at reveal depth 0 (most collapsed)
+  } else {
+    window.drillGroup = null;
+    // Land the overview at a coarse top-level grouping: crates at dig 0; the file
+    // tier one level below root (top directories) instead of the finest per-folder
+    // grouping that dig 0 would give there.
+    window.dig = tier === 'file' ? clampDig(digFloor(level) + 1) : 0;
+  }
+  renderBreadcrumb(level);
+  window.navReplaceView?.();
+  document.querySelectorAll('.view').forEach(sec => { sec.dataset.rendered = 'false'; });
+  const active = document.querySelector('.view.active');
+  if (active && window.gv) renderView(active, { preserve: false });
+}
+window.switchTier = switchTier;
+
 function drillIntoGroup(groupId, level, dig) {
   window.drillGroup = groupId;
   // The drilled view filters by the grouper that produced this group key, so
   // remember the dig it came from — caller may override (a crate cluster drills
   // into the whole crate → crate-tier grouper, dig 0).
   window.drillDig  = (dig != null) ? dig : (window.dig || 0);
-  window.focusDig  = 0;   // start at individual files; +/- collapses into folders
-  // Focus uses the breadcrumb's inline +/- control, not the standalone dig box.
-  document.querySelector(`.view[data-view="${level}"] .frame-wrap .dig-lod`)?.style.setProperty('display', 'none');
+  window.focusDig  = focusMinFz(level);   // land at reveal depth 0 (most collapsed); ⊞ reveals
   renderBreadcrumb(level);
   window.navPushView?.();
   document.querySelectorAll('.view').forEach(sec => { sec.dataset.rendered = 'false'; });
@@ -160,24 +328,26 @@ function drillIntoGroup(groupId, level, dig) {
 function drillOutOfGroup(level) {
   window.drillGroup = null;
   window.focusDig   = 0;
-  const frameWrap = document.querySelector(`.view[data-view="${level}"] .frame-wrap`);
-  frameWrap?.querySelector('.drill-breadcrumb')?.style.setProperty('display', 'none');
-  frameWrap?.querySelector('.dig-lod')?.style.removeProperty('display');   // restore overview control
-  updateDigLabel(level);
+  renderBreadcrumb(level);
   window.navPushView?.();
   document.querySelectorAll('.view').forEach(sec => { sec.dataset.rendered = 'false'; });
   const active = document.querySelector('.view.active');
   if (active && window.gv) renderView(active, { preserve: false });
 }
 
-// Drill target (group key + dig) for the folder a node sits in directly — its
-// crate-relative directory depth. Lets a directory sub-cluster drill into itself.
+// Drill target (group key + dig) for the folder a node sits in directly. Crate
+// tier: the crate-relative directory depth. File tier (or a crate-less node): the
+// absolute directory depth on the file ladder.
 function focusFolderTarget(level, n) {
-  const dirs  = relPathOf(n.id).split('/').slice(0, -1);
+  const dirs = relPathOf(n.id).split('/').slice(0, -1);
+  if (window.viewTier(level) === 'file') {
+    const dig = dirs.length - maxFileDepth(level);   // absolute → key = full dir
+    return { key: groupKeyAtDig(level, n, dig), dig };
+  }
   const gk    = levelUi(level).grouping?.key;
   const crate = gk ? n[gk] : null;
   const dig = (crate == null || crate === '')
-    ? dirs.length
+    ? dirs.length - maxFileDepth(level)
     : Math.max(0, dirs.length - (crateRoots(level).get(String(crate)) || []).length);
   return { key: groupKeyAtDig(level, n, dig), dig };
 }
@@ -190,10 +360,10 @@ function clampFocusDig(z) {
   return Math.max(-Math.max(0, maxFocusD - baseDig), Math.min(0, z | 0));
 }
 
-// Relative "dig" (level-of-detail). In the overview `delta` (+1 IN / -1 OUT)
-// steps the crate/folder grouping (`window.dig`). While focused into a group it
-// instead steps `window.focusDig` — collapsing that group's files into folder
-// boxes (-) or expanding back to individual files (+). See grouping.js.
+// Reveal-depth step from the lens chip. In the overview `delta` (+1 reveal / -1
+// collapse) steps the crate/folder grouping (`window.dig`); while focused it steps
+// `window.focusDig` — collapsing the focus's files into folder boxes (−) or
+// expanding back to individual files (+). See grouping.js.
 function setDig(delta, level) {
   level = level || currentLevel();
   if (window.drillGroup !== null) {
@@ -205,7 +375,7 @@ function setDig(delta, level) {
     if (z === (window.dig || 0)) return;
     window.dig = z;
   }
-  updateDigLabel(level);
+  renderBreadcrumb(level);
   window.navReplaceView?.();
   document.querySelectorAll('.view').forEach(sec => { sec.dataset.rendered = 'false'; });
   const active = document.querySelector('.view.active');
@@ -213,43 +383,9 @@ function setDig(delta, level) {
 }
 window.setDig = setDig;
 
-// Sync the dig-control label + button disabled-state for a level. dig 0 shows the
-// grouping key (e.g. "crate"); otherwise shows the signed level as "crate folder
-// ±N". Under each button sits the count of group boxes that pressing it would
-// show. "Out" is disabled once the overview has collapsed to a single root group
-// (dig reaches -maxCrateDepth); "in" at the static DIG_MAX.
-function updateDigLabel(level) {
-  level = level || currentLevel();
-  const root = document.querySelector(`.view[data-view="${level}"] .dig-lod`);
-  if (!root) return;
-
-  // Focus mode: the collapse control lives in the breadcrumb, not here.
-  if (window.drillGroup !== null) { renderBreadcrumb(level); return; }
-
-  const z   = window.dig || 0;
-  const gk  = levelUi(level).grouping?.key || 'group';
-  const val = root.querySelector('.dig-lod-val');
-  if (val) val.textContent = z === 0 ? gk : `/${gk}/folder${z > 0 ? '+' : ''}${z}`;
-  // Group-box counts: current level under the label, and what one step out / in
-  // would render under the − / + buttons.
-  const curN = window.groupCountAtDig?.(level, z);
-  const outN = window.groupCountAtDig?.(level, z - 1);
-  const inN  = window.groupCountAtDig?.(level, z + 1);
-  const maxD = window.maxCrateDepth?.(level) ?? 0;
-  // "Out" runs all the way to a single _root group. "In" stops at DIG_MAX, and
-  // — only once dig has reached the crate tier (z >= 0) — also stops when digging
-  // deeper no longer splits anything (next-level count == current). While dug out
-  // (z < 0) "+" stays enabled so you can always dig back in.
-  root.querySelector('[data-lod="out"]')?.toggleAttribute('disabled', z <= -maxD || z <= DIG_MIN);
-  root.querySelector('[data-lod="in"]') ?.toggleAttribute('disabled',
-    z >= DIG_MAX || (z >= 0 && inN != null && curN != null && inN === curN));
-  const curC = root.querySelector('[data-count="cur"]');
-  const outC = root.querySelector('[data-count="out"]');
-  const inC  = root.querySelector('[data-count="in"]');
-  if (curC) curC.textContent = curN != null ? String(curN) : '';
-  if (outC) outC.textContent = outN != null ? String(outN) : '';
-  if (inC)  inC.textContent  = inN  != null ? String(inN)  : '';
-}
+// Back-compat alias: callers (view-state recompute / restore) sync the dig UI via
+// this name; the control now lives entirely in the breadcrumb.
+function updateDigLabel(level) { renderBreadcrumb(level || currentLevel()); }
 window.updateDigLabel = updateDigLabel;
 
 // Format a single status-bar line for a file node.

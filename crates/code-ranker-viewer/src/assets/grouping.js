@@ -17,6 +17,18 @@ const DIG_MIN = -12, DIG_MAX = 6;
 function clampDig(z) { return Math.max(DIG_MIN, Math.min(DIG_MAX, (z | 0))); }
 window.clampDig = clampDig;
 
+// The grouping DIMENSION the map slices by — the breadcrumb's tier dropdown:
+//   • 'crate' — group by the crate attribute (Rust modules), the default when the
+//               level declares a grouping key;
+//   • 'file'  — ignore the crate attribute and group purely by directory.
+// `window.tier` (set by the dropdown) overrides; otherwise fall back to 'crate'
+// when a grouping key exists, else 'file'.
+function viewTier(level) {
+  if (window.tier === 'crate' || window.tier === 'file') return window.tier;
+  return levelUi(level).grouping?.key ? 'crate' : 'file';
+}
+window.viewTier = viewTier;
+
 // Strip the leading `{token}/` root marker from an id/path.
 function relPathOf(id) { return String(id || '').replace(/^\{[^}]+\}\//, ''); }
 
@@ -77,8 +89,41 @@ function crateDirs(level) {
 function maxCrateDepth(level) { return crateDirs(level).maxDepth; }
 window.maxCrateDepth = maxCrateDepth;
 
+// The deepest directory nesting over all nodes — the file-tier counterpart of
+// maxCrateDepth (how far dig-OUT can collapse the pure-directory grouping before
+// reaching a single root). Memoised per level.
+const _fileDepthCache = new Map();
+function maxFileDepth(level) {
+  if (_fileDepthCache.has(level)) return _fileDepthCache.get(level);
+  let m = 0;
+  for (const n of (unionGraph(level).nodes || [])) {
+    if (isExternalNode(n, level)) continue;
+    const d = relPathOf(n.id).split('/').length - 1;   // dir segments
+    if (d > m) m = d;
+  }
+  _fileDepthCache.set(level, m);
+  return m;
+}
+window.maxFileDepth = maxFileDepth;
+
+// The dig-OUT floor for the active tier: how far the grouping can collapse before
+// it is a single root group. Crate tier collapses crate-dir paths; file tier
+// collapses plain directory paths.
+function digFloor(level) {
+  return -(viewTier(level) === 'file' ? maxFileDepth(level) : maxCrateDepth(level));
+}
+window.digFloor = digFloor;
+
+// The overview's default landing dig — where reveal depth reads 0. Crate tier
+// lands on the crates (dig 0); file tier lands one level below the root (top
+// directories) rather than the finest per-folder grouping dig 0 would give.
+function overviewBaseDig(level) {
+  return viewTier(level) === 'file' ? clampDig(digFloor(level) + 1) : 0;
+}
+window.overviewBaseDig = overviewBaseDig;
+
 // Snapshot swaps change the node set → drop the memoised caches.
-function clearGroupingCache() { _crateRootCache.clear(); _crateDirsCache.clear(); }
+function clearGroupingCache() { _crateRootCache.clear(); _crateDirsCache.clear(); _fileDepthCache.clear(); }
 window.clearGroupingCache = clearGroupingCache;
 
 // Group key for a node at a given dig level. dig 0 → the crate value (matches the
@@ -90,13 +135,18 @@ function groupKeyAtDig(level, n, dig) {
 
   const d     = dig | 0;
   const gk    = levelUi(level).grouping?.key;
-  const crate = gk ? n[gk] : null;
+  // File tier ignores the crate attribute → plain directory tiers for every node.
+  const crate = (viewTier(level) === 'crate' && gk) ? n[gk] : null;
   const dirs  = relPathOf(n.id).split('/').slice(0, -1);
 
-  // No crate attribute: plain directory tiers (dig 0 = full dir).
+  // No crate attribute (file tier, or a crate-less level): plain directory tiers
+  // on an ABSOLUTE ladder — dig 0 keeps the file's full directory (finest folder
+  // grouping), each step out drops one global level until dig = -maxFileDepth is a
+  // single root. Absolute (not per-node-relative) so a fixed directory key has a
+  // single well-defined dig — which makes file-tier drilling unambiguous.
   if (crate == null || crate === '') {
-    const depth = dirs.length + d;
-    const keep  = dirs.slice(0, Math.max(0, depth));
+    const keepN = Math.max(0, Math.min(dirs.length, maxFileDepth(level) + d));
+    const keep  = dirs.slice(0, keepN);
     return keep.length ? keep.join('/') : '_root';
   }
 
@@ -124,7 +174,7 @@ function groupKeyAtDig(level, n, dig) {
 // is out of range (so the caller can blank a disabled button's count).
 function groupCountAtDig(level, dig) {
   const d = dig | 0;
-  if (d > DIG_MAX || d < -maxCrateDepth(level)) return null;
+  if (d > DIG_MAX || d < digFloor(level)) return null;
   const keys = new Set();
   for (const n of (unionGraph(level).nodes || [])) keys.add(groupKeyAtDig(level, n, d));
   return keys.size;
@@ -147,6 +197,9 @@ window.grouperForDig = grouperForDig;
 function groupLabel(level, key, dig) {
   const d = dig | 0;
   if (key === '_root') return '/';   // the collapse sentinel → show the root as "/"
+  // File tier: the key IS the full workspace-relative directory path; show it with
+  // a leading slash (no crate-segment logic).
+  if (viewTier(level) === 'file') return '/' + key;
   if (d > 0) {
     const cut     = key.indexOf('/');
     const crate   = cut >= 0 ? key.slice(0, cut) : key;
@@ -187,6 +240,47 @@ function nodeFullDir(n) {
   return segs.length ? '/' + segs.join('/') : '/';
 }
 window.nodeFullDir = nodeFullDir;
+
+// ── Tier switching: map a focus key across the crate ⇄ file dimensions ──────────
+// A crate ≡ its source directory, so the two key spaces meet at the crate-root
+// boundary: above it the keys are directory paths, below it they are identical
+// folder tails. These translate a focus group key from one tier to the other,
+// returning null when no mapping exists (the caller falls back to the anchor).
+
+// crate-tier key (`crate` or `crate/folder/…`) → file-tier key (a directory path).
+// Expands the leading crate segment into the crate's real directory; keeps the
+// folder tail (already crate-relative, so it appends directly).
+function crateKeyToFileKey(level, key) {
+  if (key == null || key === '_root') return '_root';
+  const cut   = key.indexOf('/');
+  const crate = cut >= 0 ? key.slice(0, cut) : key;
+  const tail  = cut >= 0 ? key.slice(cut + 1).split('/') : [];
+  const root  = crateRoots(level).get(String(crate));
+  if (!root) return null;                         // crate not found
+  const full  = [...root, ...tail];
+  return full.length ? full.join('/') : '_root';
+}
+window.crateKeyToFileKey = crateKeyToFileKey;
+
+// file-tier key (a directory path) → crate-tier key. Finds the crate whose root
+// directory is the deepest prefix of the path and collapses that prefix into the
+// crate segment, keeping the folder tail. Returns null for a path inside no crate
+// (the caller then falls back to the nearest representable ancestor / anchor).
+function fileKeyToCrateKey(level, key) {
+  if (key == null || key === '_root') return null;   // overview anchor
+  const segs = key.split('/');
+  let best = null, bestLen = -1;
+  for (const [crate, root] of crateRoots(level)) {
+    if (root.length > segs.length) continue;
+    let ok = true;
+    for (let i = 0; i < root.length; i++) if (root[i] !== segs[i]) { ok = false; break; }
+    if (ok && root.length > bestLen) { best = String(crate); bestLen = root.length; }
+  }
+  if (best == null) return null;                  // not inside any crate
+  const tail = segs.slice(bestLen);
+  return [best, ...tail].join('/');
+}
+window.fileKeyToCrateKey = fileKeyToCrateKey;
 
 // Aggregate the per-node cycle statuses of a group's members into one status for
 // the group node (used to red-stroke groups that contain a dependency cycle).

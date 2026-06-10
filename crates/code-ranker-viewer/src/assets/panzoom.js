@@ -160,13 +160,8 @@ function setupPanZoom(frame, svg) {
       drillOutOfGroup(lv);
     });
 
-    // Relative-zoom (level-of-detail) buttons: + finer / − coarser grouping.
-    wrap.querySelector('.dig-lod [data-lod="in"]')?.addEventListener('click', () => {
-      window.setDig?.(1, wrap.closest('.view')?.dataset.view || 'files');
-    });
-    wrap.querySelector('.dig-lod [data-lod="out"]')?.addEventListener('click', () => {
-      window.setDig?.(-1, wrap.closest('.view')?.dataset.view || 'files');
-    });
+    // The reveal-depth (level-of-detail) control now lives in the breadcrumb's
+    // lens chip (see renderBreadcrumb), not a standalone panzoom button.
 
     document.addEventListener('fullscreenchange', () => {
       if (document.fullscreenElement === wrap) enterFS();
@@ -190,7 +185,7 @@ function setupPanZoom(frame, svg) {
   };
 
   // Floating top controls that must clear the always-on header bar.
-  const FS_TOP_CTRLS = ['.size-controls', '.dig-lod', '.drill-breadcrumb'];
+  const FS_TOP_CTRLS = ['.size-controls', '.drill-breadcrumb'];
 
   function enterFS() {
     // The header stays visible for the WHOLE fullscreen session (not just on a

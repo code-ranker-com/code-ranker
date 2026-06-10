@@ -6,7 +6,8 @@ function getNavParams() {
     side:  p.get('side'),
     group: p.get('group'),
     mode:  p.get('mode'),
-    dig:   p.get('dig'),
+    depth: p.get('depth'),
+    tier:  p.get('tier'),
     stat:  p.get('stat'),
     panel: p.get('panel'),
   };
@@ -24,13 +25,24 @@ function navStat() {
   return s !== 'avg' ? s : null;
 }
 
+// Reveal depth carried in the URL: the lens offset from the context default —
+// while focused, how far the focus is collapsed (−focusDig, 0 = files, the drill
+// landing); at the overview, the grouping LOD (window.dig, 0 = crates). Always 0
+// at the default so it is omitted from the URL.
+function navDepth() {
+  const lvl = currentLevel();
+  if (window.drillGroup != null) return (window.focusDig || 0) - (window.focusMinFz?.(lvl) ?? 0);
+  return (window.dig || 0) - (window.overviewBaseDig?.(lvl) ?? 0);
+}
+
 function navViewState() {
   return {
     level: currentLevel() ?? null,
     side:  navSide(),
     group: window.drillGroup  || null,
     mode:  window.nodeSizeMode || null,
-    dig:   window.dig || 0,
+    depth: navDepth(),
+    tier:  window.tier || null,
     stat:  navStat(),
     panel: window._statsOpen ? 'stats' : null,
   };
@@ -41,7 +53,8 @@ function navViewUrl(st) {
   if (st.side)  p.set('side',  st.side);
   if (st.group) p.set('group', st.group);
   if (st.mode)  p.set('mode',  st.mode);
-  if (st.dig)   p.set('dig',   st.dig);
+  if (st.depth) p.set('depth', st.depth);
+  if (st.tier)  p.set('tier',  st.tier);
   if (st.stat)  p.set('stat',  st.stat);
   if (st.panel) p.set('panel', st.panel);
   return p.toString() ? '?' + p : location.pathname;
@@ -67,15 +80,17 @@ window.navPush = function(level, nodeId) {
   if (grp)    p.set('group', grp);
   const mode = window.nodeSizeMode || null;
   if (mode)   p.set('mode',  mode);
-  const dig = window.dig || 0;
-  if (dig)    p.set('dig',   dig);
+  const depth = navDepth();
+  if (depth)  p.set('depth', depth);
+  const tier = window.tier || null;
+  if (tier)   p.set('tier',  tier);
   const stat = navStat();
   if (stat)   p.set('stat',  stat);
   const panel = window._statsOpen ? 'stats' : null;
   if (panel)  p.set('panel', panel);
   if (nodeId) p.set('node',  nodeId);
   const url = p.toString() ? '?' + p : location.pathname;
-  history.pushState({ level: level ?? null, node: nodeId ?? null, side, group: grp, mode, dig, stat, panel }, '', url);
+  history.pushState({ level: level ?? null, node: nodeId ?? null, side, group: grp, mode, depth, tier, stat, panel }, '', url);
 };
 // Update only the `side` param in place (Baseline/Current toggle).
 window.navSetSide = function() {

@@ -2,8 +2,8 @@
 
 The technical design of the offline HTML viewer: the `code-ranker-viewer` crate
 and its static assets (embedded into the `code-ranker` binary), the data-driven
-rendering layer, the browser-side diff and cycle computation, the relative-dig
-navigation, and the offline guarantee. This is a component slice of the technical
+rendering layer, the browser-side diff and cycle computation, the tier/focus/
+reveal-depth navigation, and the offline guarantee. This is a component slice of the technical
 design — for the architecture overview, principles, domain model, the
 plugin/extraction crates and the plugin system see the main
 [DESIGN](../DESIGN.md); for the CLI crate that drives rendering (`run_report` →
@@ -13,7 +13,7 @@ plugin/extraction crates and the plugin system see the main
 
 - [HTML assets (`crates/code-ranker-viewer/src/assets/`)](#html-assets-cratescode-ranker-viewersrcassets)
 - [Asset layers](#asset-layers)
-- [Relative dig (level-of-detail)](#relative-dig-level-of-detail)
+- [Navigation: tier, focus & reveal depth](#navigation-tier-focus--reveal-depth)
 - [Affected status](#affected-status)
 - [Cycle detection](#cycle-detection)
 - [Offline guarantee](#offline-guarantee)
@@ -51,8 +51,7 @@ an asset is three edits: an `include_str!` const + a `.replace` in `lib.rs`, and
 
 Files are grouped by concern (the load order in `index.html` roughly follows this
 top-to-bottom). The viewer was split out of three former monoliths (`diagram.js`,
-`app.js`, `node-table.js`) — see
-[`REFACTOR-split-plan.md`](REFACTOR-split-plan.md).
+`app.js`, `node-table.js`).
 
 ### Vendor
 
@@ -66,7 +65,7 @@ top-to-bottom). The viewer was split out of three former monoliths (`diagram.js`
 | File | Purpose |
 |------|---------|
 | `schema.js` | The single data-access layer over the snapshot dictionaries (readers for `node_attributes` / `edge_kinds` / `node_kinds` / `cycle_kinds` / `attribute_groups` / `ui` / `presets`, plus `evalCalc`/`calcDisplay`). |
-| `grouping.js` | The **grouping ladder** for relative dig: `grouperForDig(level, dig)` / `groupKeyAtDig` (dig 0 = crate tier; +N folders under the crate; −N progressive deepest-first collapse via `crateRoots`/`crateDirs`/`maxCrateDepth`), plus `groupLabel` (box label — the **full** folder path: crate dir + absorbed source dir + folders when digging in, the collapsed crate-dir path when digging out), `groupCountAtDig` (group-box count at a dig level — powers the dig-control +/- previews), `nodeFullDir` (full workspace-relative dir of a node, e.g. `/crates/foo/src` — drilled sub-cluster labels), `crateRelDir` (crate-relative dir for neighbour labels), `aggCycleStatus`, `clampDig`. Derives every tier from file-id paths + the crate attribute — no extra backend data. |
+| `grouping.js` | The **grouping ladder** the reveal depth indexes into: `grouperForDig(level, dig)` / `groupKeyAtDig` (a tier ladder spanning synthetic crate-folders → crate tier → folders-under-crate → files, via `crateRoots`/`crateDirs`/`maxCrateDepth`; the reveal-depth lens indexes into it via `window.dig` (overview) / `window.drillDig` (drilled). `viewTier` picks the dimension (crate vs file); the **file tier** uses an absolute directory ladder anchored on `maxFileDepth`/`digFloor`, with `overviewBaseDig` the file-tier landing; `crateKeyToFileKey`/`fileKeyToCrateKey` map a focus key across dimensions for tier switching), plus `groupLabel` (box label — the **full** folder path: crate dir + absorbed source dir + folders when digging in, the collapsed crate-dir path when digging out), `groupCountAtDig` (group-box count at a dig level — powers the dig-control +/- previews), `nodeFullDir` (full workspace-relative dir of a node, e.g. `/crates/foo/src` — drilled sub-cluster labels), `crateRelDir` (crate-relative dir for neighbour labels), `aggCycleStatus`, `clampDig`. Derives every tier from file-id paths + the crate attribute — no extra backend data. |
 | `diff.js` | Browser-side diff: `computeDiff()` (node/edge status), `computeCycles()` (reads cycle membership **solely** from the backend `graph.cycles`; derives per-side status + `edgeCycleStatus`), `computeMeta()`. |
 | `utils.js` | Shared formatting/escaping/DOM helpers (`fmtNum`, `fmtFull`, `fmtDate`, `escHtml`, …). |
 
@@ -74,15 +73,15 @@ top-to-bottom). The viewer was split out of three former monoliths (`diagram.js`
 
 | File | Purpose |
 |------|---------|
-| `layout.js` | `buildDOT()` — emits the DOT for the map. Overview groups by `grouperForDig(level, window.dig)` (one node per group, deduped inter-group flow edges); each group box is labelled `fullPath (memberCount)` and tagged `cycle-status-*` aggregated from its members. Box fill: pink at the crate tier, white otherwise; metric **circles are always filled** — red at the crate tier, blue (`N_FILL`) otherwise (never empty white). At **dig in** (`dig > 0`) with crate grouping the folder-group boxes are wrapped in a labelled **crate cluster** (`subgraph cluster_crate_N`, faint-pink) so folders read as inside their crate; dig 0 / dig out stay flat. The drilled (focus) view filters to the focused group and, at `window.focusDig === 0`, renders per-file nodes (label = file **name** only) in **full-path** dir sub-clusters (`nodeFullDir`, e.g. `/crates/foo/src`; faint-filled so the whole folder area is hoverable/clickable to drill in); at `focusDig < 0` it instead collapses those files into **folder boxes** (grouped by `groupKeyAtDig` at a depth derived from `focusDig`, edges remapped file→box via `renderId`). Either way it adds **callers** (green) / **dependencies** (orange) neighbour clusters whose `edge-in`/`edge-out` edges are `constraint=false`. The neighbour boxes, their connector edges, **and the cluster itself** each carry a `status-*` class (per (group,file) presence folded from the union diff: `added` = current-only, `removed` = baseline-only, `unchanged` = both; the cluster ORs over all its boxes) so they follow the Baseline/Current toggle just like internal nodes/edges — a caller/dependency that exists in only one snapshot hides on the other side, and an all-one-side cluster hides its background+label too (member boxes are siblings of the cluster `<g>`, not children, so the cluster class hides only the box/label). **Flow** edges are drawn solid and counted (neighbour discovery and the overview metric edges still guard on `edgeIsFlow`); **non-flow** `contains`/`reexports` edges are also emitted now — **dashed**, `constraint=false`, tagged `edge-nonflow` and **hidden by CSS until a leaf-node hover** reveals the connected ones — only an individual file or a collapsed folder/group box (frame gets `.leaf-hovered`), **not** a directory sub-cluster that already shows its files (a pair already flow-linked is skipped). They also appear in the popup. No `ratio=fill`/`size` (natural layout, packed spacing); edges carry `arrowsize=0.6` (smaller arrowheads, which otherwise read oversized once the viewBox scales up on sparse graphs). The **cycle filter** (`window.cycleOnly`) drops every node not in a dependency cycle (keeping the edges between cycle nodes and the callers/dependencies clusters). Metric (SLOC/HK) sizing helpers live here too. |
+| `layout.js` | `buildDOT()` — emits the DOT for the map. Overview groups nodes by `grouperForDig` at `window.dig` (one box per group, deduped inter-group flow edges); each group box is labelled `fullPath (memberCount)` and tagged `cycle-status-*` aggregated from its members. Box fill: pink at the crate tier, white otherwise; metric **circles are always filled** — red at the crate tier, blue (`N_FILL`) otherwise (never empty white). At `dig > 0` with crate grouping the folder-group boxes are wrapped in a labelled **crate cluster** (`subgraph cluster_crate_N`, faint-pink) so folders read as inside their crate; the file tier and flat/coarse views stay flat. The drilled (focus) view filters to the focused group (`grouperForDig(level, drillDig)` === `drillGroup`) and renders a **hybrid** at reveal depth `D` (derived from `window.focusDig`): a node whose folder level under the focus is ≤ `D` becomes an individual **file** node (label = file **name** only) inside its **full-path** dir sub-cluster (`nodeFullDir`, faint-filled, hoverable/clickable to drill); a deeper node collapses into a **folder box** keyed at the frontier `groupKeyAtDig(level, n, drillDig + D + 1)`. So depth 0 shows the focus's direct files in their dir cluster alongside its immediate subfolders as boxes; `⊞` opens one more level (edges remapped file→box via `renderId`). Either way it adds **callers** (green) / **dependencies** (orange) neighbour clusters whose `edge-in`/`edge-out` edges are `constraint=false`. The neighbour boxes, their connector edges, **and the cluster itself** each carry a `status-*` class (per (group,file) presence folded from the union diff: `added` = current-only, `removed` = baseline-only, `unchanged` = both; the cluster ORs over all its boxes) so they follow the Baseline/Current toggle just like internal nodes/edges — a caller/dependency that exists in only one snapshot hides on the other side, and an all-one-side cluster hides its background+label too (member boxes are siblings of the cluster `<g>`, not children, so the cluster class hides only the box/label). **Flow** edges are drawn solid and counted (neighbour discovery and the overview metric edges still guard on `edgeIsFlow`); **non-flow** `contains`/`reexports` edges are also emitted now — **dashed**, `constraint=false`, tagged `edge-nonflow` and **hidden by CSS until a leaf-node hover** reveals the connected ones — only an individual file or a collapsed folder/group box (frame gets `.leaf-hovered`), **not** a directory sub-cluster that already shows its files (a pair already flow-linked is skipped). They also appear in the popup. No `ratio=fill`/`size` (natural layout, packed spacing); edges carry `arrowsize=0.6` (smaller arrowheads, which otherwise read oversized once the viewBox scales up on sparse graphs). The **cycle filter** (`window.cycleOnly`) drops every node not in a dependency cycle (keeping the edges between cycle nodes and the callers/dependencies clusters). Metric (SLOC/HK) sizing helpers live here too. |
 | `map-render.js` | `drawSVG()` (big-graph confirm guard, drilled views only) and `renderSVGNow()` (DOT→SVG via `window.gv`, then wires pan/zoom, the status bar, edge-highlight and tooltips). |
 
 ### Map interactions
 
 | File | Purpose |
 |------|---------|
-| `map-interactions.js` | All behaviour on the main SVG map: node selection + the platform open-source modifier (`isOpenSrcClick`, ⌘/Ctrl), the shortcut legend (`kbdHintsHtml`), **drill** nav (`drillIntoGroup(group, level, dig)`/`drillOutOfGroup`) with a **hierarchical breadcrumb** (`renderBreadcrumb`): a clickable trail `all <groups> › crate › folder …` — each segment drills to itself, the root returns to the overview (replaces the old static "← all"). **Relative-dig** (`setDig`/`updateDigLabel`): in the **overview** the `.dig-lod` control shows `/<group>/folder±N` (the grouping key, never hardcoded) with `groupCountAtDig` previews under the −/current/+ slots; `+` disables at `DIG_MAX` and — only once `dig ≥ 0` — when digging deeper no longer splits; dug out (`dig < 0`) keeps `+` enabled. **In focus** the `.dig-lod` is hidden and the collapse control lives in the breadcrumb's last crumb (`− <crumb> +`): `window.focusDig` (0 = individual files; negative collapses the focused group's files into folder boxes, deepest first) — `−` collapses, `+` expands back to files; each crumb and each +/- shows a hover count (items there / after the step). Clicking a **folder box** (folder mode) or a **directory sub-cluster** (files mode) drills into that folder (`focusFolderTarget` → group key + dig). The status bar (`computeGroupStats` → `statusLineFor`/`statusLineForGroup`: group/neighbour lines carry the full path, **folders** count and files/sloc/hk/cycle, the `_root` collapse sentinel shown as `/`; hovering a caller/dependency neighbour box shows the same crate-style stats), `setupEdgeHighlight(svgFrame, level)` (must run **before** `setupTooltips`, which removes SVG `<title>`s; the green/orange in/out connectors are hidden by default and revealed on cluster/node hover; `cluster_crate_*` overview clusters highlight all edges of the groups inside them, and **clicking a crate cluster drills into the whole crate** — `drillIntoGroup(crate, level, 0)`, crate-tier grouper — while clicking a folder box inside it drills into just that folder), `setupTooltips`. **Hover is debounced + de-flickered** (`HOVER_DELAY`): `wireNodeHover` delays the glow/raise so quick passes don't flash and clears every other `node-hl` first (never two glows at once); `raisePaint` lifts the hovered node to the end of its SVG parent (paint order — SVG has no z-index); a single shared `ehSchedule` timer drives **all** edge-highlight changes (nodes and clusters) so crossing boundaries never flashes the arrows. |
-| `panzoom.js` | `setupPanZoom()` — viewBox drag-to-pan, +/−/fit/fullscreen buttons, the SLOC/HK metric-size row, the drill-back button, and the **relative-dig** (−/+) buttons that call `setDig`. In **fullscreen** the page `<header>` (and body-attached overlays) move under the frame and the header stays **persistently visible** in a top `.fs-bar` (no slide-in); the floating top controls are offset below it. The default framing is the **capped fit** (`fitVB`): never zoom IN past `MAX_FIT_ZOOM` (1.3× absolute = frame px per SVG unit), so small graphs aren't magnified — the viewBox is enlarged (centred) to land the on-screen scale at 1.3; `renderView`'s preserve step overrides this when the user has panned/zoomed. The fit button (`zoomOut`) animates to the same capped framing. |
+| `map-interactions.js` | All behaviour on the main SVG map: node selection + the platform open-source modifier (`isOpenSrcClick`, ⌘/Ctrl), the shortcut legend (`kbdHintsHtml`), **drill** nav (`drillIntoGroup(key, level, dig)`/`drillOutOfGroup`) driving the always-visible **breadcrumb** (`renderBreadcrumb`): a **tier-dropdown anchor** (its label opens a crates ⇄ files menu → `switchTier`, which maps the focus across dimensions; shown only when the level has crates), a **root element** (`all`/`root`, drills out to the overview, replacing the old static "← all"), clickable path chips that each drill to themselves, and a trailing **reveal-depth lens chip** `⊟ depth N ⊞`. Per-chip hover counts: files under each chip; the crate/file total under the root. **Reveal depth** (`setDig` ±1 → `window.dig` in the overview, `window.focusDig` while focused): `lensInfo` computes the displayed depth (the offset from the landing, `0` by default) plus the ⊟/⊞ enabled state and hover previews (`focusRenderCount` in focus — files + collapsed boxes — / `groupCountAtDig` in the overview); `focusMinFz`/`focusMaxDepth`/`underDepthOf` derive the focus bounds and `overviewBaseDig` the overview landing. The lens replaces the former overview `.dig-lod` and last-crumb `−/+` controls. Clicking a **box body** (a folder box, a directory sub-cluster, or a crate cluster) drills the focus into it (`focusFolderTarget` → key + dig). The status bar (`computeGroupStats` → `statusLineFor`/`statusLineForGroup`: group/neighbour lines carry the full path, **folders** count and files/sloc/hk/cycle, the `_root` collapse sentinel shown as `/`; hovering a caller/dependency neighbour box shows the same crate-style stats), `setupEdgeHighlight(svgFrame, level)` (must run **before** `setupTooltips`, which removes SVG `<title>`s; the green/orange in/out connectors are hidden by default and revealed on cluster/node hover; `cluster_crate_*` overview clusters highlight all edges of the groups inside them, and **clicking a crate cluster drills into the whole crate** — `drillIntoGroup(crate, 'crate')` — while clicking a folder box inside it drills into just that folder), `setupTooltips`. **Hover is debounced + de-flickered** (`HOVER_DELAY`): `wireNodeHover` delays the glow/raise so quick passes don't flash and clears every other `node-hl` first (never two glows at once); `raisePaint` lifts the hovered node to the end of its SVG parent (paint order — SVG has no z-index); a single shared `ehSchedule` timer drives **all** edge-highlight changes (nodes and clusters) so crossing boundaries never flashes the arrows. |
+| `panzoom.js` | `setupPanZoom()` — viewBox drag-to-pan, +/−/fit/fullscreen buttons, the SLOC/HK metric-size row, and the drill-back button (the reveal-depth control now lives in the breadcrumb's lens chip, not a standalone panzoom button). In **fullscreen** the page `<header>` (and body-attached overlays) move under the frame and the header stays **persistently visible** in a top `.fs-bar` (no slide-in); the floating top controls are offset below it. The default framing is the **capped fit** (`fitVB`): never zoom IN past `MAX_FIT_ZOOM` (1.3× absolute = frame px per SVG unit), so small graphs aren't magnified — the viewBox is enlarged (centred) to land the on-screen scale at 1.3; `renderView`'s preserve step overrides this when the user has panned/zoomed. The fit button (`zoomOut`) animates to the same capped framing. |
 
 ### Node modal / popup
 
@@ -126,54 +125,87 @@ top-to-bottom). The viewer was split out of three former monoliths (`diagram.js`
 
 | File | Purpose |
 |------|---------|
-| `index.html` | The shell: one `<header>` row (brand — a link to the GitHub repo, title, two snapshot controls + a toggle, then a **Statistics** button), the single Files `.view` with `.frame-wrap` (svg frame, drill breadcrumb, **dig** control (`.dig-lod`) top-left, zoom/size controls incl. a **cycle** filter toggle, kbd legend), and the full-screen **diff-summary popup** (`#summary-overlay`). |
+| `index.html` | The shell: one `<header>` row (brand — a link to the GitHub repo, title, two snapshot controls + a toggle, then a **Statistics** button), the single Files `.view` with `.frame-wrap` (svg frame, the navigation **breadcrumb** top-left — tier-dropdown anchor, path chips, trailing reveal-depth **lens chip** — zoom/size controls incl. a **cycle** filter toggle, kbd legend), and the full-screen **diff-summary popup** (`#summary-overlay`). |
 | `base.css` · `map.css` · `modal.css` · `tables.css` · `export.css` · `snap.css` · `map-svg.css` | The former `index.css` split by concern; concatenated in `lib.rs` **in source order** into one inlined `<style>` (preserving the cascade, no extra requests → keeps the offline guarantee). `map-svg.css` holds the graphviz node/edge state rules: visibility toggles, **cycle red stroke** (side-gated), selection, hover, status bar and edge highlight. |
 
-## Relative dig (level-of-detail)
+## Navigation: tier, focus & reveal depth
 
-Two orthogonal navigation axes over the single Files graph (the control is the
-−/+ **dig** buttons top-left of the map, calling `setDig`):
+Navigation over the single Files graph is surfaced in one always-visible top-left
+**breadcrumb** (`renderBreadcrumb`):
 
-- **`window.dig`** — a relative LOD on the **overview**:
-  - `0` — every crate is its own node (the default; reproduces the legacy crate
-    grouping byte-for-byte). Crate group boxes are pink; any non-crate grouping
-    is a neutral white.
-  - `+N` — **dig in**: descend N directory levels inside crates. Folder groups are
-    labelled with their **full** path from the workspace root — crate dir +
-    absorbed source dir + folders, e.g. `/crates/code-ranker-viewer/src`,
-    `/crates/code-ranker-viewer/src/services` (`groupLabel`). The folder-group
-    boxes of one crate are wrapped in a labelled **crate cluster**
-    (`subgraph cluster_crate_N`) so they read as inside their crate.
-  - `-N` — **dig out**: progressively collapse the **deepest** crates into their
-    parent folder, one depth level per step (`crateDirs` + `maxCrateDepth`), until
-    a single root group remains (its `_root` sentinel key is shown as `/`). The
-    "−" button disables at that point.
-- **focus (`window.drillGroup`)** — **clicking a group** drills into just that
-  group's files; clicking a leaf file opens the popup. `window.drillDig` records
-  the dig at drill time so the focused view filters by the matching grouper. In
-  the focused view, directory sub-cluster labels are the **full** workspace path
-  (`nodeFullDir` → `/crates/foo/src`); caller/dependency neighbour boxes drop the
-  crate prefix when every neighbour shares the drilled crate (`/services`), else
-  keep the full key. The focus is itself navigable:
-  - **`window.focusDig`** — a sub level-of-detail *inside* the focus: `0` = the
-    group's individual files (default); `−k` collapses them into **folder boxes**
-    (deepest folders first). The `.dig-lod` is hidden here; the `−`/`+` control
-    lives in the breadcrumb's last crumb instead.
-  - **clicking a folder** — a folder box (collapsed) or a directory sub-cluster
-    (files mode) drills into that folder (`focusFolderTarget`), pushing it onto
-    the breadcrumb. A crate cluster in the overview drills into the whole crate.
-  - the **breadcrumb** (`renderBreadcrumb`) is the clickable trail `all <groups> ›
-    crate › folder …`; each segment drills to itself, the root to the overview.
+```
+[ crates ▾ ] › all › auth › domain        ⟨ ⊟ depth 0 ⊞ ⟩
+   tier-dropdown  root   path chips           reveal-depth lens
+```
 
-The tier ladder (`grouperForDig` / `groupKeyAtDig`) lives in `grouping.js`, derived
-entirely from file-id paths plus the `crate` grouping attribute — no extra backend
-data. Both axes are carried in the URL (`dig=` param) and restored on load /
-`popstate` via `applyViewState`.
+**Tier (`window.tier`, resolved by `viewTier`)** — the grouping **dimension**:
+`'crate'` (group by the crate attribute, the default when the level declares a
+grouping key) or `'file'` (ignore crates, group purely by directory). The leftmost
+chip is the **tier dropdown** — its label opens a small menu (crates ⇄ files); it
+is only shown when the level has crates. Picking a dimension (or re-picking the
+current one) navigates to that tier's overview via `switchTier`.
 
-**Node labels**: a group box shows its full path + member-node count `(N)` (what
-opens on drill-in); a file box (drilled view) shows just the file **name** — no
-counts. Box mode only — metric (SLOC/HK) circles show the metric value and are
-always filled (red at the crate tier, blue otherwise).
+**Root element** — the chip after the dropdown: `all` (crate tier) / `root` (file
+tier). It drills out to the whole-tree overview (`drillOutOfGroup`); at the
+overview it is the current (non-clickable) position. Its hover count is the total
+crate / local-file count.
+
+**Focus (`window.drillGroup` + `window.drillDig`)** — clicking a box drills into
+just that group; `drillGroup` is the group key, `drillDig` the dig it sits at
+(`digOfKeyForTier`). The breadcrumb path chips are the key split on `/`; each chip
+drills to itself (`drillIntoGroup(key, level, chipDig)`). In the focused view,
+directory sub-cluster labels are the **full** workspace path (`nodeFullDir`);
+caller/dependency neighbour boxes drop the crate prefix when every neighbour shares
+the drilled crate, else keep the full key.
+
+**Reveal depth** — the trailing **lens chip** `⟨ ⊟ depth N ⊞ ⟩`, a single dial
+stepped by `setDig` (±1). `N` is the offset from the **landing** (`0` at every
+landing — the user only moves it with the buttons); `⊞` reveals one level deeper,
+`⊟` collapses. The lens drives:
+  - **overview** → `window.dig` (the LOD), with `depth = dig - overviewBaseDig`.
+    The landing `overviewBaseDig` is the crate tier (dig 0) or, on the file tier,
+    one level below the directory root (top folders) rather than the finest
+    per-folder grouping. `⊟` below the landing folds crates/folders into coarser
+    boxes; `⊞` reveals finer groups.
+  - **focus** → `window.focusDig` (≤ 0), with `depth = focusDig - minFz`
+    (`minFz = focusMinFz`). The focused view is **hybrid**: at reveal depth `D`,
+    a node whose folder level under the focus is ≤ `D` renders as an individual
+    **file** inside its directory sub-cluster; a deeper node collapses into a
+    **folder box** at the frontier (focus + `D` + 1 levels, `groupKeyAtDig`). So
+    depth `0` shows the focus's direct files (in their dir cluster) **plus** its
+    immediate subfolders as collapsed boxes; `⊞` opens one more level. Clicking a
+    folder box drills into it; clicking a file opens its modal.
+
+  The lens is hidden when there is nothing to reveal/collapse. Hover counts under
+  the buttons preview the rendered element count one step away (`focusRenderCount`
+  — files + collapsed boxes — in focus; `groupCountAtDig` in the overview).
+
+**Tier switching (`switchTier`, crate ⇄ files)** maps the focus across dimensions
+around the **crate-root directory** boundary (a crate ≡ its source directory):
+  - *crates → files* (`crateKeyToFileKey`): expand the crate chip into its real
+    path segments, keep the folder tail.
+  - *files → crates* (`fileKeyToCrateKey`): collapse the deepest path prefix that
+    equals a crate root into the crate chip; a path inside **no** crate falls back
+    to the nearest representable ancestor (down to the overview).
+  - the focus lands at reveal depth 0 (most collapsed). The needed **crate →
+    root-directory** map comes from `crateRoots` in `grouping.js`.
+
+The **tier ladder** (`grouperForDig` / `groupKeyAtDig` in `grouping.js`) computes
+group keys from file-id paths + the `crate` attribute — no extra backend data. The
+crate tier descends/ascends via `crateRoots`/`crateDirs`/`maxCrateDepth`; the file
+tier uses an **absolute** directory ladder anchored on `maxFileDepth` (so a fixed
+directory key has one well-defined dig, making file-tier drilling unambiguous).
+`window.tier` and `depth` (the lens offset from the landing — focus collapse or
+overview LOD) round-trip through the URL (`tier=`, `depth=`, both omitted at the
+default) and restore on load / `popstate` via `applyViewState`, which clamps the
+restored `focusDig` into the focus's valid range. Per-node expand-in-place
+overrides and showing individual files inline in the **overview** are **not yet
+implemented** (the overview always renders group boxes).
+
+**Node labels**: a collapsed box shows its full path + member-node count `(N)`
+(what opens on drill-in); a file box shows just the file **name** — no counts. Box
+mode only — metric (SLOC/HK) circles show the metric value and are always filled
+(red at the crate tier, blue otherwise).
 
 **Layout density**: the map is laid out at natural size with packed spacing
 (`nodesep`/`ranksep` tiny, `height=0`/`width=0` boxes) and **no `ratio=fill` /
@@ -184,9 +216,9 @@ vertically. Strokes (node borders, edges) and arrowheads scale with the SVG fit
 like everything else; edges set `arrowsize=0.6` so the arrowheads stay legible
 rather than oversized on sparse, scaled-up graphs.
 
-Nested **crate clusters** at `dig +1` (crate boxes wrapping their folder groups)
-are implemented (`cluster_crate_N`). Not yet implemented: the diagonal in/out
-cluster placement — see `REFACTOR-split-plan.md`.
+Nested **crate clusters** (a crate's folder groups wrapped in a labelled box once
+the reveal depth opens that crate) are implemented (`cluster_crate_N`). Not yet
+implemented: the diagonal in/out cluster placement.
 
 ## Affected status
 
@@ -225,6 +257,5 @@ base91-encoded string and instantiates it from an `ArrayBuffer` — works from
 ---
 
 **Related docs**: [PRD.md](PRD.md) (viewer requirements) ·
-[REFACTOR-split-plan.md](REFACTOR-split-plan.md) (the asset split + zoom plan) ·
 main [DESIGN](../DESIGN.md) · [`code-ranker-cli/DESIGN.md`](../code-ranker-cli/DESIGN.md)
 (the `report` command and `render_html_viewer`)

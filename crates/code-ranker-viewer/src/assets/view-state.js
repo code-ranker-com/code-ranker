@@ -161,14 +161,14 @@ function recomputeAll() {
   window.drillGroup = null;
   window.dig       = 0;
   window.drillDig  = 0;
+  window.tier      = null;
+  window.focusDig  = 0;
   window.clearGroupingCache?.();
-  document.querySelectorAll('.drill-breadcrumb').forEach(bc => { bc.style.display = 'none'; });
-  document.querySelectorAll('.dig-lod').forEach(el => el.style.removeProperty('display'));
   document.querySelectorAll('.svg-frame').forEach(f => { delete f.dataset.bigConfirmed; });
   document.querySelectorAll('.view').forEach(sec => { sec.dataset.rendered = 'false'; });
 
   updateHeader();
-  window.updateDigLabel?.();
+  window.renderBreadcrumb?.();
 
   // Re-render active view
   const active = document.querySelector('.view.active');
@@ -236,21 +236,37 @@ function renderView(section, opts = {}) {
 function applyViewState(st, { rerender = false } = {}) {
   const grp  = st.group || null;
   const mode = st.mode  || null;
-  const dig = st.dig != null ? (Number(st.dig) | 0) : 0;
+  const depth = st.depth != null ? (Number(st.depth) | 0) : 0;
+  const tier = (st.tier === 'crate' || st.tier === 'file') ? st.tier : null;
   // Summary aggregation (popup): restore from the URL/history, falling back to the
   // default `avg` when the param is absent. setSummaryStat re-renders + syncs the radio.
   window.setSummaryStat?.(st.stat || 'avg');
   let changed = false;
-  if ((window.dig || 0)  !== dig) { window.dig          = dig; changed = true; }
-  if (window.drillGroup   !== grp)  { window.drillGroup   = grp;  window.drillDig = grp ? dig : 0; changed = true; }
+  if ((window.tier || null) !== tier) { window.tier       = tier; changed = true; }
   if (window.nodeSizeMode !== mode) { window.nodeSizeMode = mode; changed = true; }
-  // Sync breadcrumb (focus) and the relative-zoom control (overview only).
   const lvl = st.level ?? currentLevel();
+  // The focus's base dig is derived from the key itself (deterministic per tier),
+  // not from the URL, so a folder/crate focus round-trips correctly.
+  if (window.drillGroup !== grp) {
+    window.drillGroup = grp;
+    window.drillDig   = grp ? (window.digOfKeyForTier?.(lvl, grp, window.viewTier(lvl)) ?? 0) : 0;
+    changed = true;
+  }
+  // `depth` is the reveal-depth lens offset from the context default: focused → the
+  // focus collapse (focusDig = −depth, 0 = files); overview → the LOD (dig = depth).
+  if (grp != null) {
+    // Clamp into the focus's valid range [minFz, 0] so a stale/out-of-range depth
+    // in the URL can't land on an invalid focusDig.
+    const minFz = window.focusMinFz?.(lvl) ?? 0;
+    const fz = Math.max(minFz, Math.min(0, minFz + depth));
+    if ((window.focusDig || 0) !== fz) { window.focusDig = fz; changed = true; }
+  } else {
+    window.focusDig = 0;
+    const z = (window.overviewBaseDig?.(lvl) ?? 0) + depth;
+    if ((window.dig || 0) !== z) { window.dig = z; changed = true; }
+  }
+  // Sync the always-visible breadcrumb (tier dropdown + path chips + reveal-depth lens).
   window.renderBreadcrumb?.(lvl);
-  // Overview: the standalone dig control. Focus: it is hidden — the +/- collapse
-  // control lives inside the breadcrumb instead (renderBreadcrumb).
-  document.querySelectorAll('.dig-lod').forEach(el => { el.style.display = grp ? 'none' : ''; });
-  window.updateDigLabel?.(lvl);
   // Sync metric buttons
   document.querySelectorAll('.size-row[data-row="metric"] .size-mode-btn').forEach(b => {
     const bMode = b.dataset.size === 'dot' ? null : b.dataset.size;

@@ -90,9 +90,9 @@ function buildDOT(nodes, edges, level, viewport) {
     const baselineById = new Map((window.BASELINE?.graphs?.[level]?.nodes || []).map(n => [n.id, n]));
     const currentById  = new Map((window.CURRENT?.graphs?.[level]?.nodes  || []).map(n => [n.id, n]));
 
-    // Crate-tier groups (zoom 0) are pink; any other grouping (by folder) is a
-    // uniform neutral white, so the colour signals "these are crates".
-    const isCrateTier = activeDig === 0 && !!(levelUi(level).grouping?.key);
+    // Crate-tier groups (zoom 0) are pink; any other grouping (folders, or the
+    // file tier) is a uniform neutral white, so the colour signals "these are crates".
+    const isCrateTier = window.viewTier(level) === 'crate' && activeDig === 0 && !!(levelUi(level).grouping?.key);
     const groupFill   = isCrateTier ? '#ffd4d4' : '#ffffff';
     // Metric circles are always filled — red for the crate tier, blue otherwise
     // (white reads as "empty" / unfinished on the folder tiers).
@@ -124,7 +124,7 @@ function buildDOT(nodes, edges, level, viewport) {
     // At dig IN (>0) with crate grouping, wrap each crate's folder-groups in a
     // labelled crate cluster — so folders read as "inside their crate", mirroring
     // the drilled view's directory sub-clusters. dig 0 / dig OUT render flat.
-    const clusterByCrate = activeDig > 0 && !!(levelUi(level).grouping?.key);
+    const clusterByCrate = window.viewTier(level) === 'crate' && activeDig > 0 && !!(levelUi(level).grouping?.key);
     if (clusterByCrate) {
       const crateOf = g => { const i = g.indexOf('/'); return i >= 0 ? g.slice(0, i) : g; };
       const byCrate = new Map();   // crate → [[g, gNodes], …]
@@ -188,21 +188,34 @@ function buildDOT(nodes, edges, level, viewport) {
   // 0 = individual files (default); a negative value collapses the focus's files
   // into folder boxes, deepest folders first (mirrors the overview's dig out → in).
   const gkey = levelUi(level).grouping?.key;
+  const fileTier = window.viewTier(level) === 'file';
   const underDepth = n => {
     const dirs  = relPathOf(n.id).split('/').slice(0, -1);
-    const crate = gkey ? n[gkey] : null;
-    if (crate == null || crate === '') return dirs.length;
+    const crate = (!fileTier && gkey) ? n[gkey] : null;
+    // File tier (or crate-less): the file's position on the ABSOLUTE file-dig
+    // ladder (`dirs.length - maxFileDepth`), the same units `drillDig` uses there —
+    // so the focus collapse math compares like with like. Crate tier: depth under
+    // the crate root.
+    if (crate == null || crate === '') return dirs.length - maxFileDepth(level);
     return Math.max(0, dirs.length - (crateRoots(level).get(String(crate)) || []).length);
   };
   const maxFocusD  = drillNodes.length ? Math.max(...drillNodes.map(underDepth)) : 0;
   const fz         = window.focusDig || 0;
-  const folderMode = fz < 0 && maxFocusD > activeDig;
-  // Grouping dig for the folder boxes: −1 → deepest folders, down to one level
-  // under the focused group.
-  const focusD     = folderMode ? Math.min(maxFocusD, Math.max(activeDig + 1, maxFocusD + fz + 1)) : 0;
-  // File id (files mode) or the file's folder-box key (folder mode).
-  const renderId   = id => { const n = allNodesById.get(id); return (folderMode && n) ? groupKeyAtDig(level, n, focusD) : id; };
-  window._FOCUS = { folderMode, focusD, maxFocusD };
+  // Reveal depth D (0 = the most-collapsed landing, up to maxRel = all files). A
+  // node is shown as an individual FILE when it sits at or above the revealed
+  // frontier (its folder level under the focus ≤ D); deeper nodes collapse into a
+  // folder box at the frontier (focus + D + 1 levels). So depth 0 shows the focus's
+  // direct files (in their dir cluster) plus its immediate subfolders as boxes.
+  const minFz      = -Math.max(0, maxFocusD - activeDig);
+  const D          = fz - minFz;
+  const frontierDig = activeDig + D + 1;
+  const relLevel   = n => underDepth(n) - activeDig;
+  const isFileNode = n => relLevel(n) <= D;
+  const renderId   = id => { const n = allNodesById.get(id); return (n && !isFileNode(n)) ? groupKeyAtDig(level, n, frontierDig) : id; };
+  const anyBoxed   = drillNodes.some(n => !isFileNode(n));
+  // _FOCUS.focusD is the dig the collapsed folder boxes are keyed at (for the
+  // tooltip/click handlers); folderMode flags that some boxes are present.
+  window._FOCUS = { folderMode: anyBoxed, focusD: frontierDig, maxFocusD };
 
   const layoutDiam = n => {
     const db = baselineById.has(n.id) ? metricNodeDiam(baselineById.get(n.id), sizeMode) : 0;
@@ -334,31 +347,33 @@ function buildDOT(nodes, edges, level, viewport) {
     dot += '  }\n';
   }
 
-  if (folderMode) {
-    // Folder mode: one box per folder group (collapsed files), shown flat and
-    // clickable (drilling in is wired in map-interactions via the group key).
-    const groups = new Map();
-    for (const n of drillNodes) { const k = groupKeyAtDig(level, n, focusD); (groups.get(k) || groups.set(k, []).get(k)).push(n); }
-    for (const [k, ns] of groups) {
-      const gCyc = aggCycleStatus(ns.map(n => cycleOf?.get(n.id) || 'none'));
-      const lbl  = `${groupLabel(level, k, focusD)} (${ns.length})`;
-      dot += `  ${dotId(k)} [label=${dotId(lbl)} fillcolor="${N_FILL}" color="${N_COLOR}" shape=box style=filled fontname="Helvetica" fontsize=11 class="cycle-status-${gCyc}"]\n`;
-    }
-  } else {
-    // Files mode: sub-clusters by directory within the drilled group. Labels are
-    // the full workspace-relative directory path with a leading slash (e.g.
-    // "/libs/modkit-odata-macros/src"), so the folder reads in full.
-    const dirOf = n => nodeFullDir(n);
-    const subGroups = new Map();
-    drillNodes.forEach(n => { const d = dirOf(n); (subGroups.get(d) || subGroups.set(d, []).get(d)).push(n); });
-    let si = 0;
-    for (const [label, ns] of subGroups) {
-      dot += `  subgraph cluster_${si++} {\n`;
-      // Faint fill so the whole folder area is hoverable/clickable (drills into it).
-      dot += `    label=${dotId(label)} style=filled fillcolor="#f7f7f7" color="#cccccc" fontcolor="#666666" fontname="Helvetica" fontsize=11\n`;
-      for (const n of ns) dot += `    ${dotId(n.id)} [${nAttr(n)}]\n`;
-      dot += '  }\n';
-    }
+  // Reveal frontier: nodes at/above depth D render as individual files inside
+  // their directory sub-cluster; deeper nodes collapse into a folder box at the
+  // frontier. Both kinds can appear together — e.g. the focus's direct files in a
+  // "/src" cluster alongside collapsed "/src/render", "/src/scan" boxes.
+  const fileNodes = drillNodes.filter(isFileNode);
+  const boxNodes  = drillNodes.filter(n => !isFileNode(n));
+
+  // Collapsed folder boxes (deeper than the frontier), deduped by box key.
+  const boxes = new Map();
+  for (const n of boxNodes) { const k = groupKeyAtDig(level, n, frontierDig); (boxes.get(k) || boxes.set(k, []).get(k)).push(n); }
+  for (const [k, ns] of boxes) {
+    const gCyc = aggCycleStatus(ns.map(n => cycleOf?.get(n.id) || 'none'));
+    const lbl  = `${groupLabel(level, k, frontierDig)} (${ns.length})`;
+    dot += `  ${dotId(k)} [label=${dotId(lbl)} fillcolor="${N_FILL}" color="${N_COLOR}" shape=box style=filled fontname="Helvetica" fontsize=11 class="cycle-status-${gCyc}"]\n`;
+  }
+
+  // Revealed files: directory sub-clusters labelled with the full workspace-relative
+  // path (e.g. "/libs/modkit-odata-macros/src"), faint-filled so the folder area is
+  // hoverable/clickable to drill in.
+  const subGroups = new Map();
+  fileNodes.forEach(n => { const d = nodeFullDir(n); (subGroups.get(d) || subGroups.set(d, []).get(d)).push(n); });
+  let si = 0;
+  for (const [label, ns] of subGroups) {
+    dot += `  subgraph cluster_${si++} {\n`;
+    dot += `    label=${dotId(label)} style=filled fillcolor="#f7f7f7" color="#cccccc" fontcolor="#666666" fontname="Helvetica" fontsize=11\n`;
+    for (const n of ns) dot += `    ${dotId(n.id)} [${nAttr(n)}]\n`;
+    dot += '  }\n';
   }
 
   // Right cluster — dependencies of this group

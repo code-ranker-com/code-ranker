@@ -209,6 +209,10 @@ function buildDOT(nodes, edges, level, viewport) {
   const minFz      = -Math.max(0, maxFocusD - activeDig);
   const D          = fz - minFz;
   const frontierDig = activeDig + D + 1;
+  // The focus's PARENT dir — subtracted from folder labels so a drilled view shows
+  // paths relative to where you are while keeping the focus folder's own name
+  // (focus `…/sdk/src` → `/src`, children `/src/render`), not the long ancestor path.
+  const focusBase  = focusStripBase(level);
   const relLevel   = n => underDepth(n) - activeDig;
   const isFileNode = n => relLevel(n) <= D;
   const renderId   = id => { const n = allNodesById.get(id); return (n && !isFileNode(n)) ? groupKeyAtDig(level, n, frontierDig) : id; };
@@ -249,81 +253,53 @@ function buildDOT(nodes, edges, level, viewport) {
     return `label=${dotId(n.name)} fillcolor="${fill}" color="${col}" ${cls}`;
   };
 
-  // ── Collect external neighbor groups (no 3rd-party) ───────────────────────────
-  // inGrpFiles: groups that call INTO our files (left side)
-  // outGrpFiles: groups that our files call OUT TO (right side)
-  // A group in both → only appears on the left.
-  // Each value is a Map<our-file-id, {b,c}> tracking on which diff side(s) the
-  // connection exists, so the connector edges and neighbour group boxes can carry
-  // the same `status-*` class the internal nodes/edges do — and therefore toggle
-  // with Baseline/Current instead of always showing the union (see statusClass).
-  const inGrpFiles  = new Map(); // group → Map<our-file-id, {b,c}>
-  const outGrpFiles = new Map(); // group → Map<our-file-id, {b,c}>
-  // The map lays out the union (DIFF) graph: 'added' = current-only, 'removed' =
-  // baseline-only, 'unchanged'/'affected' = both. Fold an edge's status into the
-  // per-(group,file) presence flags.
-  const touchGrp = (m, g, fid, e) => {
-    let files = m.get(g);
-    if (!files) { files = new Map(); m.set(g, files); }
-    let rec = files.get(fid);
-    if (!rec) { rec = { b: false, c: false }; files.set(fid, rec); }
+  // ── Collect neighbour CRATES (callers / dependencies, no 3rd-party) ───────────
+  // Group every cross-boundary edge by the OTHER end's **crate** (regardless of
+  // tier / focus depth), so the boxes are a stable list of crates. Both **flow**
+  // (uses) and **non-flow** (contains / reexports) edges are included. Per crate:
+  //   • `their` — the distinct neighbour-side files coupled via **flow** edges (the
+  //     box's `(N)` count); a crate reached only by non-flow edges counts `(0)`.
+  //   • `our`   — our render-ids the connector edges fan to, with per-diff-side
+  //     presence (Baseline/Current toggle) and `flow` = does ANY edge to that file
+  //     flow (flow wins → solid connector; else dashed).
+  // A crate that is both a caller and a dependency appears on the left only.
+  const crateOf = n => { const c = gkey ? n[gkey] : null; return (c != null && c !== '') ? String(c) : gOf(n); };
+  const inGrp  = new Map();   // crate → { their:Set<flow-their-file>, our:Map<our-id,{b,c,flow}> }
+  const outGrp = new Map();
+  const touch = (m, crate, theirFile, ourId, e, flow) => {
+    let r = m.get(crate);
+    if (!r) { r = { their: new Set(), our: new Map() }; m.set(crate, r); }
+    if (flow) r.their.add(theirFile);   // count flow-coupled files only
+    let rec = r.our.get(ourId);
+    if (!rec) { rec = { b: false, c: false, flow: false }; r.our.set(ourId, rec); }
     rec.b = rec.b || e.status !== 'added';    // present in baseline
     rec.c = rec.c || e.status !== 'removed';  // present in current
+    rec.flow = rec.flow || flow;              // flow priority: solid if any flow edge
   };
   for (const e of edges) {
-    if (!edgeIsFlow(level, e.kind)) continue;   // map shows only flow connections
+    const flow = edgeIsFlow(level, e.kind);
     const sIn = drillIds.has(e.source), tIn = drillIds.has(e.target);
     if (!sIn && tIn) {
       const src = allNodesById.get(e.source);
       if (!src || isExternalNode(src, level)) continue;
-      const g = gOf(src);
-      if (g === drillGroup) continue;
-      touchGrp(inGrpFiles, g, renderId(e.target), e);
+      touch(inGrp, crateOf(src), e.source, renderId(e.target), e, flow);
     } else if (sIn && !tIn) {
       const tgt = allNodesById.get(e.target);
       if (!tgt || isExternalNode(tgt, level)) continue;
-      const g = gOf(tgt);
-      if (g === drillGroup) continue;
-      touchGrp(outGrpFiles, g, renderId(e.source), e);
+      touch(outGrp, crateOf(tgt), e.target, renderId(e.source), e, flow);
     }
   }
-  // Groups in both → remove from outGrpFiles (they appear left only)
-  for (const g of inGrpFiles.keys()) outGrpFiles.delete(g);
+  for (const c of inGrp.keys()) outGrp.delete(c);   // a crate in both → callers only
 
   // Diff side-presence → the same status class the union nodes/edges carry, so the
   // `.hide-{nodes,edges}-{added,removed}` toggle CSS hides them on the off side.
   const statusClass = (b, c) => (b && c) ? 'unchanged' : c ? 'added' : 'removed';
-  // A neighbour group box exists on a side if ANY of its file connections do.
-  const grpStatus = files => {
-    let b = false, c = false;
-    for (const rec of files.values()) { b = b || rec.b; c = c || rec.c; }
-    return statusClass(b, c);
-  };
-  // Whole-cluster status (callers / dependencies): OR over every group+file in it,
-  // so the cluster background+label hides on the side where it has no connections —
-  // otherwise an all-one-side cluster would leave an empty labelled box after a
-  // toggle. (Member boxes are NOT children of the cluster <g> in graphviz SVG, so
-  // hiding the cluster <g> only hides its background/label, not the boxes.)
-  const clusterStatus = m => {
-    let b = false, c = false;
-    for (const files of m.values())
-      for (const rec of files.values()) { b = b || rec.b; c = c || rec.c; }
-    return statusClass(b, c);
-  };
-
-  // Neighbour (callers/dependencies) labels: when every neighbour lives in the
-  // SAME crate as the drilled group, drop the crate prefix and show just the
-  // folder ("/domain"); otherwise keep the full key so cross-crate neighbours
-  // stay distinguishable.
-  const crateOfKey  = k => { const i = k.indexOf('/'); return i >= 0 ? k.slice(0, i) : k; };
-  const drillCrate  = crateOfKey(drillGroup);
-  const neighbourKeys = [...inGrpFiles.keys(), ...outGrpFiles.keys()];
-  const singleCrate = neighbourKeys.every(k => crateOfKey(k) === drillCrate);
-  const neighborLabel = k => {
-    if (!singleCrate) return k;
-    const i = k.indexOf('/');
-    return i >= 0 ? '/' + k.slice(i + 1) : k;
-  };
+  const grpStatus = r => { let b = false, c = false; for (const rec of r.our.values()) { b = b || rec.b; c = c || rec.c; } return statusClass(b, c); };
+  // Whole-cluster status (callers / dependencies): OR over every connection in it,
+  // so the cluster background+label hides on the side where it has none (member
+  // boxes are siblings of the cluster <g> in graphviz SVG, so hiding the <g> only
+  // hides its background/label, not the boxes — hence the per-box status above).
+  const clusterStatus = m => { let b = false, c = false; for (const r of m.values()) for (const rec of r.our.values()) { b = b || rec.b; c = c || rec.c; } return statusClass(b, c); };
 
   const IN_EDGE_COLOR  = '#88bb88';
   const OUT_EDGE_COLOR = '#ccaa77';
@@ -332,18 +308,19 @@ function buildDOT(nodes, edges, level, viewport) {
 
   // Node style for external group boxes in the neighbor clusters
   // Always boxes regardless of metric mode — fixedsize/width from global node default must be reset.
-  const extNode = (label, borderColor, fillColor, cls) =>
-    `[label=${dotId(label)} fillcolor="${fillColor}" color="${borderColor}" shape=box style=filled fixedsize=false fontname="Helvetica" fontsize=11${cls ? ` class="${cls}"` : ''}]`;
+  // `dashed` → a crate reached only by non-flow edges gets a dashed outline.
+  const extNode = (label, borderColor, fillColor, cls, dashed) =>
+    `[label=${dotId(label)} fillcolor="${fillColor}" color="${borderColor}" shape=box style="${dashed ? 'filled,dashed' : 'filled'}" fixedsize=false fontname="Helvetica" fontsize=11${cls ? ` class="${cls}"` : ''}]`;
   const inNodeId  = g => 'IN\x01' + g;
   const outNodeId = g => 'OUT\x01' + g;
 
-  // Left cluster — callers of this group
-  if (inGrpFiles.size > 0) {
+  // Left cluster — caller crates (label `crate (N coupled files)`)
+  if (inGrp.size > 0) {
     dot += `  subgraph cluster_in {\n`;
-    dot += `    class="status-${clusterStatus(inGrpFiles)}"\n`;
+    dot += `    class="status-${clusterStatus(inGrp)}"\n`;
     dot += `    label="callers" style=filled fillcolor="${IN_FILL}" color="#88bb88" fontcolor="#447744" fontname="Helvetica" fontsize=11\n`;
-    for (const [g, files] of inGrpFiles)
-      dot += `    ${dotId(inNodeId(g))} ${extNode(neighborLabel(g), IN_EDGE_COLOR, IN_FILL, 'status-' + grpStatus(files))}\n`;
+    for (const [crate, r] of inGrp)
+      dot += `    ${dotId(inNodeId(crate))} ${extNode(`${crate} (${r.their.size})`, IN_EDGE_COLOR, IN_FILL, 'status-' + grpStatus(r), r.their.size === 0)}\n`;
     dot += '  }\n';
   }
 
@@ -359,8 +336,10 @@ function buildDOT(nodes, edges, level, viewport) {
   for (const n of boxNodes) { const k = groupKeyAtDig(level, n, frontierDig); (boxes.get(k) || boxes.set(k, []).get(k)).push(n); }
   for (const [k, ns] of boxes) {
     const gCyc = aggCycleStatus(ns.map(n => cycleOf?.get(n.id) || 'none'));
-    const lbl  = `${groupLabel(level, k, frontierDig)} (${ns.length})`;
-    dot += `  ${dotId(k)} [label=${dotId(lbl)} fillcolor="${N_FILL}" color="${N_COLOR}" shape=box style=filled fontname="Helvetica" fontsize=11 class="cycle-status-${gCyc}"]\n`;
+    const lbl  = `${stripDirPrefix(focusBase, groupLabel(level, k, frontierDig))} (${ns.length})`;
+    // Collapsed folders are grey (matching the expanded dir sub-clusters) so they
+    // read as folders, distinct from the blue file nodes.
+    dot += `  ${dotId(k)} [label=${dotId(lbl)} fillcolor="#ececec" color="#bbbbbb" fontcolor="#555555" shape=box style=filled fontname="Helvetica" fontsize=11 class="cycle-status-${gCyc}"]\n`;
   }
 
   // Revealed files: directory sub-clusters labelled with the full workspace-relative
@@ -371,30 +350,30 @@ function buildDOT(nodes, edges, level, viewport) {
   let si = 0;
   for (const [label, ns] of subGroups) {
     dot += `  subgraph cluster_${si++} {\n`;
-    dot += `    label=${dotId(label)} style=filled fillcolor="#f7f7f7" color="#cccccc" fontcolor="#666666" fontname="Helvetica" fontsize=11\n`;
+    dot += `    label=${dotId(stripDirPrefix(focusBase, label))} style=filled fillcolor="#f7f7f7" color="#cccccc" fontcolor="#666666" fontname="Helvetica" fontsize=11\n`;
     for (const n of ns) dot += `    ${dotId(n.id)} [${nAttr(n)}]\n`;
     dot += '  }\n';
   }
 
-  // Right cluster — dependencies of this group
-  if (outGrpFiles.size > 0) {
+  // Right cluster — dependency crates (label `crate (N coupled files)`)
+  if (outGrp.size > 0) {
     dot += `  subgraph cluster_out {\n`;
-    dot += `    class="status-${clusterStatus(outGrpFiles)}"\n`;
+    dot += `    class="status-${clusterStatus(outGrp)}"\n`;
     dot += `    label="dependencies" style=filled fillcolor="${OUT_FILL}" color="#ccaa77" fontcolor="#886633" fontname="Helvetica" fontsize=11\n`;
-    for (const [g, files] of outGrpFiles)
-      dot += `    ${dotId(outNodeId(g))} ${extNode(neighborLabel(g), OUT_EDGE_COLOR, OUT_FILL, 'status-' + grpStatus(files))}\n`;
+    for (const [crate, r] of outGrp)
+      dot += `    ${dotId(outNodeId(crate))} ${extNode(`${crate} (${r.their.size})`, OUT_EDGE_COLOR, OUT_FILL, 'status-' + grpStatus(r), r.their.size === 0)}\n`;
     dot += '  }\n';
   }
 
   // Pin callers strictly left, dependencies strictly right
-  if (inGrpFiles.size > 0) {
+  if (inGrp.size > 0) {
     dot += '  { rank=min';
-    for (const g of inGrpFiles.keys()) dot += `; ${dotId(inNodeId(g))}`;
+    for (const c of inGrp.keys()) dot += `; ${dotId(inNodeId(c))}`;
     dot += ' }\n';
   }
-  if (outGrpFiles.size > 0) {
+  if (outGrp.size > 0) {
     dot += '  { rank=max';
-    for (const g of outGrpFiles.keys()) dot += `; ${dotId(outNodeId(g))}`;
+    for (const c of outGrp.keys()) dot += `; ${dotId(outNodeId(c))}`;
     dot += ' }\n';
   }
 
@@ -427,24 +406,19 @@ function buildDOT(nodes, edges, level, viewport) {
     dot += `  ${dotId(s)} -> ${dotId(t)} [${eAttr(e)} constraint=false]\n`;
   }
 
-  // Inbound group → our file (one edge per inGroup+file pair). The `status-*` class
-  // makes the connector follow the Baseline/Current toggle just like the internal
-  // edges — a caller link that exists only in one snapshot hides on the other side.
-  for (const [g, files] of inGrpFiles) {
-    const src = dotId(inNodeId(g));
-    for (const [fid, rec] of files)
-      dot += `  ${src} -> ${dotId(fid)} [color="${IN_EDGE_COLOR}" style="solid" constraint=false class="edge-in status-${statusClass(rec.b, rec.c)}"]\n`;
-    // If this group is also an outbound group (both roles), draw those edges too
-    if (outGrpFiles.has(g)) {
-      for (const [fid, rec] of outGrpFiles.get(g))
-        dot += `  ${dotId(fid)} -> ${src} [color="${IN_EDGE_COLOR}" style="solid" constraint=false class="edge-in status-${statusClass(rec.b, rec.c)}"]\n`;
-    }
+  // Caller crate → our files (one connector per coupled our-file). The `status-*`
+  // class makes the connector follow the Baseline/Current toggle just like the
+  // internal edges — a link that exists in only one snapshot hides on the other.
+  for (const [crate, r] of inGrp) {
+    const src = dotId(inNodeId(crate));
+    for (const [fid, rec] of r.our)
+      dot += `  ${src} -> ${dotId(fid)} [color="${IN_EDGE_COLOR}" style="${rec.flow ? 'solid' : 'dashed'}" constraint=false class="edge-in status-${statusClass(rec.b, rec.c)}"]\n`;
   }
-  // Our file → outbound group
-  for (const [g, files] of outGrpFiles) {
-    const tgt = dotId(outNodeId(g));
-    for (const [fid, rec] of files)
-      dot += `  ${dotId(fid)} -> ${tgt} [color="${OUT_EDGE_COLOR}" style="solid" constraint=false class="edge-out status-${statusClass(rec.b, rec.c)}"]\n`;
+  // Our files → dependency crate
+  for (const [crate, r] of outGrp) {
+    const tgt = dotId(outNodeId(crate));
+    for (const [fid, rec] of r.our)
+      dot += `  ${dotId(fid)} -> ${tgt} [color="${OUT_EDGE_COLOR}" style="${rec.flow ? 'solid' : 'dashed'}" constraint=false class="edge-out status-${statusClass(rec.b, rec.c)}"]\n`;
   }
 
   dot += '}';

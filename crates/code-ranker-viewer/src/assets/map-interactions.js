@@ -164,6 +164,24 @@ function focusRenderCount(level, fz) {
   return files + boxes.size;
 }
 
+// Node budget for the auto-chosen landing depth when drilling in.
+const FOCUS_NODE_BUDGET = 20;
+// The focusDig to land on when drilling into a crate/folder: the most-revealed
+// view (highest reveal depth) whose rendered element count stays under
+// FOCUS_NODE_BUDGET. Falls back to the most-collapsed view (`minFz`, depth 0) when
+// even that is already at/over budget. e.g. counts {d1:3, d2:18, d3:34} → land on
+// d2 (18, the largest under 20).
+function landingFocusDig(level) {
+  const minFz = focusMinFz(level);
+  let best = minFz, bestCount = -1;
+  for (let fz = minFz; fz <= 0; fz++) {
+    const c = focusRenderCount(level, fz);
+    if (c < FOCUS_NODE_BUDGET && c > bestCount) { bestCount = c; best = fz; }
+  }
+  return best;
+}
+window.landingFocusDig = landingFocusDig;
+
 // The dig at which a focus `key` is a group key, for a tier — used as drillDig.
 function digOfKeyForTier(level, key, tier) {
   if (tier === 'file') return key.split('/').length - maxFileDepth(level);
@@ -295,7 +313,7 @@ function switchTier(tier, level) {
   if (mapped != null && mapped !== '_root') {
     window.drillGroup = mapped;
     window.drillDig   = digOfKeyForTier(level, mapped, tier);
-    window.focusDig   = focusMinFz(level);   // land at reveal depth 0 (most collapsed)
+    window.focusDig   = landingFocusDig(level);   // land at the depth that fits the node budget
   } else {
     window.drillGroup = null;
     // Land the overview at a coarse top-level grouping: crates at dig 0; the file
@@ -317,7 +335,7 @@ function drillIntoGroup(groupId, level, dig) {
   // remember the dig it came from — caller may override (a crate cluster drills
   // into the whole crate → crate-tier grouper, dig 0).
   window.drillDig  = (dig != null) ? dig : (window.dig || 0);
-  window.focusDig  = focusMinFz(level);   // land at reveal depth 0 (most collapsed); ⊞ reveals
+  window.focusDig  = landingFocusDig(level);   // land at the depth that fits the node budget
   renderBreadcrumb(level);
   window.navPushView?.();
   document.querySelectorAll('.view').forEach(sec => { sec.dataset.rendered = 'false'; });
@@ -350,6 +368,17 @@ function focusFolderTarget(level, n) {
     ? dirs.length - maxFileDepth(level)
     : Math.max(0, dirs.length - (crateRoots(level).get(String(crate)) || []).length);
   return { key: groupKeyAtDig(level, n, dig), dig };
+}
+
+// Drill target (key + dig) for a neighbour **crate** box (callers/dependencies) —
+// the crate's folder in the current tier: the crate itself at the crate tier, its
+// source directory at the file tier.
+function crateFocusTarget(level, crate) {
+  if (window.viewTier(level) === 'file') {
+    const key = crateKeyToFileKey(level, crate);
+    if (key && key !== '_root') return { key, dig: digOfKeyForTier(level, key, 'file') };
+  }
+  return { key: crate, dig: 0 };
 }
 
 // Clamp a focus-dig (collapse level inside a focused group): 0 = individual files,
@@ -497,8 +526,11 @@ function setupEdgeHighlight(svgFrame, level) {
   const allNodeEls = [...svgFrame.querySelectorAll('g.node')];
   if (allEdgeEls.length === 0) return;
   // Node lookup so a dir sub-cluster's edges can be matched by the same
-  // crate-relative dir label ("/src/…") that layout.js prints.
+  // focus-relative dir label that layout.js prints (the focus path is subtracted —
+  // see focusDirPath/stripDirPrefix).
   const nodeById = new Map((typeof unionGraph === 'function' ? unionGraph(level).nodes : []).map(n => [n.id, n]));
+  const focusBase = window.focusStripBase?.(level) ?? '';
+  const nodeRelDir = n => stripDirPrefix(focusBase, nodeFullDir(n));
 
   const sb = svgFrame._statusBar;
   const showSB = text => { if (sb) { sb.textContent = text; sb.hidden = false; } };
@@ -599,20 +631,23 @@ function setupEdgeHighlight(svgFrame, level) {
         drillIntoGroup(label, level, 0);
       });
     } else {
-      // Directory sub-cluster: label is the full workspace-relative dir
-      // ("/libs/modkit-odata-macros/src") — must match layout.js's dirOf.
+      // Directory sub-cluster: label is the focus-relative dir layout.js prints
+      // (the focus path subtracted), so match against the same relative form.
       const matchIds = [...edgeMap.keys()].filter(k => {
         const node = nodeById.get(k);
-        return node ? nodeFullDir(node) === label : false;
+        return node ? nodeRelDir(node) === label : false;
       });
       edges = new Set();
       for (const id of matchIds) {
         for (const e of (edgeMap.get(id) ?? new Set())) edges.add(e);
       }
       nc = matchIds.length;
-      // Clicking the folder (its background, not a file box) drills into it.
-      const sampleId = clusterEl.querySelector('g.node title')?.textContent?.trim();
-      const sample   = sampleId ? nodeById.get(sampleId) : null;
+      // Clicking the folder background OR its name drills into it. Find a
+      // representative node by the folder's full dir (robust regardless of whether
+      // graphviz nests the member nodes in the cluster <g>, and even when the
+      // folder's files have no edges) — the old `querySelector('g.node title')`
+      // returned null in those cases, leaving the folder unclickable.
+      const sample = [...nodeById.values()].find(n => nodeRelDir(n) === label);
       if (sample) {
         const tgt = focusFolderTarget(level, sample);
         clusterEl.style.cursor = 'pointer';
@@ -688,9 +723,11 @@ function setupTooltips(svgFrame, level) {
     // ── Drilled file view: wire up individual file nodes ─────────────────────────
     // Map EVERY union node so baseline-only / current-only nodes get handlers too.
     const nodeMap = new Map(unionGraph(level).nodes.map(n => [n.id, n]));
-    // External neighbour boxes are keyed by the drill-time grouper (same as
-    // layout.js) — aggregate their stats so a hover shows crate-style details.
-    const neighbourStats = computeGroupStats(level, grouperForDig(level, window.drillDig ?? 0));
+    // Neighbour boxes are keyed by the OTHER end's crate (same as layout.js) —
+    // aggregate per-crate stats so a hover shows crate-style details.
+    const ngk = levelUi(level).grouping?.key;
+    const neighbourCrateOf = n => { const c = ngk ? n[ngk] : null; return (c != null && c !== '') ? String(c) : grouperForDig(level, window.drillDig ?? 0)(n); };
+    const neighbourStats = computeGroupStats(level, neighbourCrateOf);
     // Focus folder mode: the rendered boxes are folder groups (not files) keyed by
     // the focus-dig grouper — stats + drill-in keyed by the same depth.
     const focusFolder = window._FOCUS?.folderMode ? window._FOCUS : null;
@@ -705,11 +742,12 @@ function setupTooltips(svgFrame, level) {
       const neighborPrefix = nodeId?.startsWith('IN\x01') ? 'IN\x01'
                            : nodeId?.startsWith('OUT\x01') ? 'OUT\x01' : null;
       if (neighborPrefix) {
-        const neighborGroup = nodeId.slice(neighborPrefix.length);
+        const neighborGroup = nodeId.slice(neighborPrefix.length);   // the neighbour crate
         const arrow = neighborPrefix === 'IN\x01' ? '← ' : '→ ';
         g.addEventListener('click', e => {
           e.stopPropagation();
-          drillIntoGroup(neighborGroup, level);
+          const t = crateFocusTarget(level, neighborGroup);
+          drillIntoGroup(t.key, level, t.dig);
         });
         wireNodeHover(g,
           () => {

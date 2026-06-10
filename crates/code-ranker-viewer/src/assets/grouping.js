@@ -215,6 +215,43 @@ function groupLabel(level, key, dig) {
 }
 window.groupLabel = groupLabel;
 
+// The current focus's own directory as a workspace path with a leading slash (the
+// breadcrumb path) — the longest common directory of the focused group's files;
+// '' at the overview. Used to render drilled folder labels RELATIVE to the focus.
+function focusDirPath(level) {
+  const grp = window.drillGroup;
+  if (grp == null) return '';
+  const gOf = grouperForDig(level, window.drillDig ?? 0);
+  let common = null;
+  for (const n of (unionGraph(level).nodes || [])) {
+    if (gOf(n) !== grp) continue;
+    const segs = relPathOf(n.id).split('/').slice(0, -1);
+    if (common === null) common = segs.slice();
+    else { let i = 0; while (i < common.length && i < segs.length && common[i] === segs[i]) i++; common.length = i; }
+  }
+  return (common && common.length) ? '/' + common.join('/') : '';
+}
+window.focusDirPath = focusDirPath;
+
+// The prefix subtracted from drilled folder labels: the focus's PARENT directory,
+// so the focus folder itself keeps its name (focus `…/sdk/src` → its cluster reads
+// `/src`, children `/src/render`) while the long ancestor path is dropped.
+function focusStripBase(level) {
+  const f = focusDirPath(level);
+  if (!f || f === '/') return '';
+  const i = f.lastIndexOf('/');
+  return i > 0 ? f.slice(0, i) : '';
+}
+window.focusStripBase = focusStripBase;
+
+// Strip a focus dir prefix `base` from an absolute folder path, leaving a
+// focus-relative path with a leading slash; "/" when the path IS the focus dir.
+function stripDirPrefix(base, full) {
+  if (base && (full === base || full.startsWith(base + '/'))) return full.slice(base.length) || '/';
+  return full;
+}
+window.stripDirPrefix = stripDirPrefix;
+
 // A node's directory RELATIVE TO ITS CRATE directory, with a leading slash
 // (e.g. "/src/services"); "/" for a file sitting directly in the crate dir. Used
 // for the drilled-view directory sub-cluster labels so they read `/src` rather

@@ -261,8 +261,11 @@ offline HTML report (named `…-diff.html`) displaying:
   highlighting
 - `external` library nodes shown in a distinct amber colour with dashed
   edges to distinguish them from internal file edges
-- Diff summary table: node/edge counts and cycle counts (SCCs, nodes in
-  cycles), baseline vs current with Δ
+- Diff summary: a full-screen overlay (opened by the header **Statistics**
+  button; the page header stays visible) of structural counts
+  (files/folders/groups/edges/nodes-in-cycles) and per-file metric statistics
+  (avg/min/p50/p90/max/sum, picked by a radio and persisted in the URL `stat=`),
+  baseline vs current with Δ, downloadable as **JSON** or **Markdown**
 - All JavaScript and CSS bundled locally (no CDN or external resources)
 
 **Rationale**: Self-contained HTML is viewable without tooling and

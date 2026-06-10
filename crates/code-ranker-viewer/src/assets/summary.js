@@ -79,12 +79,20 @@ function buildSummary() {
   // `dir` is tri-state: true = lower_better, false = higher_better, null/undefined
   // = neutral (no colour). A non-boolean direction means the metric has no agreed
   // "good" way to move (raw sizes, structural counts), so the delta stays uncoloured.
+  // Delta magnitude (unsigned). The value cells stay rounded (fmtNum), but the
+  // delta keeps enough precision to never collapse a real change to "0": large
+  // deltas use the normal rounded/abbreviated form, while a delta that *would*
+  // round to 0 yet is genuinely non-zero (e.g. avg 4.83→4.82, Δ −0.0012) is shown
+  // to 2 significant digits. Only an exactly-equal pair (within float noise) is 0.
+  const fmtDeltaNum = d => {
+    const ad = Math.abs(d);
+    if (ad < 1e-9) return '0';
+    const rounded = fmtNum(ad);
+    return rounded !== '0' ? rounded : String(Number(ad.toPrecision(2)));
+  };
   const fmtDelta = (d, dir) => {
-    // Decide sign + colour from the ROUNDED display magnitude, not the raw delta:
-    // a fractional delta (e.g. 0.04) that formats to "0" must read as a plain,
-    // uncoloured 0 — never a coloured "+0" / "−0".
-    const mag = fmtNum(Math.abs(d));
-    if (mag === '0') return `<td class="num">0</td>`;
+    const mag = fmtDeltaNum(d);
+    if (mag === '0') return `<td class="num">0</td>`;   // exactly equal — plain, uncoloured
     const ds = d > 0 ? `+${mag}` : `−${mag}`;
     let cls = '';
     if (typeof dir === 'boolean') {
@@ -94,149 +102,309 @@ function buildSummary() {
     return `<td class="num${cls}">${ds}</td>`;
   };
 
-  const valueCells = (getB, getA, dir = null) =>
-    levels.map((level, i) => {
-      const gs = i > 0 ? ' grp-start' : '';
-      const b = getB(level), a = getA(level);
-      if (isReview) return `<td class="num${gs}">${fmtV(b)}</td>`;
-      const d = typeof b === 'number' && typeof a === 'number' ? a - b : null;
-      return `<td class="num${gs}">${fmtV(b)}</td><td class="num">${fmtV(a)}</td>` +
-             (d !== null ? fmtDelta(d, dir) : '<td></td>');
-    }).join('');
-
-  const cycleCells = (getB, getA) =>
-    levels.map((level, i) => {
-      const gs = i > 0 ? ' grp-start' : '';
-      const b = getB(level), a = getA(level);
-      const cc = (v, extra) => v > 0
-        ? `<td class="num${extra}"><span class="cycle-badge">${v}</span></td>`
-        : `<td class="num${extra}">${v}</td>`;
-      if (isReview) return cc(b, gs);
-      return cc(b, gs) + cc(a, '') + fmtDelta(a - b, true);
-    }).join('');
-
   const ttAttr = pct => pct ? ` data-tt="${escAttr(JSON.stringify(pct))}"` : '';
 
-  // statCells: getNode reads a node → number (for percentile tooltip). `dir` is the
-  // tri-state direction passed straight to fmtDelta (true/false/null).
-  const statCells = (getNode, dir = null) =>
-    levels.map((level, i) => {
-      const gs = i > 0 ? ' grp-start' : '';
-      const b = nodePercentiles(baseline, level, getNode);
-      const a = nodePercentiles(current,  level, getNode);
-      const bAvg = b ? b.avg : null;
-      const aAvg = a ? a.avg : null;
-      if (isReview) return `<td class="num${gs}"${ttAttr(b)}>${fmtV(bAvg)}</td>`;
-      const d = typeof bAvg === 'number' && typeof aAvg === 'number' ? aAvg - bAvg : null;
-      return `<td class="num${gs}"${ttAttr(b)}>${fmtV(bAvg)}</td>` +
-             `<td class="num"${ttAttr(a)}>${fmtV(aAvg)}</td>` +
-             (d !== null ? fmtDelta(d, dir) : '<td></td>');
-    }).join('');
+  // Render the value cells for one row from its baseline/current numbers: in a diff
+  // that is Baseline | Current | Δ, in review the single value. `ttB`/`ttA` carry
+  // the per-side distribution for the hover tooltip (metric rows); `badge` wraps a
+  // positive count in a cycle badge; `dir` drives the Δ colour.
+  const valueCellsHTML = (b, a, { dir = null, ttB = null, ttA = null, badge = false } = {}) => {
+    const cell = (v, tt) => {
+      const inner = badge && typeof v === 'number' && v > 0
+        ? `<span class="cycle-badge">${fmtV(v)}</span>` : fmtV(v);
+      return `<td class="num"${tt ? ttAttr(tt) : ''}>${inner}</td>`;
+    };
+    if (isReview) return cell(b, ttB);
+    const d = typeof b === 'number' && typeof a === 'number' ? a - b : null;
+    return cell(b, ttB) + cell(a, ttA) + (d !== null ? fmtDelta(d, dir) : '<td></td>');
+  };
 
-  const row = (label, cells, tip, formula) => {
-    const tipAttr = tip ? ` data-tip="${escAttr(tip)}"` : '';
-    const fAttr = formula ? ` data-tip-formula="${escAttr(formula)}"` : '';
-    return `<tr><td class="metric-cell"${tipAttr}${fAttr}>${label}</td>${cells}</tr>`;
+  // A row as BOTH its rendered <tr> and a plain data record (the export reads the
+  // records, so the table and the downloaded file never drift). `b`/`a` are the
+  // baseline/current numbers (null when absent).
+  const rowRecord = (label, b, a, opts = {}) => {
+    const tipAttr = opts.tip ? ` data-tip="${escAttr(opts.tip)}"` : '';
+    const fAttr   = opts.formula ? ` data-tip-formula="${escAttr(opts.formula)}"` : '';
+    const html = `<tr><td class="metric-cell"${tipAttr}${fAttr}>${label}</td>${valueCellsHTML(b, a, opts)}</tr>`;
+    const bn = typeof b === 'number' ? b : null;
+    const an = isReview ? null : (typeof a === 'number' ? a : null);
+    const delta = bn != null && an != null ? an - bn : null;
+    return { html, data: { label, baseline: bn, current: an, delta } };
   };
 
   // ── Row builders: id → function returning the <tr> HTML ('' = skip this row in
-  // this snapshot). Metadata (label/tip/formula/direction) all comes from
-  // schema.js; metric values are the per-file AVERAGE via statCells. The display
-  // order is the explicit ROW_ORDER list at the bottom — reorder THAT to move
-  // rows around. ──
+  // this snapshot). Metadata (label/tip/formula/direction) all comes from schema.js.
+  // metric:<key> rows show the stat picked by the header radio; structural rows are
+  // plain counts. The display order is the `LAYOUT` section tree at the bottom —
+  // edit THAT (sections and their `rows`) to move rows around. ──
   const level0       = levels[0];
   // summary_metrics is the snapshot's curated, already-pruned metric order (Rust
   // assemble_level keeps only keys present on internal nodes — render verbatim).
   const summaryKeys  = levelUi(level0).summary_metrics || [];
 
-  // A per-metric row: per-file AVERAGE via statCells (label/tip/formula/direction
-  // from schema.js).
+  // A per-metric row. The active summary stat (window._summaryStat — avg by
+  // default, set by the header radio) picks what each cell shows: `sum` aggregates
+  // the metric over internal files, every other stat (avg/min/p50/p90/max) reads
+  // the per-file distribution. label/tip/formula/direction come from schema.js.
   const metricRow = key => {
-    const dirRaw = attrDirection(level0, key);  // 'lower_better' | 'higher_better' | null
+    if (!hasAttrKey(level0, key)) return null;   // metric not present in this snapshot
+    const dirRaw = attrDirection(level0, key);   // 'lower_better' | 'higher_better' | null
     const dir    = dirRaw === 'lower_better' ? true : dirRaw === 'higher_better' ? false : null;
-    return row(attrName(level0, key), statCells(n => nodeAttr(n, key), dir),
-               attrDesc(level0, key) || undefined, attrFormula(level0, key) || undefined);
+    const stat   = window._summaryStat || 'avg';
+    const opts   = { dir, tip: attrDesc(level0, key) || undefined, formula: attrFormula(level0, key) || undefined };
+    // Label: the metric key (abbreviation) followed by its human name/explanation
+    // from the spec — e.g. `loc - Lines`, `hk - Henry–Kafura (HK)`. Falls back to
+    // the bare key when the spec carries no distinct name.
+    const human  = attrName(level0, key);   // name || label || key (schema.js)
+    const label  = human && human.toLowerCase() !== key.toLowerCase() ? `${key} - ${human}` : key;
+    if (stat === 'sum')
+      return rowRecord(label, sumAttr(baseline, level0, key), sumAttr(current, level0, key), opts);
+    const distB = nodePercentiles(baseline, level0, n => nodeAttr(n, key));
+    const distA = nodePercentiles(current,  level0, n => nodeAttr(n, key));
+    return rowRecord(label, distB ? distB[stat] : null, distA ? distA[stat] : null,
+                     { ...opts, ttB: distB, ttA: distA });
   };
-  // A project-wide TOTAL row: sum of a node attribute across internal files
-  // (neutral — a raw total has no "good" direction). Skipped if the attribute is
-  // absent from this snapshot.
-  const totalRow = (key, label, tip) => () =>
-    levels.some(l => hasAttrKey(l, key))
-      ? row(label, valueCells(
-          level => sumAttr(baseline, level, key),
-          level => sumAttr(current, level, key)), tip)
-      : '';
+  // Distinct grouping-key values (the groups drawn on the map — e.g. crates) per
+  // side. Empty when the level has no grouping.
+  const groupingKey = levelUi(level0).grouping?.key || null;
+  const countGroups = (snap, level) => {
+    if (!groupingKey) return 0;
+    const s = new Set();
+    for (const n of ((snap?.graphs || {})[level]?.nodes || []))
+      if (!isExternalNode(n, level)) {
+        const v = nodeAttr(n, groupingKey);
+        if (v != null && v !== '') s.add(v);
+      }
+    return s.size;
+  };
+  const groupsLabel = groupingKey
+    ? groupingKey.charAt(0).toUpperCase() + groupingKey.slice(1) + 's'   // crate → Crates
+    : 'Groups';
+  // Distinct directories holding the files (full dir path per node) per side.
+  const countFolders = (snap, level) => {
+    const s = new Set();
+    for (const n of ((snap?.graphs || {})[level]?.nodes || []))
+      if (!isExternalNode(n, level)) s.add(nodeFullDir(n));
+    return s.size;
+  };
   const cyclesRow = () => {
-    const anyCycles = levels.some(level => {
-      const cy = window.CYCLES?.[level];
-      return cy && (cy.cycleBaseline + cy.cycleBoth + cy.cycleCurrent) > 0;
-    });
-    if (!anyCycles) return '';
+    const cy = window.CYCLES?.[level0];
+    if (!cy || (cy.cycleBaseline + cy.cycleBoth + cy.cycleCurrent) === 0) return null;
     // Tooltip: how many cycle groups of each kind were found, from the active
     // snapshot's backend-computed `cycles`. Kind labels come from schema.js.
-    const level = 'files';
     const kc = {};
-    for (const g of (current?.graphs?.[level]?.cycles || [])) kc[g.kind] = (kc[g.kind] || 0) + 1;
+    for (const g of (current?.graphs?.[level0]?.cycles || [])) kc[g.kind] = (kc[g.kind] || 0) + 1;
     const kparts = Object.entries(kc).filter(([, n]) => n > 0)
-      .map(([k, n]) => `${cycleKindLabel(level, k)}: ${n}`);
-    const cyclesTip = kparts.length
+      .map(([k, n]) => `${cycleKindLabel(level0, k)}: ${n}`);
+    const tip = kparts.length
       ? `Nodes in at least one dependency cycle. Cycle groups by type — ${kparts.join(', ')}.`
       : 'Number of nodes that participate in at least one dependency cycle.';
-    return row('Nodes in cycles', cycleCells(
-      level => { const cy = window.CYCLES?.[level]; return cy ? cy.cycleBaseline + cy.cycleBoth : 0; },
-      level => { const cy = window.CYCLES?.[level]; return cy ? cy.cycleCurrent  + cy.cycleBoth : 0; }
-    ), cyclesTip);
+    return rowRecord('Nodes in cycles', cy.cycleBaseline + cy.cycleBoth, cy.cycleCurrent + cy.cycleBoth,
+                     { dir: true, badge: true, tip });
   };
 
+  // ── Structural count rows. These are plain counts (no per-file distribution),
+  // so the per-stat radio does not apply to them. ──
   const builders = {
-    'nodes-sum':  () => row('Nodes', valueCells(           // count — no "good" direction
-                          level => countNodes(baseline, level),
-                          level => countNodes(current, level))),
-    'edges-sum':  () => row('Edges', valueCells(           // count — no "good" direction
-                          level => countEdges(baseline, level),
-                          level => countEdges(current, level)),
-                          'Total dependency edges between internal nodes (external-library edges excluded).'),
-    // Project-wide raw / source line totals (sums of per-file loc / sloc).
-    'loc-sum':    totalRow('loc',  'Lines (total)',        'Total raw lines across all files — the sum of every file’s loc.'),
-    'sloc-sum':   totalRow('sloc', 'Source lines (total)', 'Total source lines across all files — the sum of every file’s sloc.'),
-    'cycles-sum': cyclesRow,
+    'nodes':   () => rowRecord(LLABELS[level0] || 'Nodes',   // "Files" at the files level
+                       countNodes(baseline, level0), countNodes(current, level0)),
+    'folders': () => rowRecord('Folders',
+                       countFolders(baseline, level0), countFolders(current, level0),
+                       { tip: 'Distinct directories that contain the files.' }),
+    'groups':  () => groupingKey
+                       ? rowRecord(groupsLabel,
+                           countGroups(baseline, level0), countGroups(current, level0),
+                           { tip: `Distinct ${groupingKey} values — the groups shown on the map.` })
+                       : null,
+    'edges':   () => rowRecord('Edges',
+                       countEdges(baseline, level0), countEdges(current, level0),
+                       { tip: 'Total dependency edges between internal nodes (external-library edges excluded).' }),
+    'cycles':  cyclesRow,
   };
-  // One builder per summary metric (except sloc — its total is the `sloc-sum` row),
-  // keyed `metric:<key>`.
-  for (const key of summaryKeys) if (key !== 'sloc') builders[`metric:${key}`] = () => metricRow(key);
 
-  // ── ROW ORDER — EDIT THIS LIST to rearrange the summary rows. Every row is named
-  // explicitly. Ids resolving to '' (absent in this snapshot — e.g. a metric this
-  // language does not emit) are skipped; any builder id missing from the list is
-  // appended at the end so a newly-added metric never silently vanishes. ──
-  const ROW_ORDER = [
-    'nodes-sum',
-    'edges-sum',
-    'loc-sum',
-    'sloc-sum',
-    'cycles-sum',
-    'metric:fan_in',
-    'metric:fan_out',
-    'metric:hk',
-    'metric:cyclomatic',
-    'metric:cognitive',
-    'metric:mi',
-    'metric:mi_sei',
-    'metric:volume',
-    'metric:bugs',
-    'metric:effort',
-    'metric:time',
-    'metric:length',
-    'metric:vocabulary',
-    'metric:lloc',
-    'metric:cloc',
-    'metric:blank',
-    'metric:tloc',
+  // ── LAYOUT — the table as a tree of titled sections, each holding its row ids in
+  // order. EDIT THIS to rearrange: move a section, reorder its `rows`, or retitle
+  // it. Row ids: 'nodes'/'groups'/'edges'/'cycles' (structural counts) and
+  // 'metric:<key>' (per-file stat rows, driven by the header radio). A metric the
+  // snapshot lacks renders nothing; a section left with no rows drops its header. ──
+  const LAYOUT = [
+    { title: 'sum always', rows: ['nodes', 'folders', 'groups', 'edges', 'cycles'] },
+    { title: 'Coupling',   rows: ['metric:fan_in', 'metric:fan_out', 'metric:hk'] },
+    { title: 'Lines',      rows: ['metric:loc', 'metric:sloc', 'metric:lloc', 'metric:cloc', 'metric:blank', 'metric:tloc'] },
+    { title: 'Complexity', rows: ['metric:cyclomatic', 'metric:cognitive', 'metric:mi', 'metric:mi_sei'] },
+    { title: 'Halstead',   rows: ['metric:volume', 'metric:bugs', 'metric:effort', 'metric:time', 'metric:length', 'metric:vocabulary'] },
   ];
 
-  const listed = new Set(ROW_ORDER);
-  const order  = [...ROW_ORDER, ...Object.keys(builders).filter(id => !listed.has(id))];
-  const rows   = order.map(id => (builders[id] ? builders[id]() : '')).filter(Boolean);
+  // One metric builder per key referenced (LAYOUT ∪ summary_metrics); metricRow
+  // itself returns '' for keys absent from this snapshot.
+  const laidOutRows = LAYOUT.flatMap(s => s.rows);
+  const metricKeys  = new Set([
+    ...summaryKeys,
+    ...laidOutRows.filter(id => id.startsWith('metric:')).map(id => id.slice('metric:'.length)),
+  ]);
+  for (const key of metricKeys) builders[`metric:${key}`] = () => metricRow(key);
 
-  tbody.innerHTML = rows.join('');
+  // Sub-header divider spanning every column (metric label + per-side value cells).
+  const headSpan  = 1 + levels.length * (isReview ? 1 : 3);
+  const headerRow = title =>
+    `<tr class="summary-subhead"><td colspan="${headSpan}">${escHtml(title)}</td></tr>`;
+
+  // Any metric builder not placed in LAYOUT lands in a trailing "Other" section, so
+  // a newly-added metric never silently vanishes.
+  const placed    = new Set(laidOutRows);
+  const leftovers = Object.keys(builders).filter(id => !placed.has(id));
+  const sections  = leftovers.length ? [...LAYOUT, { title: 'Other', rows: leftovers }] : LAYOUT;
+
+  // Render each section: build its rows, drop the empties, and emit the header only
+  // when at least one row survives. Each section also feeds the export model.
+  const out = [], model = [];
+  for (const sec of sections) {
+    const recs = sec.rows.map(id => (builders[id] ? builders[id]() : null)).filter(Boolean);
+    if (!recs.length) continue;
+    if (sec.title) out.push(headerRow(sec.title));
+    out.push(...recs.map(r => r.html));
+    model.push({ section: sec.title, rows: recs.map(r => r.data) });
+  }
+  tbody.innerHTML = out.join('');
+
+  // Structured model for the JSON/MD export (mirrors exactly what is rendered).
+  window._summaryModel = {
+    target:   window.META?.target || 'snapshot',
+    mode:     isReview ? 'review' : 'diff',
+    stat:     window._summaryStat || 'avg',
+    baseline: window.META?.baseline || null,
+    current:  isReview ? null : (window.META?.current || null),
+    sections: model,
+  };
 }
+
+// The stats the header radio offers for the metric rows. `sum` aggregates over
+// files; the rest read the per-file distribution. The structural count rows
+// (Files/Folders/groups/Edges/cycles) ignore this and always show their count.
+const SUMMARY_STATS = ['avg', 'min', 'p50', 'p90', 'max', 'sum'];
+
+// Build the per-stat radio control in the popup header (once). Changing it
+// re-renders the table to the chosen stat.
+function setupSummaryStatControl() {
+  const header = document.getElementById('summary-header');
+  if (!header || header.querySelector('.summary-stat')) return;
+  if (!window._summaryStat) window._summaryStat = 'avg';
+  const wrap = document.createElement('span');
+  wrap.className = 'summary-stat';
+  wrap.innerHTML = SUMMARY_STATS.map(s =>
+    `<label class="summary-stat-opt"><input type="radio" name="summary-stat" value="${s}"` +
+    `${s === window._summaryStat ? ' checked' : ''}>${s}</label>`
+  ).join('');
+  // (The chosen aggregation round-trips through the URL `stat=` param — see nav.js.)
+  wrap.addEventListener('change', e => {
+    if (e.target.name !== 'summary-stat') return;
+    window._summaryStat = e.target.value;
+    buildSummary();
+    window.navReplaceView?.();   // reflect the chosen aggregation in the URL
+  });
+  header.appendChild(wrap);
+}
+window.setupSummaryStatControl = setupSummaryStatControl;
+// Whether `s` is a valid aggregation id (guards URL-restored values).
+window.isSummaryStat = s => SUMMARY_STATS.includes(s);
+// Apply an aggregation chosen from outside (URL restore / popstate): updates the
+// state, re-renders the table, and reflects the choice in the radio.
+window.setSummaryStat = s => {
+  if (!SUMMARY_STATS.includes(s) || s === (window._summaryStat || 'avg')) return;
+  window._summaryStat = s;
+  const radio = document.querySelector(`.summary-stat input[value="${s}"]`);
+  if (radio) radio.checked = true;
+  buildSummary();
+};
+
+// ── Export ────────────────────────────────────────────────────────────────────
+// Trigger a client-side file download (everything stays offline — no network).
+function downloadFile(name, text, mime) {
+  const blob = new Blob([text], { type: mime });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Base file name: `<target>-summary-<stat>` (e.g. `code-ranker-summary-avg`).
+function summaryFileBase() {
+  const m = window._summaryModel || {};
+  const slug = String(m.target || 'summary').replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'summary';
+  return `${slug}-summary-${m.stat || 'avg'}`;
+}
+
+function exportSummaryJSON() {
+  const m = window._summaryModel;
+  if (!m) return;
+  downloadFile(`${summaryFileBase()}.json`, JSON.stringify(m, null, 2), 'application/json');
+}
+
+// Markdown: a title + provenance line, then one table per section. In a diff each
+// table is | Metric | Baseline | Current | Δ |; in review just | Metric | Value |.
+function exportSummaryMarkdown() {
+  const m = window._summaryModel;
+  if (!m) return;
+  const review = m.mode === 'review';
+  const fmt = v => (v == null ? '' : fmtNum(v));
+  const dlt = v => {
+    if (v == null) return '';
+    const ad = Math.abs(v);
+    if (ad < 1e-9) return '0';
+    const r = fmtNum(ad);
+    const mag = r !== '0' ? r : String(Number(ad.toPrecision(2)));
+    return v > 0 ? `+${mag}` : `−${mag}`;
+  };
+  const side = s => s ? `${s.name}${s.commit ? ` (${s.commit})` : ''}` : '—';
+  const lines = [`# ${m.target} — ${review ? 'summary' : 'diff summary'}`, ''];
+  if (!review) lines.push(`Baseline: ${side(m.baseline)} · Current: ${side(m.current)}`, '');
+  lines.push(`Stat: \`${m.stat}\``, '');
+  for (const sec of m.sections) {
+    if (sec.section) lines.push(`## ${sec.section}`, '');
+    lines.push(review ? '| Metric | Value |' : '| Metric | Baseline | Current | Δ |',
+               review ? '| --- | ---: |'   : '| --- | ---: | ---: | ---: |');
+    for (const r of sec.rows)
+      lines.push(review
+        ? `| ${r.label} | ${fmt(r.baseline)} |`
+        : `| ${r.label} | ${fmt(r.baseline)} | ${fmt(r.current)} | ${dlt(r.delta)} |`);
+    lines.push('');
+  }
+  downloadFile(`${summaryFileBase()}.md`, lines.join('\n'), 'text/markdown');
+}
+window.exportSummaryJSON = exportSummaryJSON;
+window.exportSummaryMarkdown = exportSummaryMarkdown;
+
+// ── Popup open/close + export wiring (once) ─────────────────────────────────────
+function openSummaryPopup() {
+  const ov = document.getElementById('summary-overlay');
+  if (!ov) return;
+  buildSummary();                 // refresh to the active side/stat before showing
+  // Keep the page header visible: start the white fill just below it.
+  const hdr = document.querySelector('header');
+  ov.style.top = (hdr ? hdr.offsetHeight : 0) + 'px';
+  ov.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+function closeSummaryPopup() {
+  const ov = document.getElementById('summary-overlay');
+  if (ov) ov.style.display = 'none';
+  document.body.style.overflow = '';
+}
+window.openSummaryPopup = openSummaryPopup;
+window.closeSummaryPopup = closeSummaryPopup;
+
+function setupSummaryPopup() {
+  const ov = document.getElementById('summary-overlay');
+  if (!ov || ov._wired) return;
+  ov._wired = true;
+  document.getElementById('stats-btn')?.addEventListener('click', openSummaryPopup);
+  document.getElementById('summary-close')?.addEventListener('click', closeSummaryPopup);
+  document.getElementById('summary-export-json')?.addEventListener('click', exportSummaryJSON);
+  document.getElementById('summary-export-md')?.addEventListener('click', exportSummaryMarkdown);
+  ov.addEventListener('mousedown', e => { if (e.target === ov) closeSummaryPopup(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && ov.style.display !== 'none') closeSummaryPopup();
+  });
+}
+window.setupSummaryPopup = setupSummaryPopup;

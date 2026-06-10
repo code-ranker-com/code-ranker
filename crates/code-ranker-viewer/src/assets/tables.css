@@ -17,6 +17,13 @@
 .summary-table td.delta-bad   { color: #c0392b; font-weight: 600; }
 .summary-table th.num,
 .summary-table td.num { width: 66px; min-width: 66px; max-width: 66px; }
+/* Sub-header divider rows (section labels inside the table body). */
+.node-table.summary-table tbody tr.summary-subhead td {
+  padding: 12px 6px 4px; font-size: 11px; font-weight: 700; letter-spacing: .05em;
+  text-transform: uppercase; color: #6b7f93; background: #eef2f6;
+  text-align: left; border-bottom: 1px solid #d0d8e4;
+}
+.node-table.summary-table tbody tr.summary-subhead:first-child td { padding-top: 2px; }
 .cycle-badge { display: inline-block; padding: 1px 9px; border-radius: 10px;
                background: #fff0f0; border: 1px solid #f5a0a0;
                color: #c00; font-weight: 600; font-size: 13px; }

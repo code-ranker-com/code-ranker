@@ -20,6 +20,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.viewSide = (urlSide === 'baseline' && window.BASELINE) ? 'baseline'
                   : window.CURRENT ? 'current'
                   : 'baseline';
+  // Restore the summary aggregation from the URL (`stat=`) before the first render
+  // so the table and the radio come up on the chosen stat.
+  const urlStat = getNavParams().stat;
+  if (urlStat && window.isSummaryStat?.(urlStat)) window._summaryStat = urlStat;
   // If the Prompt Generator was open (state in the URL), restore its selected
   // nodes before the tables render so those rows come up already selected.
   const epState = (typeof epReadUrl === 'function') ? epReadUrl() : null;
@@ -33,12 +37,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupFileControls();
   setupTooltip();
   buildSummary();
+  setupSummaryStatControl();
+  setupSummaryPopup();
   updateFilesTab();
   updateHeader();
-
-  document.getElementById('summary-header')?.addEventListener('click', () => {
-    document.querySelector('.summary').classList.toggle('collapsed');
-  });
 
 
   const active = document.querySelector('.view.active');
@@ -51,13 +53,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
   // Restore state from URL, then set initial history entry
-  const { level: urlLevel, node: urlNode, group: urlGroup, mode: urlMode, dig: urlDig } = getNavParams();
+  const { level: urlLevel, node: urlNode, group: urlGroup, mode: urlMode, dig: urlDig, stat: urlStat2 } = getNavParams();
   if (urlLevel && urlLevel !== currentLevel()) switchToLevel(urlLevel);
-  applyViewState({ level: urlLevel, group: urlGroup, mode: urlMode, dig: urlDig }, { rerender: !!(urlGroup || urlMode || urlDig) });
+  applyViewState({ level: urlLevel, group: urlGroup, mode: urlMode, dig: urlDig, stat: urlStat2 }, { rerender: !!(urlGroup || urlMode || urlDig) });
   if (urlNode) openModalForNode(urlNode, urlLevel ?? currentLevel());
   // Replace initial history state so popstate can restore it
   history.replaceState(
-    { level: currentLevel(), node: urlNode ?? null, group: urlGroup ?? null, mode: urlMode ?? null, dig: window.dig || 0, side: window.viewSide },
+    { level: currentLevel(), node: urlNode ?? null, group: urlGroup ?? null, mode: urlMode ?? null, dig: window.dig || 0, side: window.viewSide, stat: window.navStat?.() ?? null },
     '', location.href
   );
 
@@ -74,7 +76,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const side = st.side;
     if (window.CURRENT && (side === 'baseline' || side === 'current')) setViewSide(side);
     if (lvl && lvl !== currentLevel()) switchToLevel(lvl);
-    applyViewState({ level: lvl ?? currentLevel(), group: st.group, mode: st.mode, dig: st.dig }, { rerender: true });
+    applyViewState({ level: lvl ?? currentLevel(), group: st.group, mode: st.mode, dig: st.dig, stat: st.stat }, { rerender: true });
     if (nid) {
       openModalForNode(nid, lvl ?? currentLevel());
     } else {

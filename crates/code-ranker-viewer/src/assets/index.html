@@ -28,6 +28,7 @@
       </div>
       <span class="custom-indicator" id="custom-indicator"></span>
     </div>
+    <button class="header-stats-btn" id="stats-btn" type="button" title="Open the diff summary statistics">Statistics</button>
   </div>
   <input type="file" id="input-baseline" accept=".json,.html" style="display:none">
   <input type="file" id="input-current"  accept=".json,.html" style="display:none">
@@ -80,22 +81,29 @@
   </div>
 </section>
 
-<!-- ── Summary ───────────────────────────────────────────────────────────── -->
-<section class="summary collapsed">
-  <div class="node-table-header" id="summary-header">
-    <span id="summary-title">Diff summary</span>
-  </div>
-  <div class="node-table-body">
-    <div class="node-table-container" id="summary-container">
-      <table class="node-table summary-table">
-        <thead id="summary-thead"></thead>
-        <tbody id="summary-tbody"></tbody>
-      </table>
+</main>
+
+<!-- ── Diff summary popup (full-screen, opened by the header Statistics button) ── -->
+<div id="summary-overlay" style="display:none">
+  <div id="summary-popup">
+    <div id="summary-header">
+      <span id="summary-title">Diff summary</span>
+      <span class="summary-actions">
+        <button class="summary-export-btn" id="summary-export-json" type="button" title="Download as JSON">JSON</button>
+        <button class="summary-export-btn" id="summary-export-md"   type="button" title="Download as Markdown">MD</button>
+      </span>
+      <button id="summary-close" type="button" title="Close">✕</button>
+    </div>
+    <div id="summary-body">
+      <div class="node-table-container" id="summary-container">
+        <table class="node-table summary-table">
+          <thead id="summary-thead"></thead>
+          <tbody id="summary-tbody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
-</section>
-
-</main>
+</div>
 
 <div id="tt" class="tt" hidden></div>
 

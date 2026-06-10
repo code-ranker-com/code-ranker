@@ -7,12 +7,20 @@ function getNavParams() {
     group: p.get('group'),
     mode:  p.get('mode'),
     dig:   p.get('dig'),
+    stat:  p.get('stat'),
   };
 }
 // The active diff side carried in the URL — only in diff mode (a current snapshot
 // exists); review mode has a single view and omits the param.
 function navSide() {
   return window.CURRENT && window.viewSide ? window.viewSide : null;
+}
+
+// Summary aggregation stat carried in the URL — only when non-default (avg is the
+// implicit default, omitted to keep the URL clean).
+function navStat() {
+  const s = window._summaryStat || 'avg';
+  return s !== 'avg' ? s : null;
 }
 
 function navViewState() {
@@ -22,6 +30,7 @@ function navViewState() {
     group: window.drillGroup  || null,
     mode:  window.nodeSizeMode || null,
     dig:   window.dig || 0,
+    stat:  navStat(),
   };
 }
 function navViewUrl(st) {
@@ -31,6 +40,7 @@ function navViewUrl(st) {
   if (st.group) p.set('group', st.group);
   if (st.mode)  p.set('mode',  st.mode);
   if (st.dig)   p.set('dig',   st.dig);
+  if (st.stat)  p.set('stat',  st.stat);
   return p.toString() ? '?' + p : location.pathname;
 }
 // Drill navigation (in/out of a group) — adds a history entry so Back works.
@@ -56,9 +66,11 @@ window.navPush = function(level, nodeId) {
   if (mode)   p.set('mode',  mode);
   const dig = window.dig || 0;
   if (dig)    p.set('dig',   dig);
+  const stat = navStat();
+  if (stat)   p.set('stat',  stat);
   if (nodeId) p.set('node',  nodeId);
   const url = p.toString() ? '?' + p : location.pathname;
-  history.pushState({ level: level ?? null, node: nodeId ?? null, side, group: grp, mode, dig }, '', url);
+  history.pushState({ level: level ?? null, node: nodeId ?? null, side, group: grp, mode, dig, stat }, '', url);
 };
 // Update only the `side` param in place (Baseline/Current toggle).
 window.navSetSide = function() {

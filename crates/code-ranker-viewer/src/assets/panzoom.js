@@ -177,8 +177,8 @@ function setupPanZoom(frame, svg) {
   // ── Fullscreen overlay ────────────────────────────────────────────────────────
   // In fullscreen only `wrap` (the frame) is visible, so the page `<header>` and
   // the body-attached overlays (node modal, snapshot popup, metric tooltip) are
-  // moved under `wrap` for the duration and restored on exit. The header rides a
-  // slide-in `.fs-bar` revealed when the cursor nears the top edge.
+  // moved under `wrap` for the duration and restored on exit. The header sits in a
+  // persistent `.fs-bar` at the top — always visible, no slide-in.
   let fsBarEl = null, fsMoveHandler = null;
   let headerEl = null, headerParent = null, headerNext = null;
   let fsMoved = [];   // relocated overlays: { el, parent, next }
@@ -189,9 +189,14 @@ function setupPanZoom(frame, svg) {
     wrap.appendChild(el);
   };
 
+  // Floating top controls that must clear the always-on header bar.
+  const FS_TOP_CTRLS = ['.size-controls', '.dig-lod', '.drill-breadcrumb'];
+
   function enterFS() {
+    // The header stays visible for the WHOLE fullscreen session (not just on a
+    // top-edge hover) — `.fs-bar` is created already `.visible`.
     fsBarEl = document.createElement('div');
-    fsBarEl.className = 'fs-bar';
+    fsBarEl.className = 'fs-bar visible';
 
     headerEl = document.querySelector('header');
     if (headerEl) {
@@ -204,16 +209,19 @@ function setupPanZoom(frame, svg) {
     fsMoved = [];
     ['node-modal-overlay', 'snap-popup', 'tt'].forEach(id => relocate(document.getElementById(id)));
 
+    // Offset the top-left/right floating controls below the persistent header.
+    const offsetControls = () => {
+      const top = (fsBarEl.offsetHeight + 12) + 'px';
+      FS_TOP_CTRLS.forEach(sel => wrap.querySelector(sel)?.style.setProperty('top', top));
+    };
+    requestAnimationFrame(offsetControls);
+
+    // Keep the zoom controls' right-edge reveal working; the header no longer toggles.
     fsMoveHandler = e => {
-      const barH = fsBarEl.offsetHeight;
-      const topShow = e.clientY < barH + 52 + 52;
-      fsBarEl.classList.toggle('visible', topShow);
-      const topPx = topShow ? (barH + 12) + 'px' : '';
-      wrap.querySelector('.size-controls')?.style.setProperty('top', topPx || null);
       const r = wrap.getBoundingClientRect();
       const sc2 = wrap.querySelector('.size-controls');
       const zoneW2 = sc2 ? sc2.offsetWidth + 24 : 248;
-      wrap.classList.toggle('show-zoom', topShow || e.clientX >= r.right - zoneW2);
+      wrap.classList.toggle('show-zoom', e.clientX >= r.right - zoneW2);
     };
     document.addEventListener('mousemove', fsMoveHandler);
   }
@@ -221,7 +229,7 @@ function setupPanZoom(frame, svg) {
   function exitFS() {
     if (fsMoveHandler) { document.removeEventListener('mousemove', fsMoveHandler); fsMoveHandler = null; }
     wrap.classList.remove('show-zoom');
-    wrap.querySelector('.size-controls')?.style.removeProperty('top');
+    FS_TOP_CTRLS.forEach(sel => wrap.querySelector(sel)?.style.removeProperty('top'));
     if (headerEl && headerParent) headerParent.insertBefore(headerEl, headerNext);
     headerEl = null;
     fsMoved.forEach(({ el, parent, next }) => { if (parent) parent.insertBefore(el, next); });

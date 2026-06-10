@@ -237,6 +237,9 @@ function applyViewState(st, { rerender = false } = {}) {
   const grp  = st.group || null;
   const mode = st.mode  || null;
   const dig = st.dig != null ? (Number(st.dig) | 0) : 0;
+  // Summary aggregation (popup): restore from the URL/history, falling back to the
+  // default `avg` when the param is absent. setSummaryStat re-renders + syncs the radio.
+  window.setSummaryStat?.(st.stat || 'avg');
   let changed = false;
   if ((window.dig || 0)  !== dig) { window.dig          = dig; changed = true; }
   if (window.drillGroup   !== grp)  { window.drillGroup   = grp;  window.drillDig = grp ? dig : 0; changed = true; }

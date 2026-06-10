@@ -92,8 +92,9 @@
 .exp-copy-btn:hover { background: #3a5a8a; opacity: 1; }
 .exp-copy-icon { font-size: 22px; line-height: 1; }
 .node-table-wrap.collapsed .node-table-body { display: none; }
-/* Collapsed: show only the title + count, hide the search box. */
-.node-table-wrap.collapsed .nt-search-input { display: none; }
+/* Collapsed: show only the title + count, hide the search box + kind filters. */
+.node-table-wrap.collapsed .nt-search-input,
+.node-table-wrap.collapsed .nt-kind-filters { display: none; }
 
 .node-table-container {
   overflow-x: auto; max-height: 760px; overflow-y: auto;

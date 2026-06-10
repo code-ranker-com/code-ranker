@@ -92,4 +92,9 @@
                    font-family: inherit; }
 .nt-search-input:focus { border-color: #1abc9c; }
 .nt-search-input::placeholder { color: #aaa; font-weight: 400; }
+/* Kind-filter checkboxes (files / folders / groups), next to the search box. */
+.nt-kind-filters { display: inline-flex; gap: 12px; align-items: center;
+                   font-size: 12px; font-weight: 400; color: #5c7a96; }
+.nt-kind-opt { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.nt-kind-opt input { cursor: pointer; margin: 0; }
 

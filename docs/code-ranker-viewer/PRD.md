@@ -206,6 +206,12 @@ when toggling; the selected-row count reflects the active side): clicking a chec
 highlights the row (yellow) and the corresponding SVG node (yellow fill
 - amber stroke); shift-click selects a range; the header checkbox
 selects or deselects all visible rows (indeterminate when partial).
+Besides files the table also lists **folder** and **group (crate)** aggregate
+rows (each numeric column summed over its files, a `Cycle` count, blank at 0);
+kind-filter checkboxes next to the search (files / folders / crates, files +
+crates on by default) toggle which appear, clicking an aggregate drills into it
+on the map, and hovering/selecting a row lights up its map element and vice
+versa. The totals footer shows only when the displayed rows are a single kind.
 Selection also works directly on the map: **holding Shift** turns the main
 diagram into a selection surface (the cursor changes over the SVG), and
 Shift-clicking an SVG node toggles its selection — exactly like ticking its

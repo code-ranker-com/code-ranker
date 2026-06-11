@@ -16,6 +16,22 @@ g.node polygon, g.node ellipse { stroke-width: 1; }
    connections (member boxes hide via their own status above). */
 .hide-nodes-added   g.cluster.status-added   { display: none; }
 .hide-nodes-removed g.cluster.status-removed { display: none; }
+/* Fan-in/out overlay (composeFanSections): sections + real arrows drawn into the
+   SVG after the graph is laid out. */
+.fan-section text { user-select: none; -webkit-user-select: none; }
+.fan-pill, .fan-btn, .fan-crate { cursor: pointer; }
+.fan-btn rect { transition: fill .1s; }
+.fan-btn:hover rect { fill: #f0f0f0; }
+/* Hovering a crate (or the collapsed pill) highlights that element and reveals ONLY
+   its own connector arrows — like the old per-node hover. */
+/* Hovering a crate/pill glows it (same blue as g.node.node-hl) and reveals its own
+   arrows; hovering a file (fanHighlightFile → .fan-arrow-on) reveals the arrows that
+   attach to it. Arrows never intercept clicks meant for nodes. */
+.fan-crate:hover > rect, .fan-pill:hover > rect { filter: drop-shadow(0 0 7px rgba(30,160,220,1)) drop-shadow(0 0 3px rgba(30,160,220,.95)); }
+.fan-arrow { pointer-events: none; opacity: 0; transition: opacity .12s; }
+.fan-crate:hover .fan-arrow, .fan-pill:hover .fan-arrow, .fan-arrow.fan-arrow-on { opacity: 1; }
+/* Hovering the section's tinted background reveals ALL its arrows. */
+.fan-section.fan-show-all .fan-arrow { opacity: 1; }
 /* ── Cycle visibility override (specificity 0,4,1 > hide rules 0,2,1) ──────── */
 /* When a cycle chip is active alongside any hide-* chip, cycle elements win */
 :is(.hide-nodes-added,.hide-nodes-removed,.hide-nodes-affected,.hide-nodes-unchanged).show-cycle-baseline

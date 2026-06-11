@@ -57,6 +57,9 @@ function buildDOT(nodes, edges, level, viewport) {
   const cycleOnly  = !!window.cycleOnly;
   const isCyc      = id => !!(cycleOf && cycleOf.has(id));
 
+  // Fan-in/out section data is recomputed each render; overview leaves it empty.
+  window._fanData = { in: [], out: [] };
+
   let dot = 'digraph {\n';
   dot += '  rankdir=LR\n';
   // No `ratio=fill` / `size`: let graphviz lay out at natural size with packed
@@ -280,38 +283,22 @@ function buildDOT(nodes, edges, level, viewport) {
   }
   for (const c of inGrp.keys()) outGrp.delete(c);   // a crate in both → callers only
 
-  // Diff side-presence → the same status class the union nodes/edges carry, so the
-  // `.hide-{nodes,edges}-{added,removed}` toggle CSS hides them on the off side.
+  // Diff side-presence → status class (drives the overlay's Baseline/Current hide).
   const statusClass = (b, c) => (b && c) ? 'unchanged' : c ? 'added' : 'removed';
   const grpStatus = r => { let b = false, c = false; for (const rec of r.our.values()) { b = b || rec.b; c = c || rec.c; } return statusClass(b, c); };
-  // Whole-cluster status (callers / dependencies): OR over every connection in it,
-  // so the cluster background+label hides on the side where it has none (member
-  // boxes are siblings of the cluster <g> in graphviz SVG, so hiding the <g> only
-  // hides its background/label, not the boxes — hence the per-box status above).
-  const clusterStatus = m => { let b = false, c = false; for (const r of m.values()) for (const rec of r.our.values()) { b = b || rec.b; c = c || rec.c; } return statusClass(b, c); };
 
-  const IN_EDGE_COLOR  = '#88bb88';
-  const OUT_EDGE_COLOR = '#ccaa77';
-  const IN_FILL        = '#edf7ed';
-  const OUT_FILL       = '#fdf3e3';
-
-  // Node style for external group boxes in the neighbor clusters
-  // Always boxes regardless of metric mode — fixedsize/width from global node default must be reset.
-  // `dashed` → a crate reached only by non-flow edges gets a dashed outline.
-  const extNode = (label, borderColor, fillColor, cls, dashed) =>
-    `[label=${dotId(label)} fillcolor="${fillColor}" color="${borderColor}" shape=box style="${dashed ? 'filled,dashed' : 'filled'}" fixedsize=false fontname="Helvetica" fontsize=11${cls ? ` class="${cls}"` : ''}]`;
-  const inNodeId  = g => 'IN\x01' + g;
-  const outNodeId = g => 'OUT\x01' + g;
-
-  // Left cluster — caller crates, i.e. this group's fan-in (label `crate (N coupled files)`)
-  if (inGrp.size > 0) {
-    dot += `  subgraph cluster_in {\n`;
-    dot += `    class="status-${clusterStatus(inGrp)}"\n`;
-    dot += `    label="Fan-in" style=filled fillcolor="${IN_FILL}" color="#88bb88" fontcolor="#447744" fontname="Helvetica" fontsize=11\n`;
-    for (const [crate, r] of inGrp)
-      dot += `    ${dotId(inNodeId(crate))} ${extNode(`${crate} (${r.their.size})`, IN_EDGE_COLOR, IN_FILL, 'status-' + grpStatus(r), r.their.size === 0)}\n`;
-    dot += '  }\n';
-  }
+  // The Fan-in (callers) / Fan-out (dependencies) neighbour sections are NOT laid
+  // out by graphviz. The internal file/folder graph is rendered alone (so its node
+  // positions are fixed), and the sections + their real arrows are composed into the
+  // SVG afterwards (composeFanSections in map-interactions.js) — that way a +/−
+  // collapse never reflows the graph, the viewBox, or the pan/zoom. Here we only
+  // stash the per-crate data the overlay needs: the crate, its flow-coupled file
+  // count, and our render-ids the arrows attach to (with flow → solid, diff status).
+  const fanSerialize = grp => [...grp].map(([crate, r]) => ({
+    crate, count: r.their.size, status: grpStatus(r),
+    our: [...r.our].map(([fid, rec]) => ({ fid, flow: rec.flow, status: statusClass(rec.b, rec.c) })),
+  }));
+  window._fanData = { in: fanSerialize(inGrp), out: fanSerialize(outGrp) };
 
   // Reveal frontier: nodes at/above depth D render as individual files inside
   // their directory sub-cluster; deeper nodes collapse into a folder box at the
@@ -344,27 +331,8 @@ function buildDOT(nodes, edges, level, viewport) {
     dot += '  }\n';
   }
 
-  // Right cluster — dependency crates, i.e. this group's fan-out (label `crate (N coupled files)`)
-  if (outGrp.size > 0) {
-    dot += `  subgraph cluster_out {\n`;
-    dot += `    class="status-${clusterStatus(outGrp)}"\n`;
-    dot += `    label="Fan-out" style=filled fillcolor="${OUT_FILL}" color="#ccaa77" fontcolor="#886633" fontname="Helvetica" fontsize=11\n`;
-    for (const [crate, r] of outGrp)
-      dot += `    ${dotId(outNodeId(crate))} ${extNode(`${crate} (${r.their.size})`, OUT_EDGE_COLOR, OUT_FILL, 'status-' + grpStatus(r), r.their.size === 0)}\n`;
-    dot += '  }\n';
-  }
-
-  // Pin callers strictly left, dependencies strictly right
-  if (inGrp.size > 0) {
-    dot += '  { rank=min';
-    for (const c of inGrp.keys()) dot += `; ${dotId(inNodeId(c))}`;
-    dot += ' }\n';
-  }
-  if (outGrp.size > 0) {
-    dot += '  { rank=max';
-    for (const c of outGrp.keys()) dot += `; ${dotId(outNodeId(c))}`;
-    dot += ' }\n';
-  }
+  // (Fan-in / Fan-out sections are composed into the SVG after layout — see
+  // composeFanSections — not emitted here, so the internal graph lays out alone.)
 
   // ── Edges ─────────────────────────────────────────────────────────────────────
   // Internal edges (within the drilled group). Flow edges (solid) are laid out
@@ -395,20 +363,8 @@ function buildDOT(nodes, edges, level, viewport) {
     dot += `  ${dotId(s)} -> ${dotId(t)} [${eAttr(e)} constraint=false]\n`;
   }
 
-  // Caller crate → our files (one connector per coupled our-file). The `status-*`
-  // class makes the connector follow the Baseline/Current toggle just like the
-  // internal edges — a link that exists in only one snapshot hides on the other.
-  for (const [crate, r] of inGrp) {
-    const src = dotId(inNodeId(crate));
-    for (const [fid, rec] of r.our)
-      dot += `  ${src} -> ${dotId(fid)} [color="${IN_EDGE_COLOR}" style="${rec.flow ? 'solid' : 'dashed'}" constraint=false class="edge-in status-${statusClass(rec.b, rec.c)}"]\n`;
-  }
-  // Our files → dependency crate
-  for (const [crate, r] of outGrp) {
-    const tgt = dotId(outNodeId(crate));
-    for (const [fid, rec] of r.our)
-      dot += `  ${dotId(fid)} -> ${tgt} [color="${OUT_EDGE_COLOR}" style="${rec.flow ? 'solid' : 'dashed'}" constraint=false class="edge-out status-${statusClass(rec.b, rec.c)}"]\n`;
-  }
+  // (Connectors from our files to the Fan-in/out crate boxes are drawn by the
+  // post-layout overlay — composeFanSections — as real SVG arrows.)
 
   dot += '}';
   return dot;

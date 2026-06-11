@@ -194,11 +194,15 @@ chain from the root to the first branching folder, at the node-budget reveal dep
 **group view** — one node per group (e.g. per-crate, from `ui.grouping.key`), with
 deduped inter-group edges — is what the crate tier / overview shows. **Clicking a
 group node drills into it**: the map re-renders showing only that group's files in
-directory sub-clusters, plus two neighbor clusters — **`Fan-in`** (callers, left, green
-background) and **`Fan-out`** (dependencies, right, orange background), each a list of
-**crates** labelled `crate (N)` where N is the count of that crate's files coupled
-to the focus (caller files for callers, depended-on files for dependencies);
-clicking a crate drills into its folder. **Clicking a box** drills the focus into
+directory sub-clusters, plus — drawn as an overlay after layout — a **Fan-in**
+(callers, green) section at the **top** and a **Fan-out** (dependencies, orange)
+section at the **bottom**, each listing the neighbour **crates** as `crate (N)`
+(N = that crate's files coupled to the focus). Each section is **collapsed by
+default** to a single `Fan-in N` bar with a `+`; expanding (`+`) lays the crates out
+full-width, wrapping down, with a `−`. Collapsing/expanding never moves the graph,
+pan or zoom (room for the expanded grid is reserved up front). A crate's **arrows to
+its coupled files** show on hover — hover a crate → its arrows, a file → the arrows
+reaching it, a section's background → all of them; clicking a crate drills into its folder. **Clicking a box** drills the focus into
 it (a crate, a folder, or — at the crate boundary — a whole crate). An
 already-**expanded** folder/crate cluster is navigated only by its **name label** —
 its background is inert (no point re-drilling into what is already open). A
@@ -216,9 +220,9 @@ Back / Forward / Refresh work correctly; mode changes update the URL via
 `replaceState`.
 The map is laid out **once** from the **union** of both snapshots; the
 `[data-side]` Baseline/Current buttons are a pure CSS visibility flip. This
-extends to the **callers / dependencies** neighbour clusters of a drilled group:
-their boxes, connector arrows, and the cluster background each hide on the side
-where that caller/dependency does not exist, exactly like internal nodes/edges.
+extends to the **Fan-in / Fan-out** overlay sections of a drilled group:
+their crate chips and arrows each hide on the side where that caller/dependency
+does not exist, exactly like internal nodes/edges.
 **Current is shown by default.** The display mode is controlled by **three buttons** —
 `■` (box/label mode), `SLOC` (circles sized by source lines), `HK` (circles
 sized by Henry-Kafura) — reflected in the `mode=` URL parameter. In metric

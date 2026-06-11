@@ -2,27 +2,48 @@ function setupPanZoom(frame, svg) {
   const vbAttr = svg.getAttribute('viewBox');
   if (!vbAttr) return;
   const [ox, oy, ow, oh] = vbAttr.split(/[ ,]+/).map(Number);
-  // The fit-all viewBox for this render — renderView compares against it to decide
-  // whether the user has panned/zoomed (and thus whether to preserve on re-render).
-  frame.dataset.naturalVB = `${ox} ${oy} ${ow} ${oh}`;
+  // The fit-all viewBox (set below from fitVB) is the framing renderView compares
+  // against to decide whether the user has panned/zoomed (→ preserve on re-render).
   let pan = null, didDrag = false, animFrame = null;
 
   // Capped fit-all viewBox: the default framing never zooms IN past 1.3× absolute
-  // (frame px per SVG unit). For small graphs whose natural fit would magnify
-  // beyond that, enlarge the viewBox (centred) so the on-screen scale lands at 1.3.
+  // (frame px per SVG unit). It also keeps the TOP strip free — the area the
+  // breadcrumb occupies plus a little padding — so the diagram is fit/centred into
+  // the space *below* the breadcrumb, never under it.
   const MAX_FIT_ZOOM = 1.3;
+  // Screen px to keep clear at the top: the breadcrumb's bottom (relative to the
+  // frame) + ~12px padding; ~50 as a fallback before it is laid out.
+  function topReservePx() {
+    const fr = frame.getBoundingClientRect();
+    const bc = frame.parentElement?.querySelector('.drill-breadcrumb');
+    if (bc && fr.height) {
+      const r = (bc.getBoundingClientRect().bottom - fr.top) + 12;
+      if (isFinite(r) && r > 0) return r;
+    }
+    return 50;
+  }
   function fitVB() {
     const fw = frame.clientWidth || frame.offsetWidth || 0;
     const fh = frame.clientHeight || frame.offsetHeight || 0;
     if (!fw || !fh || !ow || !oh) return [ox, oy, ow, oh];
-    const fitScale = Math.min(fw / ow, fh / oh);
-    if (fitScale <= MAX_FIT_ZOOM) return [ox, oy, ow, oh];
-    const k = fitScale / MAX_FIT_ZOOM, nw = ow * k, nh = oh * k;
-    return [ox + (ow - nw) / 2, oy + (oh - nh) / 2, nw, nh];
+    const R = Math.min(topReservePx(), fh * 0.6);   // never eat more than 60% of the height
+    const avail = Math.max(1, fh - R);
+    // Fit the content into the area BELOW the reserve, capped at 1.3× absolute.
+    const s = Math.min(fw / ow, avail / oh, MAX_FIT_ZOOM);
+    // viewBox exactly fills the frame at scale s (aspect = frame → no letterbox), so
+    // vx/vy place the content precisely: centred horizontally, centred in the area
+    // below the reserve (the top R px left empty for the breadcrumb).
+    const vw = fw / s, vh = fh / s;
+    const vx = ox - (vw - ow) / 2;
+    const contentTop = R + (avail - oh * s) / 2;
+    const vy = oy - contentTop / s;
+    return [vx, vy, vw, vh];
   }
   // Default framing for this fresh render = the capped fit. renderView's preserve
   // step overrides this afterwards when the user had zoomed/panned.
-  { const [fx, fy, fw, fh] = fitVB(); svg.setAttribute('viewBox', `${fx} ${fy} ${fw} ${fh}`); }
+  { const [fx, fy, fw, fh] = fitVB();
+    frame.dataset.naturalVB = `${fx} ${fy} ${fw} ${fh}`;
+    svg.setAttribute('viewBox', `${fx} ${fy} ${fw} ${fh}`); }
 
   function getVB() { return svg.getAttribute('viewBox').split(/[ ,]+/).map(Number); }
   function setVB(x, y, w, h) { svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`); }

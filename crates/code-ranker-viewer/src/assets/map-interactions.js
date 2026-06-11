@@ -360,6 +360,268 @@ function drillOutOfGroup(level) {
   if (active && window.gv) renderView(active, { preserve: false });
 }
 
+// ── Fan-in / Fan-out overlay ───────────────────────────────────────────────────
+// The internal file/folder graph is laid out by graphviz ALONE, so its node
+// positions are fixed. The Fan-in (callers, top) / Fan-out (dependencies, bottom)
+// sections + their real arrows are composed into the SVG afterwards. We reserve
+// vertical bands for the fully-EXPANDED grids once (so the +/− toggle never changes
+// the viewBox, the graph, or the pan/zoom); a toggle re-runs ONLY the overlay build
+// — nothing moves but the section content and its arrows.
+const SVGNS   = 'http://www.w3.org/2000/svg';
+const FAN_GEO = { BOXH: 22, BOXMINW: 52, BOXPADX: 18, GAPX: 8, GAPY: 8, LBLH: 18, PAD: 12, BTN: 18, PILLW: 128 };
+const FAN_PAL = {
+  in:  { fill: '#edf7ed', stroke: '#88bb88', text: '#447744' },
+  out: { fill: '#fdf3e3', stroke: '#ccaa77', text: '#886633' },
+};
+const svgEl = (name, attrs) => {
+  const e = document.createElementNS(SVGNS, name);
+  for (const k in attrs) if (attrs[k] != null) e.setAttribute(k, attrs[k]);
+  return e;
+};
+function fanCollapsed(dir) {
+  const st = window._fanCollapsed || (window._fanCollapsed = { in: true, out: true });
+  return st[dir];
+}
+// A node's centre in the SVG's user (viewBox) coordinates — independent of pan/zoom,
+// so it stays valid after the viewBox is expanded and across toggles.
+function nodeCenterUser(svg, el) {
+  const m = svg.getScreenCTM();
+  if (!m) return null;
+  const r = el.getBoundingClientRect();
+  const p = svg.createSVGPoint();
+  p.x = r.left + r.width / 2; p.y = r.top + r.height / 2;
+  const o = p.matrixTransform(m.inverse());
+  // half-extents in user units (graphviz applies no rotation → a/d are the scale)
+  return { x: o.x, y: o.y, hw: (r.width / 2) / (m.a || 1), hh: (r.height / 2) / (m.d || 1) };
+}
+// Point on a node's bbox edge toward `from`, so an arrow lands on the border, not
+// the centre.
+function rectEdgePoint(t, from) {
+  const dx = from.x - t.x, dy = from.y - t.y;
+  if (!dx && !dy) return { x: t.x, y: t.y };
+  const s = Math.min(dx ? t.hw / Math.abs(dx) : Infinity, dy ? t.hh / Math.abs(dy) : Infinity);
+  return { x: t.x + dx * s, y: t.y + dy * s };
+}
+// Measure a label's rendered width (cached) so crate chips size to their text, the
+// way the old graphviz boxes did (auto-width, full crate name).
+const _fanTextW = new Map();
+function fanMeasure(svg, s) {
+  if (_fanTextW.has(s)) return _fanTextW.get(s);
+  const t = svgEl('text', { 'font-size': 11, 'font-family': 'Helvetica', x: -9999, y: -9999 });
+  t.textContent = s;
+  svg.appendChild(t);
+  let w = 0; try { w = t.getComputedTextLength(); } catch {}
+  t.remove();
+  if (!w) w = s.length * 6.6;
+  _fanTextW.set(s, w);
+  return w;
+}
+// Flow-lay a section's crate chips left→right, wrapping when the next chip would
+// exceed availW (variable widths, like graphviz). Returns chip rects (x within the
+// row, row index, width) + total flow height.
+function chipFlow(svg, secData, availW) {
+  const chips = [];
+  const rowW = [];   // content width per row (for centring)
+  let x = 0, row = 0;
+  for (const c of secData) {
+    const label = `${c.crate} (${c.count})`;
+    const w = Math.max(FAN_GEO.BOXMINW, Math.ceil(fanMeasure(svg, label)) + FAN_GEO.BOXPADX);
+    if (x > 0 && x + w > availW) { row++; x = 0; }
+    chips.push({ c, label, x, row, w });
+    rowW[row] = x + w;
+    x += w + FAN_GEO.GAPX;
+  }
+  const rows = secData.length ? row + 1 : 0;
+  return { chips, rows, rowW, h: rows * FAN_GEO.BOXH + Math.max(0, rows - 1) * FAN_GEO.GAPY };
+}
+// Reserved band height for a section's fully-EXPANDED flow — constant regardless of
+// collapse state, so the band never resizes on toggle.
+function fanReservedH(svg, secData, availW) {
+  if (!secData.length) return 0;
+  return FAN_GEO.PAD * 2 + FAN_GEO.LBLH + chipFlow(svg, secData, availW).h;
+}
+// A bigger framed +/− button (rect + symbol). `onClick` optional (the collapsed
+// pill handles its own click, so its + needs none).
+function fanBtn(sym, x, y, pal, onClick) {
+  const g = svgEl('g', { class: 'fan-btn' });
+  // Transparent hit area (no visible frame — just the symbol; a faint bg on hover).
+  g.appendChild(svgEl('rect', { x, y, width: FAN_GEO.BTN, height: FAN_GEO.BTN, rx: 4, fill: 'transparent' }));
+  const t = svgEl('text', { x: x + FAN_GEO.BTN / 2, y: y + FAN_GEO.BTN / 2 + 5, 'text-anchor': 'middle', 'font-size': 15, 'font-weight': 700, fill: pal.text, 'font-family': 'Helvetica' });
+  t.textContent = sym;
+  g.appendChild(t);
+  if (onClick) g.addEventListener('click', e => { e.stopPropagation(); onClick(); });
+  return g;
+}
+
+function composeFanSections(svgFrame, level) {
+  const svg = svgFrame?.querySelector('svg');
+  if (!svg) return;
+  svg.querySelector('#fan-overlay')?.remove();
+  const data = window._fanData || { in: [], out: [] };
+  if (!data.in.length && !data.out.length) return;
+
+  // Capture the bare-graph viewBox + node anchors and reserve the expanded bands
+  // ONCE; toggles reuse them and never touch the viewBox (so pan/zoom is preserved).
+  if (!svgFrame._fanBase) {
+    const vb = (svg.getAttribute('viewBox') || '').split(/\s+/).map(Number);
+    if (!(vb.length === 4 && vb.every(Number.isFinite))) return;
+    const anchors = new Map();
+    svg.querySelectorAll('g.node').forEach(g => {
+      const id = g.querySelector('title')?.textContent?.trim();
+      if (!id) return;
+      const c = nodeCenterUser(svg, g);
+      if (c) anchors.set(id, c);
+    });
+    const base = { x: vb[0], y: vb[1], w: vb[2], h: vb[3] };
+    // Expanded sections are at least 250 wide; on a narrow graph they extend past it
+    // (centred) so a lone short chip's box still fits. The viewBox widens to match.
+    base.secW = Math.max(base.w, 250);
+    base.secX = base.x + (base.w - base.secW) / 2;
+    const availW = base.secW - FAN_GEO.PAD * 2;
+    base.topH = fanReservedH(svg, data.in,  availW);
+    base.botH = fanReservedH(svg, data.out, availW);
+    svgFrame._fanBase = base; svgFrame._fanAnchors = anchors;
+    svg.setAttribute('viewBox', `${base.secX} ${base.y - base.topH} ${base.secW} ${base.h + base.topH + base.botH}`);
+  }
+  const base = svgFrame._fanBase, anchors = svgFrame._fanAnchors;
+
+  const overlay = svgEl('g', { id: 'fan-overlay' });
+  const defs = svgEl('defs', {});
+  for (const dir of ['in', 'out']) {
+    const m = svgEl('marker', { id: `fan-ah-${dir}`, markerWidth: 7, markerHeight: 6, refX: 6, refY: 3, orient: 'auto' });
+    m.appendChild(svgEl('path', { d: 'M0,0 L0,6 L7,3 z', fill: FAN_PAL[dir].stroke }));
+    defs.appendChild(m);
+  }
+  overlay.appendChild(defs);
+  const trunc = (s, n) => s.length > n ? s.slice(0, n - 1) + '…' : s;
+
+  const buildSection = (dir, secData, bandTop, bandH) => {
+    if (!secData.length) return;
+    const pal = FAN_PAL[dir];
+    const cx  = base.x + base.w / 2;
+    const g   = svgEl('g', { class: `fan-section fan-${dir}` });
+    const collapsed = secData.length > 1 && fanCollapsed(dir);
+    // Shared +/− button position — top-right of the section, identical in both states.
+    const btnX = base.secX + base.secW - FAN_GEO.PAD - FAN_GEO.BTN;
+    const btnY = bandTop + FAN_GEO.PAD / 2 + (FAN_GEO.BOXH - FAN_GEO.BTN) / 2;
+    // Shared Fan-in/out label position (centred in the top row) — same in both states
+    // so the text doesn't jump on collapse/expand.
+    const lblX = base.secX + base.secW / 2;
+    const lblY = bandTop + FAN_GEO.PAD / 2 + FAN_GEO.BOXH / 2 + 4;
+
+    // Arrows from anchor (ax,ay) to each coupled file's EDGE — hidden by default,
+    // shown only while the section is hovered (CSS), like the old connectors.
+    const drawArrows = (our, ax, ay, parent) => {
+      for (const o of our) {
+        const fa = anchors.get(o.fid);
+        if (!fa) continue;
+        const ep = rectEdgePoint(fa, { x: ax, y: ay });
+        const d  = dir === 'in' ? `M${ax},${ay} L${ep.x},${ep.y}` : `M${ep.x},${ep.y} L${ax},${ay}`;
+        parent.appendChild(svgEl('path', {
+          d, fill: 'none', stroke: pal.stroke, 'stroke-width': 1.2,
+          'stroke-dasharray': o.flow ? null : '4,3',
+          'marker-end': `url(#fan-ah-${dir})`,
+          'data-fid': o.fid,
+          class: `fan-arrow status-${o.status || 'unchanged'}`,
+        }));
+      }
+    };
+
+    if (collapsed) {
+      // One pill "Fan-in N" + a framed + button; the whole pill expands on click.
+      const pillH = FAN_GEO.BOXH, pillW = base.secW - 8;
+      // Sit at the band's TOP (same top as the expanded section's background), so
+      // expanding grows only downward and the top edge never shifts.
+      const px = base.secX + 4, py = bandTop + FAN_GEO.PAD / 2;
+      const agg = new Map();
+      for (const c of secData) for (const o of c.our) {
+        const a = agg.get(o.fid) || { fid: o.fid, flow: false, status: o.status };
+        a.flow = a.flow || o.flow; agg.set(o.fid, a);
+      }
+      const pill = svgEl('g', { class: 'fan-pill' });
+      drawArrows([...agg.values()], cx, dir === 'in' ? py + pillH : py, pill);
+      pill.appendChild(svgEl('rect', { x: px, y: py, width: pillW, height: pillH, fill: pal.fill, stroke: pal.stroke }));
+      const t = svgEl('text', { x: lblX, y: lblY, 'text-anchor': 'middle', 'font-size': 11, fill: pal.text, 'font-family': 'Helvetica' });
+      t.textContent = `Fan-${dir} ${secData.length}`;
+      pill.appendChild(t);
+      pill.appendChild(fanBtn('+', btnX, btnY, pal));
+      pill.addEventListener('click', e => { e.stopPropagation(); toggleFanSection(dir); });
+      g.appendChild(pill);
+    } else {
+      const lbl = svgEl('text', { x: lblX, y: lblY, 'text-anchor': 'middle', 'font-size': 11, fill: pal.text, 'font-family': 'Helvetica' });
+      lbl.textContent = `Fan-${dir}`;
+      g.appendChild(lbl);
+      if (secData.length > 1)
+        g.appendChild(fanBtn('−', btnX, btnY, pal, () => toggleFanSection(dir)));
+
+      const startX  = base.secX + FAN_GEO.PAD;
+      const gridTop = bandTop + FAN_GEO.PAD + FAN_GEO.LBLH;
+      const flow    = chipFlow(svg, secData, base.secW - FAN_GEO.PAD * 2);
+      const contentH = FAN_GEO.LBLH + flow.h;
+      // Tinted full-width section background (behind label/boxes/arrows). Hovering
+      // its exposed area (not a crate, which sits on top) reveals ALL the section's
+      // arrows; the crate boxes still reveal only their own on hover.
+      const bg = svgEl('rect', { class: 'fan-bg', x: base.secX + 4, y: bandTop + FAN_GEO.PAD / 2, width: base.secW - 8, height: contentH + FAN_GEO.PAD, fill: pal.fill, stroke: pal.stroke });
+      bg.addEventListener('mouseenter', () => g.classList.add('fan-show-all'));
+      bg.addEventListener('mouseleave', () => g.classList.remove('fan-show-all'));
+      g.insertBefore(bg, g.firstChild);
+      const availW = base.secW - FAN_GEO.PAD * 2;
+      for (const chip of flow.chips) {
+        const c = chip.c;
+        const bx = startX + (availW - flow.rowW[chip.row]) / 2 + chip.x;
+        const by = gridTop + chip.row * (FAN_GEO.BOXH + FAN_GEO.GAPY);
+        const box = svgEl('g', { class: `fan-crate status-${c.status}` });
+        box.appendChild(svgEl('rect', { x: bx, y: by, width: chip.w, height: FAN_GEO.BOXH, fill: pal.fill, stroke: pal.stroke, 'stroke-dasharray': c.count === 0 ? '4,3' : null }));
+        const ct = svgEl('text', { x: bx + chip.w / 2, y: by + FAN_GEO.BOXH / 2 + 4, 'text-anchor': 'middle', 'font-size': 11, fill: pal.text, 'font-family': 'Helvetica' });
+        ct.textContent = chip.label;
+        box.appendChild(ct);
+        // Clicking a crate box drills into that crate's folder (as the old boxes did).
+        box.addEventListener('click', e => {
+          e.stopPropagation();
+          const t = crateFocusTarget(level, c.crate);
+          drillIntoGroup(t.key, level, t.dig);
+        });
+        drawArrows(c.our, bx + chip.w / 2, dir === 'in' ? by + FAN_GEO.BOXH : by, box);
+        g.appendChild(box);
+      }
+    }
+    overlay.appendChild(g);
+  };
+
+  buildSection('in',  data.in,  base.y - base.topH, base.topH);
+  buildSection('out', data.out, base.y + base.h,    base.botH);
+  svg.appendChild(overlay);
+}
+window.composeFanSections = composeFanSections;
+
+// Collapse/expand a section — re-runs ONLY the overlay (no graphviz, no viewBox
+// change), so the graph and the pan/zoom stay put; only the section + its arrows move.
+function toggleFanSection(dir) {
+  const st = window._fanCollapsed || (window._fanCollapsed = { in: true, out: true });
+  st[dir] = !st[dir];
+  if (window._fanFrame) composeFanSections(window._fanFrame, window._fanFrame.dataset.fanLevel);
+}
+window.toggleFanSection = toggleFanSection;
+
+// Hovering a file node reveals the Fan-in/out arrows that attach to it (matched by
+// the arrow's data-fid = the file's render-id).
+function fanHighlightFile(on, fid) {
+  const ov = window._fanFrame?.querySelector('#fan-overlay');
+  if (!ov) return;
+  // Always clear the previous file/box highlight first, so a missed `mouseleave`
+  // (fast pointer movement between nodes) can never leave stale arrows lit — the
+  // next `mouseenter` resets the set. Mirrors the internal edge-highlight, which
+  // also clears everything before applying.
+  ov.querySelectorAll('.fan-arrow.fan-arrow-on').forEach(a => a.classList.remove('fan-arrow-on'));
+  if (!on || !fid) return;
+  const ids = Array.isArray(fid) ? new Set(fid) : null;
+  ov.querySelectorAll('.fan-arrow').forEach(a => {
+    const f = a.getAttribute('data-fid');
+    if (ids ? ids.has(f) : f === fid) a.classList.add('fan-arrow-on');
+  });
+}
+window.fanHighlightFile = fanHighlightFile;
+
 // Drill target (group key + dig) for the folder a node sits in directly — its
 // depth on the active tier's ladder (`underDepthOf`), so a folder/dir-cluster
 // drills into itself.
@@ -601,7 +863,7 @@ function setupEdgeHighlight(svgFrame, level) {
     const cTitle = clusterEl.querySelector('title')?.textContent?.trim() || '';
     const label  = clusterEl.querySelector('text')?.textContent?.trim()  || '';
 
-    let edges, nc;
+    let edges, nc, memberIds = null;
     if (cTitle === 'cluster_in') {
       clusterInEl = clusterEl;
       edges = new Set(inEdges);
@@ -643,6 +905,7 @@ function setupEdgeHighlight(svgFrame, level) {
         for (const e of (edgeMap.get(id) ?? new Set())) edges.add(e);
       }
       nc = matchIds.length;
+      memberIds = matchIds;
       // The folder cluster is EXPANDED (its files are visible), so a click on its
       // background does nothing; only its path label drills into it. Find a
       // representative node by the folder's full dir (robust regardless of whether
@@ -746,7 +1009,16 @@ function setupTooltips(svgFrame, level) {
                            : nodeId?.startsWith('OUT\x01') ? 'OUT\x01' : null;
       if (neighborPrefix) {
         const neighborGroup = nodeId.slice(neighborPrefix.length);   // the neighbour crate
-        const arrow = neighborPrefix === 'IN\x01' ? '← ' : '→ ';
+        const dir   = neighborPrefix === 'IN\x01' ? 'in' : 'out';
+        const arrow = dir === 'in' ? '← ' : '→ ';
+        // Collapsed-section summary box (`FAN_ALL` marker, '\x02') → expand on click.
+        if (neighborGroup === '\x02') {
+          g.addEventListener('click', e => { e.stopPropagation(); toggleFanSection(dir); });
+          wireNodeHover(g,
+            () => showStatus(`${arrow}Fan-${dir} — click to expand`),
+            e => { if (!e.relatedTarget?.closest?.('g.cluster')) hideStatus(); });
+          return;
+        }
         g.addEventListener('click', e => {
           e.stopPropagation();
           const t = crateFocusTarget(level, neighborGroup);
@@ -769,8 +1041,8 @@ function setupTooltips(svgFrame, level) {
           drillIntoGroup(nodeId, level, focusFolder.focusD);
         });
         wireNodeHover(g,
-          () => { const st = focusStats?.get(nodeId); showStatus(st ? statusLineForGroup(st) : nodeId); },
-          e => { if (!e.relatedTarget?.closest?.('g.cluster')) hideStatus(); });
+          () => { const st = focusStats?.get(nodeId); showStatus(st ? statusLineForGroup(st) : nodeId); window.fanHighlightFile?.(true, nodeId); },
+          e => { window.fanHighlightFile?.(false, nodeId); if (!e.relatedTarget?.closest?.('g.cluster')) hideStatus(); });
         return;
       }
 
@@ -796,10 +1068,12 @@ function setupTooltips(svgFrame, level) {
           section?.querySelector(`tr[data-node-id="${nodeId.replace(/\\/g,'\\\\').replace(/"/g,'\\"')}"]`)
                   ?.classList.add('row-hl');
           showStatus(statusLineFor(node, level));
+          window.fanHighlightFile?.(true, nodeId);
         },
         e => {
           section?.querySelector(`tr[data-node-id="${nodeId.replace(/\\/g,'\\\\').replace(/"/g,'\\"')}"]`)
                   ?.classList.remove('row-hl');
+          window.fanHighlightFile?.(false, nodeId);
           if (!e.relatedTarget?.closest?.('g.cluster')) hideStatus();
         });
     });

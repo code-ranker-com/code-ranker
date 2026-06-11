@@ -52,6 +52,12 @@ function renderSVGNow(svgFrame, nodes, edges, level) {
     svg.setAttribute('width', '100%');
     svg.setAttribute('height', '100%');
     svg.style.display = 'block';
+    // Compose the Fan-in/out overlay onto the freshly-laid-out graph BEFORE pan/zoom
+    // captures the (now band-reserved) viewBox. Reset the per-svg cache first so it
+    // recomputes anchors for this render; toggles afterwards reuse it.
+    svgFrame._fanBase = null; svgFrame._fanAnchors = null;
+    window._fanFrame = svgFrame; svgFrame.dataset.fanLevel = level;
+    composeFanSections(svgFrame, level);
     setupPanZoom(svgFrame, svg);
     // Status bar: one persistent element per frame-wrap, reused across re-renders.
     const fw = svgFrame.parentElement;

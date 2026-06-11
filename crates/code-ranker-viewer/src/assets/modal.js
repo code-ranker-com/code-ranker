@@ -218,12 +218,33 @@ window.setModalDiagram = setModalDiagram;
 
 function closeModal() {
   window.hideMetricTooltip?.();
+  const m      = window._modalNode;       // the file shown at close time
+  const openId = window._modalOpenId;      // the file the popup opened on
   window._modalNode = null;
+  window._modalOpenId = null;
   window.flyoutHeader?.unmount('modal');
   const overlay = document.getElementById('node-modal-overlay');
   if (overlay) overlay.style.display = 'none';
   document.body.style.overflow = '';
-  window.navPush?.(document.querySelector('.view.active')?.dataset.view ?? null, null);
+
+  const activeLevel = document.querySelector('.view.active')?.dataset.view ?? null;
+  const level = m?.level ?? activeLevel;
+  // Compare the containing FOLDER of the file shown at close vs. the one the popup
+  // opened on. Folder changed → land the map in the close file's folder. Folder
+  // unchanged (same folder, even if a different file — or the same file) → leave
+  // the map exactly where it was, just drop the node.
+  if (m && openId && level && level === activeLevel && window.drillIntoGroup) {
+    const lookup    = id => (typeof activeGraph === 'function' ? activeGraph(level).nodes : []).find(n => n.id === id)
+                          ?? window.DIFF?.[level]?.nodes?.find(n => n.id === id);
+    const closeTgt  = (n => n ? focusFolderTarget(level, n) : null)(lookup(m.id));
+    const openTgt   = (n => n ? focusFolderTarget(level, n) : null)(lookup(openId));
+    if (closeTgt && closeTgt.key && closeTgt.key !== '_root'
+        && (!openTgt || openTgt.key !== closeTgt.key)) {
+      window.drillIntoGroup(closeTgt.key, level, closeTgt.dig);
+      return;
+    }
+  }
+  window.navPush?.(level, null);
 }
 function closeModalSilent() {
   window.hideMetricTooltip?.();

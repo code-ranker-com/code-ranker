@@ -112,7 +112,13 @@ function openModalForNode(nodeId, level) {
   const nodeData = onSide ?? window.DIFF?.[level]?.nodes?.find(n => n.id === nodeId);
   if (!nodeData) return false;
   // Remember which node the modal shows so a baseline⇄current toggle can re-render it.
+  // On a FRESH open (the overlay is not already visible) also remember it as the
+  // open anchor: closeModal compares it against the node shown at close time to
+  // decide whether the user navigated to a different file (→ land the map in that
+  // file's folder) or stayed on the same one (→ leave the map untouched).
+  const _wasOpen = document.getElementById('node-modal-overlay')?.style.display === 'flex';
   window._modalNode = { id: nodeId, level };
+  if (!_wasOpen) window._modalOpenId = nodeId;
   // Clear any tooltip anchored to the element we're about to replace.
   window.hideMetricTooltip?.();
   const section = document.querySelector(`.view[data-view="${level}"]`);

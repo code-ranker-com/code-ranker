@@ -199,7 +199,9 @@ background) and **dependencies** (right, orange background), each a list of
 **crates** labelled `crate (N)` where N is the count of that crate's files coupled
 to the focus (caller files for callers, depended-on files for dependencies);
 clicking a crate drills into its folder. **Clicking a box** drills the focus into
-it (a crate, a folder, or — at the crate boundary — a whole crate). A
+it (a crate, a folder, or — at the crate boundary — a whole crate). An
+already-**expanded** folder/crate cluster is navigated only by its **name label** —
+its background is inert (no point re-drilling into what is already open). A
 single always-visible **breadcrumb** (top-left of the diagram) carries the
 navigation: a **tier dropdown** anchor (its label opens the crates ⇄ files menu), a
 **root** chip (`all`/`root`, returning to the overview), the clickable path chips
@@ -259,7 +261,10 @@ The modal popup opened by clicking a row or an SVG node is fullscreen
 same style as the map (tier dropdown → `all`/`root` → crate/folder chips → the
 file): clicking a path chip drills the map there and closes the popup, while the
 tier dropdown switches crates⇄files representation **without** closing — the same
-file stays open and only its breadcrumb re-renders. The popup
+file stays open and only its breadcrumb re-renders. Closing the popup (✕/Esc/
+backdrop) after navigating between files lands the map in the **folder of the file
+shown at close** when it differs from the folder the popup opened on; staying within
+the same folder (or on the same file) leaves the map where it was. The popup
 includes a synced selection checkbox, fields in
 order id (⎘ copy) → path (⎘ copy, filename bold) → source (a link to the
 file on the project's git host, built from `git.origin`; project files
@@ -272,7 +277,13 @@ callers, one block per **other crate** that calls in (`crate in: <crate>`),
 same-crate callers (`fan in`), the **central node**, same-crate dependencies
 (`fan out`), one block per other crate it depends on (`crate out: <crate>`), and
 external dependencies; per-crate blocks are ordered with the biggest nearest the
-node. **Arrows are drawn only between fan-in → node → fan-out.** Cards are tinted
+node. The fan-in/out **arrow points to the nearest internal block** — same-crate
+when present, otherwise the closest `crate in/out` block — so it appears even when
+the coupling is purely cross-crate; only the external blocks have no arrow. The
+arrow **matches the colour of the block it points to** (blue same-crate, green
+callers, orange dependencies) and is shown **dashed and unlabelled** when fan-in/out
+is 0 (the file connects only through non-flow `contains`/`reexports` edges).
+Cards are tinted
 like the map's clusters — green for callers, yellow for dependencies — while
 same-crate cards stay neutral and 3rd-party (external) cards are grey. It mirrors
 the map's gestures — Shift-click toggles a node's selection, ⌘/Ctrl-click opens

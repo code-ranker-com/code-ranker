@@ -88,15 +88,17 @@ function buildDiagramSVG(node, level) {
 
   // ── Layout: card blocks stacked vertically, 5 cards per row ──────────────────
   //   external          (external callers)
-  //   crate in: a / b…  (cross-crate callers, one block per crate)
-  //   fan in            (same-crate callers)        ── arrow ──┐
-  //   [ main node ]                                            │
-  //   fan out           (same-crate dependencies)   ── arrow ──┘
-  //   crate out: c…     (cross-crate dependencies, one block per crate)
+  //   crate in: a / b…  (cross-crate callers, one block per crate)  ── arrow ──┐
+  //   fan in            (same-crate callers)                        ── arrow ──┤
+  //   [ main node ]                                                            │
+  //   fan out           (same-crate dependencies)                  ── arrow ──┤
+  //   crate out: c…     (cross-crate dependencies, one block per crate) arrow ─┘
   //   external          (external dependencies)
   // Every block is a FIXED 5 columns wide (the main node spans the same width);
-  // height grows with the row count. Arrows connect only fan-in → node → fan-out;
-  // every other block (external, per-crate) carries no arrow.
+  // height grows with the row count. The fan-in/out arrow connects the node to
+  // the NEAREST internal block (same-crate `fan` or, when absent, the closest
+  // cross-crate `crate in/out`) — matching what fan_in/fan_out count. Only the
+  // external blocks (third-party, tracked as fan_*_external) carry no arrow.
   const SNW = 148, SNH = 62;
   const MNH2 = 110 + 54;
   const COLS      = 5;            // cards per row (fixed)
@@ -140,11 +142,12 @@ function buildDiagramSVG(node, level) {
     return [...m.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
   };
 
-  // Ordered block descriptors. `fan` marks the single block that arrows to the
-  // node. Bigger crates sit CLOSER to the node: above → ascending toward fan-in
-  // (biggest just above it); below → descending from fan-out.
+  // Ordered block descriptors. `fan` marks the same-group block; `ext` marks the
+  // third-party block (NOT counted in fan_in/fan_out — those live in
+  // fan_*_external). Bigger crates sit CLOSER to the node: above → ascending
+  // toward fan-in (biggest just above it); below → descending from fan-out.
   // A block's label is a plain prefix + a bolder crate-name suffix (nullable).
-  const mk = (items, dir, label, crate, color, fan) => ({ items, dir, label, crate, color, fan: !!fan, h: blockH(items), y: 0 });
+  const mk = (items, dir, label, crate, color, fan, ext) => ({ items, dir, label, crate, color, fan: !!fan, ext: !!ext, h: blockH(items), y: 0 });
   const crateIn  = crossByCrate(inConns.internal);    // desc by count
   const crateOut = crossByCrate(outConns.internal);   // desc by count
   // The main node's own group value — labels the same-group fan blocks too.
@@ -153,7 +156,7 @@ function buildDiagramSVG(node, level) {
   const gLabel = _groupKey || 'group';
 
   const above = [];
-  if (inConns.external.length) above.push(mk(inConns.external, 'in', 'external', null, BOX_EXT));
+  if (inConns.external.length) above.push(mk(inConns.external, 'in', 'external', null, BOX_EXT, false, true));
   for (const [c, items] of [...crateIn].reverse()) above.push(mk(items, 'in', `${gLabel} in: `, c, BOX_IN));
   const fanInRecs = sameCrate(inConns.internal);
   if (fanInRecs.length) above.push(mk(fanInRecs, 'in', ownCrate ? `${gLabel} in: ` : 'fan in', ownCrate, BOX_FAN, true));
@@ -162,22 +165,27 @@ function buildDiagramSVG(node, level) {
   const fanOutRecs = sameCrate(outConns.internal);
   if (fanOutRecs.length) below.push(mk(fanOutRecs, 'out', ownCrate ? `${gLabel} out: ` : 'fan out', ownCrate, BOX_FAN, true));
   for (const [c, items] of crateOut) below.push(mk(items, 'out', `${gLabel} out: `, c, BOX_OUT));
-  if (outConns.external.length) below.push(mk(outConns.external, 'out', 'external', null, BOX_EXT));
+  if (outConns.external.length) below.push(mk(outConns.external, 'out', 'external', null, BOX_EXT, false, true));
 
-  const fanInBlock  = above.find(b => b.fan) || null;
-  const fanOutBlock = below.find(b => b.fan) || null;
+  // The in/out arrow + "Fan-in/out: N" label anchor to the blocks fan_in/fan_out
+  // actually count: every INTERNAL block (same-group `fan` + cross-group
+  // `crate in/out`), never the external one. The arrow targets the block nearest
+  // the node — the last internal block above, the first internal block below — so
+  // it shows even when there is no same-crate block (e.g. only cross-crate deps).
+  const fanInTarget  = [...above].reverse().find(b => !b.ext) || null;
+  const fanOutTarget = below.find(b => !b.ext) || null;
 
   // Stack from the top down, then the node, then the blocks below it.
   let cursor = MARG;
   above.forEach((b, i) => {
     b.y = cursor;
     cursor += b.h;
-    cursor += (i === above.length - 1 && b.fan) ? ARR_GAP : BLOCK_GAP;
+    cursor += (i === above.length - 1 && !b.ext) ? ARR_GAP : BLOCK_GAP;
   });
   const MNY = cursor;
   cursor = MNY + MNH2;
   below.forEach((b, i) => {
-    cursor += (i === 0 && b.fan) ? ARR_GAP : BLOCK_GAP;
+    cursor += (i === 0 && !b.ext) ? ARR_GAP : BLOCK_GAP;
     b.y = cursor;
     cursor += b.h;
   });
@@ -200,9 +208,14 @@ function buildDiagramSVG(node, level) {
   // scroll the central node to the middle of the viewport on open.
   const nodeCyFrac = (MNY + MNH2 / 2) / VH;
   let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VW} ${VH}" data-node-cy="${nodeCyFrac.toFixed(5)}" style="display:block;width:100%;max-width:${VW}px;height:auto;margin:auto">`;
+  // One arrowhead marker per block colour, so the fan-in/out line + head matches
+  // the colour of the block it points to (blue same-crate, green `crate in`,
+  // orange `crate out`).
+  const arrowMarkerId = c => 'ah-' + c.replace('#', '');
+  const arrowMarkers = [BOX_FAN, BOX_IN, BOX_OUT, BOX_EXT].map(c =>
+    `<marker id="${arrowMarkerId(c)}" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3z" fill="${c}"/></marker>`).join('');
   s += `<defs>` +
-    `<marker id="ah" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3z" fill="#4d6f9c"/></marker>` +
-    `<marker id="ah-ext" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3z" fill="#9aa0a6"/></marker>` +
+    arrowMarkers +
     `<clipPath id="mn-clip"><rect x="${MNX+10}" y="${MNY}" width="${MNW-20}" height="${MNH2}"/></clipPath>` +
     `</defs>`;
 
@@ -346,11 +359,16 @@ function buildDiagramSVG(node, level) {
 
   // Blocks above the node (external, per-crate, then same-crate fan-in).
   for (const b of above) s += renderBlock(b);
-  // Fan-in arrow — only same-crate fan-in → node.
-  if (fanInBlock) {
-    s += `<line x1="${MNCX}" y1="${fanInBlock.y + fanInBlock.h + BOX_VPAD}" x2="${MNCX}" y2="${MNY}" stroke="#4d6f9c" stroke-width="1.5" marker-end="url(#ah)"/>`;
-    if (node.fan_in != null && node.fan_in > 0)
-      s += `<text x="${MNCX+8}" y="${Math.round((fanInBlock.y + fanInBlock.h + MNY) / 2) + 4}" font-family="system-ui,sans-serif" font-size="10" fill="#5c7a96">Fan-in: ${node.fan_in}</text>`;
+  // Fan-in arrow — nearest internal caller block (same-crate fan-in, else the
+  // closest cross-crate `crate in` block) → node. Dashed (and unlabelled) when
+  // fan_in is 0: the block exists but links only through non-flow edges
+  // (contains / reexports), so every card in it is dashed too.
+  if (fanInTarget) {
+    const flowIn = node.fan_in != null && node.fan_in > 0;
+    const dashIn = flowIn ? '' : ' stroke-dasharray="5,3"';
+    s += `<line x1="${MNCX}" y1="${fanInTarget.y + fanInTarget.h + BOX_VPAD}" x2="${MNCX}" y2="${MNY}" stroke="${fanInTarget.color}" stroke-width="1.5"${dashIn} marker-end="url(#${arrowMarkerId(fanInTarget.color)})"/>`;
+    if (flowIn)
+      s += `<text x="${MNCX+8}" y="${Math.round((fanInTarget.y + fanInTarget.h + MNY) / 2) + 4}" font-family="system-ui,sans-serif" font-size="10" fill="#5c7a96">Fan-in: ${node.fan_in}</text>`;
   }
 
   // Main node
@@ -460,11 +478,16 @@ function buildDiagramSVG(node, level) {
   s += `<text class="mn-copied-msg" ${mono} x="${MNX+MNW/2}" y="${MNY+MNH2/2+18}" text-anchor="middle" font-size="20" font-weight="700" fill="#4d6f9c">copied</text>`;
   s += `</g>`;
 
-  // Fan-out arrow — only node → same-crate fan-out.
-  if (fanOutBlock) {
-    s += `<line x1="${MNCX}" y1="${MNY+MNH2}" x2="${MNCX}" y2="${fanOutBlock.y}" stroke="#4d6f9c" stroke-width="1.5" marker-end="url(#ah)"/>`;
-    if (node.fan_out != null && node.fan_out > 0)
-      s += `<text x="${MNCX+8}" y="${Math.round((MNY + MNH2 + fanOutBlock.y) / 2) + 4}" font-family="system-ui,sans-serif" font-size="10" fill="#5c7a96">Fan-out: ${node.fan_out}</text>`;
+  // Fan-out arrow — node → nearest internal dependency block (same-crate fan-out,
+  // else the closest cross-crate `crate out` block). Dashed (and unlabelled) when
+  // fan_out is 0: the block exists but links only through non-flow edges
+  // (contains / reexports), so every card in it is dashed too.
+  if (fanOutTarget) {
+    const flowOut = node.fan_out != null && node.fan_out > 0;
+    const dashOut = flowOut ? '' : ' stroke-dasharray="5,3"';
+    s += `<line x1="${MNCX}" y1="${MNY+MNH2}" x2="${MNCX}" y2="${fanOutTarget.y}" stroke="${fanOutTarget.color}" stroke-width="1.5"${dashOut} marker-end="url(#${arrowMarkerId(fanOutTarget.color)})"/>`;
+    if (flowOut)
+      s += `<text x="${MNCX+8}" y="${Math.round((MNY + MNH2 + fanOutTarget.y) / 2) + 4}" font-family="system-ui,sans-serif" font-size="10" fill="#5c7a96">Fan-out: ${node.fan_out}</text>`;
   }
   // Blocks below the node (same-crate fan-out, per-crate, then external).
   for (const b of below) s += renderBlock(b);

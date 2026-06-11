@@ -166,17 +166,19 @@ function focusRenderCount(level, fz) {
 
 // Node budget for the auto-chosen landing depth when drilling in.
 const FOCUS_NODE_BUDGET = 20;
-// The focusDig to land on when drilling into a crate/folder: the most-revealed
-// view (highest reveal depth) whose rendered element count stays under
-// FOCUS_NODE_BUDGET. Falls back to the most-collapsed view (`minFz`, depth 0) when
-// even that is already at/over budget. e.g. counts {d1:3, d2:18, d3:34} → land on
-// d2 (18, the largest under 20).
+// The focusDig to land on when drilling into a crate/folder: the DEEPEST (most-
+// revealed) view whose rendered element count stays under FOCUS_NODE_BUDGET. Falls
+// back to the most-collapsed view (`minFz`, depth 0) when even that is already
+// at/over budget. The count is non-decreasing as the reveal depth grows, so the
+// deepest under-budget depth is also the richest. Keying on the highest *count*
+// instead would wrongly stop early when a deeper reveal adds no elements — e.g. a
+// lone file nested in folders keeps the count at 1 at every depth, so the folder
+// would never expand. e.g. counts {d1:3, d2:18, d3:34} → land on d2 (18 < 20).
 function landingFocusDig(level) {
   const minFz = focusMinFz(level);
-  let best = minFz, bestCount = -1;
+  let best = minFz;
   for (let fz = minFz; fz <= 0; fz++) {
-    const c = focusRenderCount(level, fz);
-    if (c < FOCUS_NODE_BUDGET && c > bestCount) { bestCount = c; best = fz; }
+    if (focusRenderCount(level, fz) < FOCUS_NODE_BUDGET) best = fz;
   }
   return best;
 }
@@ -618,11 +620,14 @@ function setupEdgeHighlight(svgFrame, level) {
         for (const e of (edgeMap.get(id) ?? new Set())) edges.add(e);
       }
       nc = matchIds.length;
-      // Clicking the crate container (not a folder box inside it) drills into the
+      // The crate container is EXPANDED (its folders/files are visible), so a click
+      // on its background does nothing; only its name/path label drills into the
       // whole crate — crate-tier grouper, so the focus shows all its files.
-      clusterEl.style.cursor = 'pointer';
+      const crateLabelEl = clusterEl.querySelector('text');
+      if (crateLabelEl) crateLabelEl.style.cursor = 'pointer';
       clusterEl.addEventListener('click', e => {
         if (e.target.closest('g.node')) return;   // a folder box handles its own click
+        if (!e.target.closest('text')) return;    // only the path label navigates
         e.stopPropagation();
         drillIntoGroup(label, level, 0);
       });
@@ -638,7 +643,8 @@ function setupEdgeHighlight(svgFrame, level) {
         for (const e of (edgeMap.get(id) ?? new Set())) edges.add(e);
       }
       nc = matchIds.length;
-      // Clicking the folder background OR its name drills into it. Find a
+      // The folder cluster is EXPANDED (its files are visible), so a click on its
+      // background does nothing; only its path label drills into it. Find a
       // representative node by the folder's full dir (robust regardless of whether
       // graphviz nests the member nodes in the cluster <g>, and even when the
       // folder's files have no edges) — the old `querySelector('g.node title')`
@@ -646,9 +652,11 @@ function setupEdgeHighlight(svgFrame, level) {
       const sample = [...nodeById.values()].find(n => nodeRelDir(n) === label);
       if (sample) {
         const tgt = focusFolderTarget(level, sample);
-        clusterEl.style.cursor = 'pointer';
+        const dirLabelEl = clusterEl.querySelector('text');
+        if (dirLabelEl) dirLabelEl.style.cursor = 'pointer';
         clusterEl.addEventListener('click', e => {
           if (e.target.closest('g.node')) return;   // a file handles its own click
+          if (!e.target.closest('text')) return;    // only the path label navigates
           e.stopPropagation();
           drillIntoGroup(tgt.key, level, tgt.dig);
         });

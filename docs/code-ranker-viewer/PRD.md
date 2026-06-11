@@ -194,8 +194,8 @@ chain from the root to the first branching folder, at the node-budget reveal dep
 **group view** — one node per group (e.g. per-crate, from `ui.grouping.key`), with
 deduped inter-group edges — is what the crate tier / overview shows. **Clicking a
 group node drills into it**: the map re-renders showing only that group's files in
-directory sub-clusters, plus two neighbor clusters — **callers** (left, green
-background) and **dependencies** (right, orange background), each a list of
+directory sub-clusters, plus two neighbor clusters — **`Fan-in`** (callers, left, green
+background) and **`Fan-out`** (dependencies, right, orange background), each a list of
 **crates** labelled `crate (N)` where N is the count of that crate's files coupled
 to the focus (caller files for callers, depended-on files for dependencies);
 clicking a crate drills into its folder. **Clicking a box** drills the focus into

@@ -303,11 +303,11 @@ function buildDOT(nodes, edges, level, viewport) {
   const inNodeId  = g => 'IN\x01' + g;
   const outNodeId = g => 'OUT\x01' + g;
 
-  // Left cluster — caller crates (label `crate (N coupled files)`)
+  // Left cluster — caller crates, i.e. this group's fan-in (label `crate (N coupled files)`)
   if (inGrp.size > 0) {
     dot += `  subgraph cluster_in {\n`;
     dot += `    class="status-${clusterStatus(inGrp)}"\n`;
-    dot += `    label="callers" style=filled fillcolor="${IN_FILL}" color="#88bb88" fontcolor="#447744" fontname="Helvetica" fontsize=11\n`;
+    dot += `    label="Fan-in" style=filled fillcolor="${IN_FILL}" color="#88bb88" fontcolor="#447744" fontname="Helvetica" fontsize=11\n`;
     for (const [crate, r] of inGrp)
       dot += `    ${dotId(inNodeId(crate))} ${extNode(`${crate} (${r.their.size})`, IN_EDGE_COLOR, IN_FILL, 'status-' + grpStatus(r), r.their.size === 0)}\n`;
     dot += '  }\n';
@@ -344,11 +344,11 @@ function buildDOT(nodes, edges, level, viewport) {
     dot += '  }\n';
   }
 
-  // Right cluster — dependency crates (label `crate (N coupled files)`)
+  // Right cluster — dependency crates, i.e. this group's fan-out (label `crate (N coupled files)`)
   if (outGrp.size > 0) {
     dot += `  subgraph cluster_out {\n`;
     dot += `    class="status-${clusterStatus(outGrp)}"\n`;
-    dot += `    label="dependencies" style=filled fillcolor="${OUT_FILL}" color="#ccaa77" fontcolor="#886633" fontname="Helvetica" fontsize=11\n`;
+    dot += `    label="Fan-out" style=filled fillcolor="${OUT_FILL}" color="#ccaa77" fontcolor="#886633" fontname="Helvetica" fontsize=11\n`;
     for (const [crate, r] of outGrp)
       dot += `    ${dotId(outNodeId(crate))} ${extNode(`${crate} (${r.their.size})`, OUT_EDGE_COLOR, OUT_FILL, 'status-' + grpStatus(r), r.their.size === 0)}\n`;
     dot += '  }\n';

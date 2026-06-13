@@ -6,6 +6,32 @@ one LOC bucket — `sloc`, `cloc`, `blank`, or `tloc`. Inline tests are split of
 production size, HK, or complexity of a file. The walk-through below counts a
 14-line hello-world by hand.
 
+## What "correct" means (normative)
+
+This file is the **source of truth** for *what each metric counts* in Rust — the
+definition the **Metric Accuracy** goal (`cpt-code-ranker-nfr-metric-accuracy`)
+and its tests assert against (see [`docs/metric-correctness.md`](../../docs/metric-correctness.md)).
+Three rules hold for **every** metric below, so the per-metric sections only list
+what *does* count:
+
+- **Counted from the parsed AST, never from text.** A metric keyword that appears
+  only as a look-alike — inside an identifier (`super_unsafe_fn`), a comment, a
+  string / char literal, a doc-comment, an attribute, or an unexpanded macro body
+  — **does not count**. No false positives from text.
+- **Production code only.** `#[cfg(test)]` / `#[test]` / `#[bench]` items are
+  stripped first, so nothing inside them counts toward any production metric
+  (their lines become `tloc`).
+- **Macros are not expanded.** A construct generated *inside* a macro invocation
+  is invisible — a deliberate non-goal, not a missed count.
+
+Per-function metrics (`cyclomatic`, `cognitive`, `exits`, `args`, `closures`) are
+**summed over the file's functions** and **omitted at their no-signal value**
+(`omit_at` — `1` for `cyclomatic`, `0` for the rest; see `node_schema.md`). The
+per-construct increment rules for these come from `rust-code-analysis` (our
+analyzer of record); the guarantees this spec adds on top are the three rules
+above plus summation and omission. Reconciling the analyzer's definitions against
+independent tools is the differential layer in `docs/metric-correctness.md`.
+
 ## The example
 
 Each line carries its own checkbox matrix in a trailing comment: the first
@@ -133,9 +159,16 @@ the **sum over every function**; a function-less file omits it.
 
 ### `exits`, `args`, `closures` — structural counts
 
-Plain tallies over the production unit: `exits` = number of `return`/`?`/throw
-exit points, `args` = function (or, if none, closure) parameter count,
-`closures` = number of closures defined.
+Per-function tallies, **summed over the file's functions** (like `cyclomatic` —
+not read from the file root, which is why a function-less file omits them):
+
+- **`exits`** — explicit exit points: each `return` and each `?` (try) operator.
+- **`args`** — parameter count, summed over functions **and** closures.
+- **`closures`** — number of closures (`|…| …`) defined.
+
+A function-less file omits all three (their no-signal value is `0`). As with the
+others, a `return`/`?`/`|` appearing in a comment, string, or identifier does not
+count — these are AST counts, not text matches.
 
 ### Halstead — the operator/operand dictionaries
 

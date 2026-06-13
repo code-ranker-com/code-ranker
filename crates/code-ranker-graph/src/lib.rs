@@ -95,6 +95,7 @@ pub fn coupling_specs() -> (
                 calc: "sloc * (fan_in * fan_out) ** 2",
                 direction: Direction::LowerBetter,
                 abbreviate: true,
+                ..Default::default()
             },
         ),
         (

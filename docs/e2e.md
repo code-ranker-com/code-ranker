@@ -20,6 +20,64 @@ Each project deliberately contains **both the dependency forms we DO detect and
 the known blind spots**, documented in the source comments and pinned in its
 `code-ranker-report.json`.
 
+## Why these fixtures exist
+
+The goldens are the **regression net for metric correctness**, not just for graph
+shape. A whole class of metric bug is *silent*: a per-function metric
+(`cyclomatic`, `cognitive`, `exits`, `args`, `closures`) read from the file's
+**root** code space instead of summed over its child function spaces comes out as
+a constant — `1` for `cyclomatic`, `0` (and thus omitted) for the rest — on every
+file. The e2e test stays green because the golden froze that broken output as the
+"expected" value. The bug hid for exactly as long as no fixture exercised the
+metric with a non-trivial value.
+
+So the standing requirement is: **every metric and every case must appear with a
+meaningful, non-trivial value in at least one golden.** Concretely the fixtures
+must, between them, exercise:
+
+- **Every node metric the analyzer computes for the language**, with a non-zero
+  value on at least one file — including the per-function ones (a function with
+  **nested branches** → `cognitive`; a `return` → `exits`; a **multi-argument**
+  function → `args`; a **closure** → `closures`; an `unsafe` block → `unsafe`). A
+  fixture of trivial stub functions is not enough: it leaves those metrics at
+  their omit value and the golden asserts nothing about them.
+- **Every edge kind** (`uses`, `contains`, `reexports`, `super`) and an external
+  node.
+- **Every cycle kind** — both `mutual` (2-node) and `chain` (3+-node) — in every
+  language's fixture.
+
+When a fixture is missing one of these, the metric/case is **unguarded**: a future
+regression (or a re-introduction of the root-vs-sum read) changes nothing the test
+can see. Adding coverage means changing a sample's source so the value becomes
+non-trivial, then regenerating its golden (below).
+
+**Per-language metric scope.** `rust-code-analysis` does not compute every metric
+for every language, so "every metric" means *every metric the analyzer supports
+for that language* — and every metric is still guarded by **at least one** golden.
+Known gaps the fixtures cannot fill (the construct is present in each `complex.*`
+but the analyzer emits nothing):
+
+| metric | not emitted for | why |
+|---|---|---|
+| `args` | Python | analyzer does not compute it for the language |
+| `closures` | Python | analyzer does not compute it for the language |
+| `exits` | JavaScript | analyzer does not compute it for the language |
+| `cloc` | JavaScript | analyzer does not count JS comment lines |
+| `tloc` | Python, JavaScript, TypeScript | only the Rust analysis strips `#[cfg(test)]` items |
+| `items`, `unsafe` | non-Rust | emitted only by the Rust plugin (not in the central catalog) |
+
+This per-language scope is enforced by the `every_central_metric_is_exercised_per_language`
+test: each central metric must be non-zero in every language's golden except the
+rows above (encoded as `COVERAGE_EXCEPTIONS`), and a stale exception (the analyzer
+started emitting it) also fails — so this table and the test stay in lock-step.
+
+So per golden, **every metric the analyzer/plugin produces for that language
+appears with a non-zero value on at least one file** (Rust covers all 26; the
+others cover all minus the rows above). Verified by iterating each committed
+golden, not by spot-check.
+
+`cyclomatic` / `cognitive` are computed for all four languages.
+
 ## How it works
 
 - `crates/code-ranker-plugin-<lang>/sample/code-ranker.toml` — a self-contained
@@ -90,6 +148,16 @@ Every project contains a file-to-file dependency cycle (`a ⇄ b`), an external
 dependency, and a test file.
 
 ### Rust (`crates/code-ranker-plugin-rust/sample/`)
+
+**Metric coverage** (`src/complex.rs`): a dependency-free file built solely to
+surface the per-function metrics with real values — nested branches
+(`cyclomatic` / `cognitive`), early `return`s (`exits`), several arguments
+(`args`), a closure (`closures`), and an `unsafe` block (`unsafe`). Without it
+the stub functions elsewhere leave those metrics at their omit value and the
+golden would assert nothing about them.
+
+**Cycle kinds** — both are pinned: `mutual` (2-node, `a ⇄ b`) and `chain`
+(3-node, `chain::one → two → three → one` under `src/chain/`).
 
 Detected: `use crate::`, groups `{}`, glob `*`, `as` rename, `super::`, inline
 modules, `pub use` → `Reexports` edge, external crate via `use serde::` →

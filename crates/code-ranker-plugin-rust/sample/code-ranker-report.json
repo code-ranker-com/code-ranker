@@ -33,12 +33,24 @@
         }
       },
       "cycle_kinds": {
+        "chain": {
+          "description": "Three or more nodes forming a dependency cycle (A → B → C → A).",
+          "label": "Chain"
+        },
         "mutual": {
           "description": "Two nodes that directly depend on each other (A ↔ B).",
           "label": "Mutual"
         }
       },
       "cycles": [
+        {
+          "kind": "chain",
+          "nodes": [
+            "{target}/src/chain/one.rs",
+            "{target}/src/chain/three.rs",
+            "{target}/src/chain/two.rs"
+          ]
+        },
         {
           "kind": "mutual",
           "nodes": [
@@ -114,6 +126,39 @@
           "line": 8,
           "source": "{target}/src/b.rs",
           "target": "{target}/src/a.rs"
+        },
+        {
+          "kind": "contains",
+          "source": "{target}/src/chain.rs",
+          "target": "{target}/src/chain/one.rs"
+        },
+        {
+          "kind": "contains",
+          "source": "{target}/src/chain.rs",
+          "target": "{target}/src/chain/three.rs"
+        },
+        {
+          "kind": "contains",
+          "source": "{target}/src/chain.rs",
+          "target": "{target}/src/chain/two.rs"
+        },
+        {
+          "kind": "uses",
+          "line": 2,
+          "source": "{target}/src/chain/one.rs",
+          "target": "{target}/src/chain/two.rs"
+        },
+        {
+          "kind": "uses",
+          "line": 2,
+          "source": "{target}/src/chain/three.rs",
+          "target": "{target}/src/chain/one.rs"
+        },
+        {
+          "kind": "uses",
+          "line": 2,
+          "source": "{target}/src/chain/two.rs",
+          "target": "{target}/src/chain/three.rs"
         },
         {
           "kind": "uses",
@@ -229,14 +274,14 @@
         },
         {
           "kind": "reexports",
-          "line": 35,
+          "line": 42,
           "source": "{target}/src/lib.rs",
           "target": "{target}/src/a.rs",
           "visibility": "public"
         },
         {
           "kind": "uses",
-          "line": 57,
+          "line": 64,
           "source": "{target}/src/lib.rs",
           "target": "{target}/src/a.rs"
         },
@@ -247,7 +292,7 @@
         },
         {
           "kind": "uses",
-          "line": 58,
+          "line": 65,
           "source": "{target}/src/lib.rs",
           "target": "{target}/src/b.rs"
         },
@@ -255,6 +300,16 @@
           "kind": "contains",
           "source": "{target}/src/lib.rs",
           "target": "{target}/src/c.rs"
+        },
+        {
+          "kind": "contains",
+          "source": "{target}/src/lib.rs",
+          "target": "{target}/src/chain.rs"
+        },
+        {
+          "kind": "contains",
+          "source": "{target}/src/lib.rs",
+          "target": "{target}/src/complex.rs"
         },
         {
           "kind": "contains",
@@ -299,6 +354,15 @@
         }
       ],
       "node_attributes": {
+        "args": {
+          "description": "Number of function / closure arguments.",
+          "direction": "lower_better",
+          "group": "complexity",
+          "label": "Args",
+          "name": "Arguments",
+          "short": "Args",
+          "value_type": "int"
+        },
         "blank": {
           "description": "Empty or whitespace-only lines. In Rust, measured on production code only (inline `#[cfg(test)]` / `#[test]` tests are excluded, like `sloc`; their lines are `tloc`).",
           "group": "loc",
@@ -326,6 +390,24 @@
           "short": "Comments",
           "value_type": "int"
         },
+        "closures": {
+          "description": "Number of closures defined in the unit.",
+          "direction": "lower_better",
+          "group": "complexity",
+          "label": "Closures",
+          "name": "Closures",
+          "short": "Closures",
+          "value_type": "int"
+        },
+        "cognitive": {
+          "description": "How hard the code is for a human to follow — not just how many paths it has.<br>Like `cyclomatic` it adds +1 for each break in linear flow (`if`, `else`, `match`, loops, `catch`, chained `&&` / `||`), but it also adds an extra +1 for every level of nesting: an `if` inside a loop inside an `if` costs far more than three flat `if`s.<br>That nesting penalty is the point — deeply indented logic is what actually strains a reader, so a high `cognitive` next to a modest `cyclomatic` flags tangled, hard-to-read code.<br>Summed across every function in the file.",
+          "direction": "lower_better",
+          "group": "complexity",
+          "label": "Cognitive",
+          "name": "Cognitive complexity",
+          "short": "Cognitive",
+          "value_type": "int"
+        },
         "crate": {
           "label": "Crate",
           "value_type": "str"
@@ -343,6 +425,7 @@
           "group": "complexity",
           "label": "Cyclomatic",
           "name": "Cyclomatic complexity",
+          "omit_at": 1.0,
           "short": "Cyclomatic",
           "value_type": "int"
         },
@@ -355,6 +438,15 @@
           "name": "Halstead effort",
           "short": "H.effort",
           "value_type": "float"
+        },
+        "exits": {
+          "description": "Number of exit points (return/throw) in the unit.",
+          "direction": "lower_better",
+          "group": "complexity",
+          "label": "Exits",
+          "name": "Exit points",
+          "short": "Exits",
+          "value_type": "int"
         },
         "external": {
           "label": "External",
@@ -487,6 +579,13 @@
           "short": "TLOC",
           "value_type": "int"
         },
+        "unsafe": {
+          "description": "Count of `unsafe` blocks and `unsafe fn`/`impl`/`trait` declarations in production code (test items are excluded). Syntactic count: `unsafe` inside a macro body is not seen, and the figure is not type-checked.",
+          "direction": "lower_better",
+          "label": "Unsafe",
+          "short": "Unsafe",
+          "value_type": "int"
+        },
         "version": {
           "label": "Version",
           "value_type": "str"
@@ -556,6 +655,7 @@
           "crate": "helper",
           "cyclomatic": 2,
           "effort": 49.128,
+          "exits": 1,
           "fan_in": 1,
           "id": "{target}/helper/src/gadget.rs",
           "items": 1,
@@ -599,6 +699,7 @@
           "crate": "helper",
           "cyclomatic": 2,
           "effort": 49.128,
+          "exits": 1,
           "fan_in": 1,
           "id": "{target}/helper/src/widget.rs",
           "items": 2,
@@ -622,6 +723,7 @@
           "cycle": "mutual",
           "cyclomatic": 2,
           "effort": 4413.97,
+          "exits": 1,
           "fan_in": 2,
           "fan_out": 2,
           "fan_out_external": 1,
@@ -645,10 +747,12 @@
           "blank": 4,
           "bugs": 0.0521,
           "cloc": 15,
+          "closures": 1,
           "crate": "rust-sample",
           "cycle": "mutual",
           "cyclomatic": 4,
           "effort": 1958.647,
+          "exits": 2,
           "fan_in": 3,
           "fan_out": 1,
           "fan_out_external": 1,
@@ -675,6 +779,7 @@
           "crate": "rust-sample",
           "cyclomatic": 3,
           "effort": 132.877,
+          "exits": 2,
           "fan_in": 2,
           "id": "{target}/src/c.rs",
           "items": 3,
@@ -692,12 +797,137 @@
           "volume": 53.15
         },
         {
+          "bugs": 0.0011,
+          "cloc": 5,
+          "crate": "rust-sample",
+          "effort": 6,
+          "id": "{target}/src/chain.rs",
+          "items": 3,
+          "kind": "file",
+          "length": 6,
+          "loc": 8,
+          "mi": 124.161,
+          "mi_sei": 150.564,
+          "name": "chain.rs",
+          "sloc": 3,
+          "time": 0.333,
+          "visibility": "public",
+          "vocabulary": 4,
+          "volume": 12
+        },
+        {
+          "blank": 1,
+          "bugs": 0.011,
+          "cloc": 1,
+          "crate": "rust-sample",
+          "cycle": "chain",
+          "cyclomatic": 2,
+          "effort": 190.195,
+          "exits": 1,
+          "fan_in": 1,
+          "fan_out": 1,
+          "hk": 4,
+          "id": "{target}/src/chain/one.rs",
+          "items": 1,
+          "kind": "file",
+          "length": 12,
+          "loc": 6,
+          "mi": 122.592,
+          "mi_sei": 130.923,
+          "name": "one.rs",
+          "sloc": 4,
+          "time": 10.566,
+          "visibility": "public",
+          "vocabulary": 9,
+          "volume": 38.039
+        },
+        {
+          "blank": 1,
+          "bugs": 0.011,
+          "cloc": 1,
+          "crate": "rust-sample",
+          "cycle": "chain",
+          "cyclomatic": 2,
+          "effort": 190.195,
+          "exits": 1,
+          "fan_in": 1,
+          "fan_out": 1,
+          "hk": 4,
+          "id": "{target}/src/chain/three.rs",
+          "items": 1,
+          "kind": "file",
+          "length": 12,
+          "loc": 6,
+          "mi": 122.592,
+          "mi_sei": 130.923,
+          "name": "three.rs",
+          "sloc": 4,
+          "time": 10.566,
+          "visibility": "public",
+          "vocabulary": 9,
+          "volume": 38.039
+        },
+        {
+          "blank": 1,
+          "bugs": 0.011,
+          "cloc": 1,
+          "crate": "rust-sample",
+          "cycle": "chain",
+          "cyclomatic": 2,
+          "effort": 190.195,
+          "exits": 1,
+          "fan_in": 1,
+          "fan_out": 1,
+          "hk": 4,
+          "id": "{target}/src/chain/two.rs",
+          "items": 1,
+          "kind": "file",
+          "length": 12,
+          "loc": 6,
+          "mi": 122.592,
+          "mi_sei": 130.923,
+          "name": "two.rs",
+          "sloc": 4,
+          "time": 10.566,
+          "visibility": "public",
+          "vocabulary": 9,
+          "volume": 38.039
+        },
+        {
+          "args": 6,
+          "blank": 2,
+          "bugs": 0.158,
+          "cloc": 17,
+          "closures": 1,
+          "cognitive": 5,
+          "crate": "rust-sample",
+          "cyclomatic": 8,
+          "effort": 10375,
+          "exits": 4,
+          "id": "{target}/src/complex.rs",
+          "items": 2,
+          "kind": "file",
+          "length": 83,
+          "lloc": 6,
+          "loc": 32,
+          "mi": 81.668,
+          "mi_sei": 88.138,
+          "name": "complex.rs",
+          "sloc": 15,
+          "time": 576.388,
+          "unsafe": 1,
+          "visibility": "public",
+          "vocabulary": 32,
+          "volume": 415
+        },
+        {
           "blank": 2,
           "bugs": 0.0331,
           "cloc": 11,
           "crate": "rust-sample",
           "cyclomatic": 2,
           "effort": 991.183,
+          "exits": 1,
           "fan_out": 3,
           "id": "{target}/src/cross.rs",
           "items": 1,
@@ -756,12 +986,14 @@
           "volume": 10
         },
         {
+          "args": 1,
           "blank": 3,
           "bugs": 0.00736,
           "cloc": 4,
           "crate": "rust-sample",
           "cyclomatic": 2,
           "effort": 103.782,
+          "exits": 1,
           "fan_out": 1,
           "id": "{target}/src/cycle_examples/reex_spoke.rs",
           "items": 2,
@@ -784,6 +1016,7 @@
           "crate": "rust-sample",
           "cyclomatic": 2,
           "effort": 154.533,
+          "exits": 1,
           "fan_out": 1,
           "id": "{target}/src/cycle_examples/sup_loose.rs",
           "items": 3,
@@ -824,6 +1057,7 @@
           "crate": "rust-sample",
           "cyclomatic": 2,
           "effort": 154.533,
+          "exits": 1,
           "fan_out": 1,
           "id": "{target}/src/cycle_examples/sup_parent.rs",
           "items": 3,
@@ -840,6 +1074,7 @@
           "volume": 41.209
         },
         {
+          "args": 1,
           "blank": 3,
           "bugs": 0.00488,
           "cloc": 9,
@@ -890,6 +1125,7 @@
           "crate": "rust-sample",
           "cyclomatic": 2,
           "effort": 225.852,
+          "exits": 1,
           "fan_in": 1,
           "fan_out": 1,
           "hk": 5,
@@ -914,6 +1150,7 @@
           "crate": "rust-sample",
           "cyclomatic": 2,
           "effort": 166.052,
+          "exits": 1,
           "id": "{target}/src/foo/bar.rs",
           "items": 1,
           "kind": "file",
@@ -930,27 +1167,28 @@
         },
         {
           "blank": 7,
-          "bugs": 0.0331,
-          "cloc": 29,
+          "bugs": 0.0355,
+          "cloc": 34,
           "crate": "rust-sample",
           "cyclomatic": 2,
-          "effort": 992.898,
+          "effort": 1099.872,
+          "exits": 1,
           "fan_out": 3,
           "id": "{target}/src/lib.rs",
-          "items": 12,
+          "items": 14,
           "kind": "file",
-          "length": 42,
+          "length": 46,
           "lloc": 1,
-          "loc": 64,
-          "mi": 78.737,
-          "mi_sei": 83.652,
+          "loc": 71,
+          "mi": 76.137,
+          "mi_sei": 80.309,
           "name": "lib.rs",
-          "sloc": 17,
-          "time": 55.161,
+          "sloc": 19,
+          "time": 61.104,
           "tloc": 11,
           "visibility": "public",
-          "vocabulary": 26,
-          "volume": 197.418
+          "vocabulary": 28,
+          "volume": 221.138
         },
         {
           "blank": 2,
@@ -979,6 +1217,7 @@
           "crate": "rust-sample",
           "cyclomatic": 2,
           "effort": 196.755,
+          "exits": 1,
           "fan_out": 1,
           "id": "{target}/src/relocated/custom.rs",
           "items": 1,
@@ -996,22 +1235,23 @@
         }
       ],
       "stats": {
-        "blank": 2.75,
-        "bugs": 0.0167,
-        "cloc": 9.6,
-        "cyclomatic": 2.214,
-        "effort": 533.443,
-        "fan_in": 1.4,
-        "fan_out": 1.555,
-        "hk": 103.333,
-        "length": 18,
-        "mi": 105.929,
-        "mi_sei": 121.045,
-        "sloc": 6.15,
-        "time": 29.635,
+        "blank": 2.5,
+        "bugs": 0.0214,
+        "cloc": 8.88,
+        "cognitive": 5,
+        "cyclomatic": 2.5,
+        "effort": 883.082,
+        "fan_in": 1.307,
+        "fan_out": 1.416,
+        "hk": 53.666,
+        "length": 19.56,
+        "mi": 107.583,
+        "mi_sei": 121.961,
+        "sloc": 6.2,
+        "time": 49.059,
         "tloc": 10.333,
-        "vocabulary": 11.85,
-        "volume": 71.813
+        "vocabulary": 12.08,
+        "volume": 80.044
       },
       "ui": {
         "card_metrics": [
@@ -1032,6 +1272,7 @@
           "length",
           "vocabulary",
           "cyclomatic",
+          "cognitive",
           "mi",
           "mi_sei",
           "lloc",
@@ -1053,11 +1294,13 @@
           "fan_out",
           "fan_in",
           "cyclomatic",
+          "cognitive",
           "items",
           "cycle"
         ],
         "summary_metrics": [
           "cyclomatic",
+          "cognitive",
           "sloc",
           "mi",
           "mi_sei",
@@ -1259,17 +1502,17 @@
   "target": "/home/user/code-ranker/crates/code-ranker-plugin-rust/sample",
   "timings": [
     {
-      "detail": "22 nodes from 20 files",
+      "detail": "27 nodes from 25 files",
       "ms": 0,
       "stage": "rust"
     },
     {
-      "detail": "20 nodes annotated",
+      "detail": "25 nodes annotated",
       "ms": 0,
       "stage": "complexity"
     },
     {
-      "detail": "nodes=22 edges=40",
+      "detail": "nodes=27 edges=48",
       "ms": 0,
       "stage": "projection"
     }

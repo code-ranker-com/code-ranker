@@ -161,14 +161,15 @@ if let Some(u) = node.unsafe_count {              // NEW
 }
 ```
 
-**Zero-omission:** the schema convention is that a metric is omitted when it is
-zero (cf. `hk` / `cycle`). Gating on `u > 0` means files with no `unsafe` simply
-carry no `unsafe` key, instead of a noisy `"unsafe": 0` on every node. `loc` is
-always present because it's never zero; `unsafe` should follow the zero-omission
-rule. The one built-in exception is `cyclomatic`, whose floor is `1` rather than
-`0` — it (and `cognitive`) are dropped for function-less files instead. So if a
-metric's neutral value isn't `0`, gate on that neutral value rather than relying
-on the `== 0` rule.
+**Zero-omission:** the schema convention is that a metric is omitted at its
+no-signal value (cf. `hk` / `cycle`). Gating on `u > 0` means files with no
+`unsafe` simply carry no `unsafe` key, instead of a noisy `"unsafe": 0` on every
+node. `loc` is always present because it's never zero; `unsafe` should follow the
+omission rule. The no-signal value is **`0` by default**; if your metric's is
+something else, set `omit_at` on its `AttributeSpec` (e.g. `cyclomatic` uses
+`omit_at: 1`, since McCabe's floor is `1`) — the same value gates emission and is
+published to the frontend, so the two never drift. Don't hardcode a bespoke `> N`
+check.
 
 ### 4. Declare the attribute spec (so the viewer renders it)
 

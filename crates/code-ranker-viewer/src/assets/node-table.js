@@ -302,9 +302,14 @@ function setupNodeTable(section, level) {
 
     const sorted = [...filtered].sort((a, b) => {
       const av = nodeVal(a, sortId), bv = nodeVal(b, sortId);
-      if (av === null && bv === null) return 0;
-      if (av === null) return 1;
-      if (bv === null) return -1;
+      // An empty / omitted value (e.g. an omitted metric, or a non-cycle row)
+      // ranks as the minimum, so it sorts *with* the direction: first when
+      // ascending, last when descending — never pinned to one end.
+      const aEmpty = av === null || av === undefined || av === '';
+      const bEmpty = bv === null || bv === undefined || bv === '';
+      if (aEmpty && bEmpty) return 0;
+      if (aEmpty) return -1 * sortDir;
+      if (bEmpty) return 1 * sortDir;
       if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * sortDir;
       return String(av).localeCompare(String(bv)) * sortDir;
     });

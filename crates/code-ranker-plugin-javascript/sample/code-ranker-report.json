@@ -36,9 +36,20 @@
         "chain": {
           "description": "Three or more nodes forming a dependency cycle (A → B → C → A).",
           "label": "Chain"
+        },
+        "mutual": {
+          "description": "Two nodes that directly depend on each other (A ↔ B).",
+          "label": "Mutual"
         }
       },
       "cycles": [
+        {
+          "kind": "mutual",
+          "nodes": [
+            "{target}/src/m1.js",
+            "{target}/src/m2.js"
+          ]
+        },
         {
           "kind": "chain",
           "nodes": [
@@ -110,6 +121,18 @@
           "line": 5,
           "source": "{target}/src/c.js",
           "target": "{target}/src/b.js"
+        },
+        {
+          "kind": "uses",
+          "line": 3,
+          "source": "{target}/src/m1.js",
+          "target": "{target}/src/m2.js"
+        },
+        {
+          "kind": "uses",
+          "line": 2,
+          "source": "{target}/src/m2.js",
+          "target": "{target}/src/m1.js"
         }
       ],
       "node_attributes": {
@@ -172,6 +195,7 @@
           "group": "complexity",
           "label": "Cyclomatic",
           "name": "Cyclomatic complexity",
+          "omit_at": 1.0,
           "short": "Cyclomatic",
           "value_type": "int"
         },
@@ -339,10 +363,10 @@
           "name": "lodash"
         },
         {
-          "args": 2,
+          "args": 6,
           "blank": -6,
           "bugs": 0.0354,
-          "closures": 1,
+          "closures": 3,
           "cognitive": 3,
           "cycle": "chain",
           "cyclomatic": 4,
@@ -374,10 +398,10 @@
           "visibility": "public"
         },
         {
-          "args": 2,
+          "args": 6,
           "blank": -3,
           "bugs": 0.0095,
-          "closures": 1,
+          "closures": 3,
           "cognitive": 3,
           "cycle": "chain",
           "cyclomatic": 3,
@@ -400,10 +424,10 @@
           "volume": 50.718
         },
         {
-          "args": 2,
+          "args": 7,
           "blank": -6,
           "bugs": 0.0325,
-          "closures": 1,
+          "closures": 3,
           "cognitive": 3,
           "cycle": "chain",
           "cyclomatic": 4,
@@ -427,28 +451,97 @@
           "volume": 154.287
         },
         {
+          "args": 5,
+          "bugs": 0.11,
+          "closures": 1,
+          "cognitive": 27,
+          "cyclomatic": 2,
+          "effort": 5996.95,
+          "id": "{target}/src/complex.js",
+          "kind": "file",
+          "length": 58,
+          "lloc": 11,
+          "loc": 17,
+          "mi": 102.731,
+          "mi_sei": 72.712,
+          "name": "complex.js",
+          "sloc": 11,
+          "time": 333.163,
+          "visibility": "public",
+          "vocabulary": 23,
+          "volume": 262.366
+        },
+        {
           "id": "{target}/src/dynamic.js",
           "kind": "file",
           "loc": 5,
           "name": "dynamic.js",
           "visibility": "public"
+        },
+        {
+          "args": 2,
+          "bugs": 0.00528,
+          "closures": 1,
+          "cognitive": 1,
+          "cycle": "mutual",
+          "effort": 63.165,
+          "fan_in": 1,
+          "fan_out": 1,
+          "hk": 3,
+          "id": "{target}/src/m1.js",
+          "kind": "file",
+          "length": 9,
+          "lloc": 2,
+          "loc": 7,
+          "mi": 136.179,
+          "mi_sei": 120.866,
+          "name": "m1.js",
+          "sloc": 3,
+          "time": 3.509,
+          "visibility": "public",
+          "vocabulary": 7,
+          "volume": 25.266
+        },
+        {
+          "args": 2,
+          "bugs": 0.00528,
+          "closures": 1,
+          "cognitive": 1,
+          "cycle": "mutual",
+          "effort": 63.165,
+          "fan_in": 1,
+          "fan_out": 1,
+          "hk": 3,
+          "id": "{target}/src/m2.js",
+          "kind": "file",
+          "length": 9,
+          "lloc": 2,
+          "loc": 6,
+          "mi": 136.179,
+          "mi_sei": 120.866,
+          "name": "m2.js",
+          "sloc": 3,
+          "time": 3.509,
+          "visibility": "public",
+          "vocabulary": 7,
+          "volume": 25.266
         }
       ],
       "stats": {
-        "bugs": 0.0258,
-        "cognitive": 3,
-        "cyclomatic": 3.666,
-        "effort": 737.236,
-        "fan_in": 2,
-        "fan_out": 1.5,
-        "hk": 92,
-        "length": 29,
-        "mi": 128.199,
-        "mi_sei": 109.625,
-        "sloc": 8,
-        "time": 40.957,
-        "vocabulary": 15.333,
-        "volume": 116.478
+        "bugs": 0.0329,
+        "cognitive": 6.333,
+        "cyclomatic": 3.25,
+        "effort": 1389.164,
+        "fan_in": 1.6,
+        "fan_out": 1.333,
+        "hk": 56.4,
+        "length": 27.166,
+        "mi": 126.614,
+        "mi_sei": 107.22,
+        "sloc": 6.833,
+        "time": 77.175,
+        "vocabulary": 13.833,
+        "volume": 110.388
       },
       "ui": {
         "card_metrics": [
@@ -648,17 +741,17 @@
   "target": "/home/user/code-ranker/crates/code-ranker-plugin-javascript/sample",
   "timings": [
     {
-      "detail": "7 nodes from 5 files",
+      "detail": "10 nodes from 8 files",
       "ms": 0,
       "stage": "javascript"
     },
     {
-      "detail": "3 nodes annotated",
+      "detail": "6 nodes annotated",
       "ms": 0,
       "stage": "complexity"
     },
     {
-      "detail": "nodes=7 edges=9",
+      "detail": "nodes=10 edges=11",
       "ms": 0,
       "stage": "projection"
     }

@@ -475,11 +475,14 @@ plugin from the full file) is unchanged, giving `loc = sloc + cloc + blank + tlo
 halstead / loc / maintainability), which the orchestrator merges into each
 level's dictionaries and then prunes to the keys actually present.
 
-**Metrics written per file** (flat `attrs` keys; each omitted when it rounds to
-zero; the LOC block is gated on `sloc > 0`, the Halstead block on `volume > 0`,
-and the complexity pair — `cyclomatic` / `cognitive` — on the file having
-functions, i.e. `cyclomatic_sum > 1`, so a function-less file omits both rather
-than reporting a vacuous `cyclomatic` of `1`):
+**Metrics written per file** (flat `attrs` keys). Each metric is dropped at its
+**no-signal value**, declared per metric by `metric_omit_at(key)` and published
+on the spec as `AttributeSpec.omit_at` (so emission and the declared spec never
+drift). That value is `0` for almost everything; the one exception is
+`cyclomatic`, whose floor is `1` (McCabe's single straight-line path) — so a
+function-less file, whose `cyclomatic_sum` is a vacuous `1` (and `cognitive_sum`
+`0`), drops both rather than reporting a meaningless `1`. The LOC block is
+additionally gated on `sloc > 0` and the Halstead block on `volume > 0`:
 
 | Group | Keys |
 |----------|------|

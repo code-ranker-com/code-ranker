@@ -33,12 +33,24 @@
         }
       },
       "cycle_kinds": {
+        "chain": {
+          "description": "Three or more nodes forming a dependency cycle (A → B → C → A).",
+          "label": "Chain"
+        },
         "mutual": {
           "description": "Two nodes that directly depend on each other (A ↔ B).",
           "label": "Mutual"
         }
       },
       "cycles": [
+        {
+          "kind": "chain",
+          "nodes": [
+            "{target}/pkg/chain1.py",
+            "{target}/pkg/chain3.py",
+            "{target}/pkg/chain2.py"
+          ]
+        },
         {
           "kind": "mutual",
           "nodes": [
@@ -124,6 +136,42 @@
         },
         {
           "kind": "uses",
+          "line": 2,
+          "source": "{target}/pkg/chain1.py",
+          "target": "{target}/pkg/__init__.py"
+        },
+        {
+          "kind": "uses",
+          "line": 2,
+          "source": "{target}/pkg/chain1.py",
+          "target": "{target}/pkg/chain2.py"
+        },
+        {
+          "kind": "uses",
+          "line": 2,
+          "source": "{target}/pkg/chain2.py",
+          "target": "{target}/pkg/__init__.py"
+        },
+        {
+          "kind": "uses",
+          "line": 2,
+          "source": "{target}/pkg/chain2.py",
+          "target": "{target}/pkg/chain3.py"
+        },
+        {
+          "kind": "uses",
+          "line": 2,
+          "source": "{target}/pkg/chain3.py",
+          "target": "{target}/pkg/__init__.py"
+        },
+        {
+          "kind": "uses",
+          "line": 2,
+          "source": "{target}/pkg/chain3.py",
+          "target": "{target}/pkg/chain1.py"
+        },
+        {
+          "kind": "uses",
           "line": 4,
           "source": "{target}/tests/test_pkg.py",
           "target": "{target}/pkg/__init__.py"
@@ -169,6 +217,15 @@
           "short": "Comments",
           "value_type": "int"
         },
+        "cognitive": {
+          "description": "How hard the code is for a human to follow — not just how many paths it has.<br>Like `cyclomatic` it adds +1 for each break in linear flow (`if`, `else`, `match`, loops, `catch`, chained `&&` / `||`), but it also adds an extra +1 for every level of nesting: an `if` inside a loop inside an `if` costs far more than three flat `if`s.<br>That nesting penalty is the point — deeply indented logic is what actually strains a reader, so a high `cognitive` next to a modest `cyclomatic` flags tangled, hard-to-read code.<br>Summed across every function in the file.",
+          "direction": "lower_better",
+          "group": "complexity",
+          "label": "Cognitive",
+          "name": "Cognitive complexity",
+          "short": "Cognitive",
+          "value_type": "int"
+        },
         "cycle": {
           "description": "Cycle kind this node participates in.",
           "label": "Cycle",
@@ -182,6 +239,7 @@
           "group": "complexity",
           "label": "Cyclomatic",
           "name": "Cyclomatic complexity",
+          "omit_at": 1.0,
           "short": "Cyclomatic",
           "value_type": "int"
         },
@@ -380,7 +438,7 @@
           "bugs": 0.00223,
           "cloc": 2,
           "effort": 17.414,
-          "fan_in": 3,
+          "fan_in": 6,
           "id": "{target}/pkg/__init__.py",
           "kind": "file",
           "length": 5,
@@ -471,6 +529,100 @@
           "volume": 78.137
         },
         {
+          "blank": 2,
+          "bugs": 0.00938,
+          "cycle": "chain",
+          "cyclomatic": 2,
+          "effort": 149.447,
+          "exits": 1,
+          "fan_in": 1,
+          "fan_out": 2,
+          "hk": 16,
+          "id": "{target}/pkg/chain1.py",
+          "kind": "file",
+          "length": 12,
+          "lloc": 3,
+          "loc": 7,
+          "mi": 122.138,
+          "mi_sei": 100.711,
+          "name": "chain1.py",
+          "sloc": 4,
+          "time": 8.302,
+          "visibility": "public",
+          "vocabulary": 11,
+          "volume": 41.513
+        },
+        {
+          "blank": 2,
+          "bugs": 0.00938,
+          "cycle": "chain",
+          "cyclomatic": 2,
+          "effort": 149.447,
+          "exits": 1,
+          "fan_in": 1,
+          "fan_out": 2,
+          "hk": 16,
+          "id": "{target}/pkg/chain2.py",
+          "kind": "file",
+          "length": 12,
+          "lloc": 3,
+          "loc": 7,
+          "mi": 122.138,
+          "mi_sei": 100.711,
+          "name": "chain2.py",
+          "sloc": 4,
+          "time": 8.302,
+          "visibility": "public",
+          "vocabulary": 11,
+          "volume": 41.513
+        },
+        {
+          "blank": 2,
+          "bugs": 0.00938,
+          "cycle": "chain",
+          "cyclomatic": 2,
+          "effort": 149.447,
+          "exits": 1,
+          "fan_in": 1,
+          "fan_out": 2,
+          "hk": 16,
+          "id": "{target}/pkg/chain3.py",
+          "kind": "file",
+          "length": 12,
+          "lloc": 3,
+          "loc": 7,
+          "mi": 122.138,
+          "mi_sei": 100.711,
+          "name": "chain3.py",
+          "sloc": 4,
+          "time": 8.302,
+          "visibility": "public",
+          "vocabulary": 11,
+          "volume": 41.513
+        },
+        {
+          "blank": 6,
+          "bugs": 0.0742,
+          "cloc": 2,
+          "cognitive": 4,
+          "cyclomatic": 6,
+          "effort": 3323.763,
+          "exits": 3,
+          "id": "{target}/pkg/complex.py",
+          "kind": "file",
+          "length": 43,
+          "lloc": 7,
+          "loc": 16,
+          "mi": 98.417,
+          "mi_sei": 93.695,
+          "name": "complex.py",
+          "sloc": 9,
+          "time": 184.653,
+          "visibility": "public",
+          "vocabulary": 22,
+          "volume": 191.755
+        },
+        {
           "blank": 4,
           "bugs": 0.0175,
           "cloc": 1,
@@ -493,21 +645,22 @@
         }
       ],
       "stats": {
-        "blank": 6.8,
-        "bugs": 0.0294,
-        "cloc": 3.8,
-        "cyclomatic": 3.5,
-        "effort": 1030.445,
-        "fan_in": 2.25,
-        "fan_out": 3,
-        "hk": 450,
-        "length": 32.2,
-        "mi": 104.037,
-        "mi_sei": 105.764,
-        "sloc": 7.6,
-        "time": 57.246,
-        "vocabulary": 19.6,
-        "volume": 149.153
+        "blank": 5.111,
+        "bugs": 0.0277,
+        "cloc": 3.5,
+        "cognitive": 4,
+        "cyclomatic": 3.25,
+        "effort": 991.592,
+        "fan_in": 2.142,
+        "fan_out": 2.5,
+        "hk": 189.6,
+        "length": 26.666,
+        "mi": 109.446,
+        "mi_sei": 102.739,
+        "sloc": 6.555,
+        "time": 55.087,
+        "vocabulary": 17,
+        "volume": 118.007
       },
       "ui": {
         "card_metrics": [
@@ -528,6 +681,7 @@
           "length",
           "vocabulary",
           "cyclomatic",
+          "cognitive",
           "mi",
           "mi_sei",
           "lloc",
@@ -545,10 +699,12 @@
           "fan_out",
           "fan_in",
           "cyclomatic",
+          "cognitive",
           "cycle"
         ],
         "summary_metrics": [
           "cyclomatic",
+          "cognitive",
           "sloc",
           "mi",
           "mi_sei",
@@ -706,17 +862,17 @@
   "target": "/home/user/code-ranker/crates/code-ranker-plugin-python/sample",
   "timings": [
     {
-      "detail": "10 nodes from 5 files",
+      "detail": "14 nodes from 9 files",
       "ms": 0,
       "stage": "python"
     },
     {
-      "detail": "5 nodes annotated",
+      "detail": "9 nodes annotated",
       "ms": 0,
       "stage": "complexity"
     },
     {
-      "detail": "nodes=10 edges=14",
+      "detail": "nodes=14 edges=20",
       "ms": 0,
       "stage": "projection"
     }

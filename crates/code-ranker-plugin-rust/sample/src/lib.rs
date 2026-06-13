@@ -18,6 +18,13 @@ pub mod c;
 // `cross` depends on the `helper` workspace member by SUBMODULE path; `derives`
 // depends on serde only through a qualified derive (see those files).
 pub mod cross;
+// `complex` — exercises the per-function complexity metrics (cyclomatic,
+// cognitive, exits, args, closures) and the `unsafe` count, so the golden guards
+// them with real non-trivial values rather than the omit-value floor.
+pub mod complex;
+// `chain` — a 3-node `uses` cycle (one → two → three → one) so the golden covers
+// the `chain` cycle kind, next to the 2-node `mutual` cycle from `a ⇄ b`.
+pub mod chain;
 // `cycle_examples` — self-contained demo of which edge forms close a cycle and
 // which do not (uses/contains/reexports/super); see principles/rust/what-is-cycle.md.
 pub mod cycle_examples;

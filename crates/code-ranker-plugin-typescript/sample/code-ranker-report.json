@@ -33,12 +33,24 @@
         }
       },
       "cycle_kinds": {
+        "chain": {
+          "description": "Three or more nodes forming a dependency cycle (A → B → C → A).",
+          "label": "Chain"
+        },
         "mutual": {
           "description": "Two nodes that directly depend on each other (A ↔ B).",
           "label": "Mutual"
         }
       },
       "cycles": [
+        {
+          "kind": "chain",
+          "nodes": [
+            "{target}/src/chain1.ts",
+            "{target}/src/chain3.ts",
+            "{target}/src/chain2.ts"
+          ]
+        },
         {
           "kind": "mutual",
           "nodes": [
@@ -109,9 +121,36 @@
           "line": 6,
           "source": "{target}/src/b.ts",
           "target": "{target}/src/types.ts"
+        },
+        {
+          "kind": "uses",
+          "line": 2,
+          "source": "{target}/src/chain1.ts",
+          "target": "{target}/src/chain2.ts"
+        },
+        {
+          "kind": "uses",
+          "line": 2,
+          "source": "{target}/src/chain2.ts",
+          "target": "{target}/src/chain3.ts"
+        },
+        {
+          "kind": "uses",
+          "line": 2,
+          "source": "{target}/src/chain3.ts",
+          "target": "{target}/src/chain1.ts"
         }
       ],
       "node_attributes": {
+        "args": {
+          "description": "Number of function / closure arguments.",
+          "direction": "lower_better",
+          "group": "complexity",
+          "label": "Args",
+          "name": "Arguments",
+          "short": "Args",
+          "value_type": "int"
+        },
         "blank": {
           "description": "Empty or whitespace-only lines. In Rust, measured on production code only (inline `#[cfg(test)]` / `#[test]` tests are excluded, like `sloc`; their lines are `tloc`).",
           "group": "loc",
@@ -139,6 +178,15 @@
           "short": "Comments",
           "value_type": "int"
         },
+        "closures": {
+          "description": "Number of closures defined in the unit.",
+          "direction": "lower_better",
+          "group": "complexity",
+          "label": "Closures",
+          "name": "Closures",
+          "short": "Closures",
+          "value_type": "int"
+        },
         "cognitive": {
           "description": "How hard the code is for a human to follow — not just how many paths it has.<br>Like `cyclomatic` it adds +1 for each break in linear flow (`if`, `else`, `match`, loops, `catch`, chained `&&` / `||`), but it also adds an extra +1 for every level of nesting: an `if` inside a loop inside an `if` costs far more than three flat `if`s.<br>That nesting penalty is the point — deeply indented logic is what actually strains a reader, so a high `cognitive` next to a modest `cyclomatic` flags tangled, hard-to-read code.<br>Summed across every function in the file.",
           "direction": "lower_better",
@@ -161,6 +209,7 @@
           "group": "complexity",
           "label": "Cyclomatic",
           "name": "Cyclomatic complexity",
+          "omit_at": 1.0,
           "short": "Cyclomatic",
           "value_type": "int"
         },
@@ -173,6 +222,15 @@
           "name": "Halstead effort",
           "short": "H.effort",
           "value_type": "float"
+        },
+        "exits": {
+          "description": "Number of exit points (return/throw) in the unit.",
+          "direction": "lower_better",
+          "group": "complexity",
+          "label": "Exits",
+          "name": "Exit points",
+          "short": "Exits",
+          "value_type": "int"
         },
         "external": {
           "label": "External",
@@ -337,6 +395,7 @@
           "blank": 1,
           "bugs": 0.0166,
           "cloc": 2,
+          "closures": 1,
           "cyclomatic": 2,
           "effort": 353.817,
           "fan_out": 1,
@@ -362,6 +421,7 @@
           "cycle": "mutual",
           "cyclomatic": 5,
           "effort": 7858.206,
+          "exits": 2,
           "fan_in": 2,
           "fan_out": 3,
           "fan_out_external": 3,
@@ -387,6 +447,7 @@
           "cycle": "mutual",
           "cyclomatic": 3,
           "effort": 700,
+          "exits": 2,
           "fan_in": 1,
           "fan_out": 2,
           "hk": 32,
@@ -403,6 +464,100 @@
           "visibility": "public",
           "vocabulary": 16,
           "volume": 120
+        },
+        {
+          "bugs": 0.0163,
+          "cloc": 1,
+          "cycle": "chain",
+          "cyclomatic": 2,
+          "effort": 344.156,
+          "exits": 1,
+          "fan_in": 1,
+          "fan_out": 1,
+          "hk": 4,
+          "id": "{target}/src/chain1.ts",
+          "kind": "file",
+          "length": 16,
+          "lloc": 4,
+          "loc": 6,
+          "mi": 123.41,
+          "mi_sei": 134.482,
+          "name": "chain1.ts",
+          "sloc": 4,
+          "time": 19.119,
+          "visibility": "public",
+          "vocabulary": 12,
+          "volume": 57.359
+        },
+        {
+          "bugs": 0.0163,
+          "cloc": 1,
+          "cycle": "chain",
+          "cyclomatic": 2,
+          "effort": 344.156,
+          "exits": 1,
+          "fan_in": 1,
+          "fan_out": 1,
+          "hk": 4,
+          "id": "{target}/src/chain2.ts",
+          "kind": "file",
+          "length": 16,
+          "lloc": 4,
+          "loc": 6,
+          "mi": 123.41,
+          "mi_sei": 134.482,
+          "name": "chain2.ts",
+          "sloc": 4,
+          "time": 19.119,
+          "visibility": "public",
+          "vocabulary": 12,
+          "volume": 57.359
+        },
+        {
+          "bugs": 0.0163,
+          "cloc": 1,
+          "cycle": "chain",
+          "cyclomatic": 2,
+          "effort": 344.156,
+          "exits": 1,
+          "fan_in": 1,
+          "fan_out": 1,
+          "hk": 4,
+          "id": "{target}/src/chain3.ts",
+          "kind": "file",
+          "length": 16,
+          "lloc": 4,
+          "loc": 6,
+          "mi": 123.41,
+          "mi_sei": 134.482,
+          "name": "chain3.ts",
+          "sloc": 4,
+          "time": 19.119,
+          "visibility": "public",
+          "vocabulary": 12,
+          "volume": 57.359
+        },
+        {
+          "args": 4,
+          "bugs": 0.138,
+          "cloc": 5,
+          "cognitive": 5,
+          "cyclomatic": 7,
+          "effort": 8441.411,
+          "exits": 3,
+          "id": "{target}/src/complex.ts",
+          "kind": "file",
+          "length": 65,
+          "lloc": 11,
+          "loc": 16,
+          "mi": 95.705,
+          "mi_sei": 102.077,
+          "name": "complex.ts",
+          "sloc": 11,
+          "time": 468.967,
+          "visibility": "public",
+          "vocabulary": 27,
+          "volume": 309.067
         },
         {
           "bugs": 0.00329,
@@ -428,6 +583,7 @@
           "cloc": 1,
           "cyclomatic": 2,
           "effort": 159.452,
+          "exits": 1,
           "fan_in": 2,
           "id": "{target}/src/types.ts",
           "kind": "file",
@@ -449,6 +605,7 @@
           "cloc": 1,
           "cyclomatic": 3,
           "effort": 217.944,
+          "exits": 2,
           "fan_in": 1,
           "id": "{target}/src/util.ts",
           "kind": "file",
@@ -467,21 +624,21 @@
       ],
       "stats": {
         "blank": 1.8,
-        "bugs": 0.0331,
-        "cloc": 3.833,
-        "cognitive": 2,
-        "cyclomatic": 3,
-        "effort": 1553.406,
-        "fan_in": 1.5,
-        "fan_out": 2,
-        "hk": 286,
-        "length": 31.833,
-        "mi": 111.884,
-        "mi_sei": 122.009,
-        "sloc": 6.333,
-        "time": 86.3,
-        "vocabulary": 16.333,
-        "volume": 145.055
+        "bugs": 0.0385,
+        "cloc": 3.1,
+        "cognitive": 3.5,
+        "cyclomatic": 3.111,
+        "effort": 1879.431,
+        "fan_in": 1.285,
+        "fan_out": 1.5,
+        "hk": 116.8,
+        "length": 30.4,
+        "mi": 113.724,
+        "mi_sei": 123.757,
+        "sloc": 6.1,
+        "time": 104.412,
+        "vocabulary": 16.1,
+        "volume": 135.147
       },
       "ui": {
         "card_metrics": [
@@ -683,17 +840,17 @@
   "target": "/home/user/code-ranker/crates/code-ranker-plugin-typescript/sample",
   "timings": [
     {
-      "detail": "9 nodes from 6 files",
+      "detail": "13 nodes from 10 files",
       "ms": 0,
       "stage": "typescript"
     },
     {
-      "detail": "6 nodes annotated",
+      "detail": "10 nodes annotated",
       "ms": 0,
       "stage": "complexity"
     },
     {
-      "detail": "nodes=9 edges=9",
+      "detail": "nodes=13 edges=12",
       "ms": 0,
       "stage": "projection"
     }

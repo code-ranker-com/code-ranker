@@ -285,7 +285,10 @@ fn rust_sample_check_json_violations() {
     let (_ok, stdout, stderr) = run_check_capture("rust", &["--output-format", "json"]);
     let v: Value = serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("json: {e}: {stderr}"));
     let first = &v.as_array().expect("array")[0];
-    assert_eq!(first["rule"], "cycle.mutual");
+    // The sample has two cycles: the 2-node `a ⇄ b` mutual and the 3-node
+    // `chain::one→two→three` chain. The chain is the more severe SCC, so it is
+    // reported first.
+    assert_eq!(first["rule"], "cycle.chain");
     assert_eq!(first["graph"], "files");
 }
 
@@ -362,14 +365,15 @@ fn rust_sample_check_baseline_verdict_neutral() {
 }
 
 /// The `scorecard` format streams a per-principle table + worst-module list to
-/// stdout. The Rust sample has a mutual cycle (a.rs ↔ b.rs) and no metric
-/// breaches, so ADP is the only principle with violations and tops the table.
+/// stdout. The Rust sample has two cycles (the `a ⇄ b` mutual and the 3-node
+/// `chain`) and no metric breaches, so ADP is the only principle with violations
+/// and tops the table.
 #[test]
 fn rust_sample_scorecard_triage() {
     let (ok, stdout, stderr) = run_report_capture("rust", &["--output.scorecard"]);
     assert!(ok, "scorecard run failed: {stderr}");
     assert!(
-        stdout.contains("scorecard  (rust, 20 files)"),
+        stdout.contains("scorecard  (rust, 25 files)"),
         "header with file count: {stdout}"
     );
     assert!(
@@ -388,8 +392,9 @@ fn rust_sample_scorecard_triage() {
 }
 
 /// With no `--preset`, the prompt auto-picks the worst-violating principle (ADP
-/// here) and lists the cycle members + their connections — the same Markdown the
-/// HTML viewer's Prompt Generator emits.
+/// here) and lists the worst cycle's members + their connections — the same
+/// Markdown the HTML viewer's Prompt Generator emits. The 3-node `chain` SCC
+/// outranks the 2-node `a ⇄ b` mutual, so it is the cycle shown.
 #[test]
 fn rust_sample_prompt_auto_picks_worst_principle() {
     let (ok, stdout, stderr) = run_report_capture("rust", &["--output.prompt.path=stdout"]);
@@ -403,8 +408,10 @@ fn rust_sample_prompt_auto_picks_worst_principle() {
         "cycle-modules section"
     );
     assert!(
-        stdout.contains("- `src/a.rs`") && stdout.contains("- `src/b.rs`"),
-        "both cycle members listed with cleaned paths: {stdout}"
+        stdout.contains("- `src/chain/one.rs`")
+            && stdout.contains("- `src/chain/two.rs`")
+            && stdout.contains("- `src/chain/three.rs`"),
+        "the worst cycle (3-node chain) members listed with cleaned paths: {stdout}"
     );
     assert!(
         stdout.contains("## Connections — common"),
@@ -439,10 +446,10 @@ fn rust_sample_prompt_explicit_preset_top1() {
         stdout.contains("## Modules ordered by"),
         "metric ordering section: {stdout}"
     );
-    // lib.rs is the largest file in the sample (production SLOC 17 — its
+    // lib.rs is the largest file in the sample (production SLOC 19 — its
     // `#[cfg(test)] mod tests` is excluded from the metric).
     assert!(
-        stdout.contains("- `src/lib.rs` (SLOC: 17)"),
+        stdout.contains("- `src/lib.rs` (SLOC: 19)"),
         "the single worst SLOC module: {stdout}"
     );
 }
@@ -514,4 +521,98 @@ fn javascript_sample_matches_golden() {
 #[test]
 fn typescript_sample_matches_golden() {
     assert_sample_matches("typescript");
+}
+
+/// Every language whose golden is committed.
+const LANGS: &[&str] = &["rust", "python", "javascript", "typescript"];
+
+/// Central metrics (`metric_specs` + `coupling_specs`) the analyzer does NOT
+/// produce for a given language, so they are legitimately absent from that
+/// language's golden. Each is a deliberate, documented gap — keep in lock-step
+/// with the "Per-language metric scope" table in `docs/e2e.md`. A stale entry
+/// (the analyzer started emitting the metric) is itself a test failure, so this
+/// list cannot silently drift.
+const COVERAGE_EXCEPTIONS: &[(&str, &[&str])] = &[
+    ("args", &["python"]),
+    ("closures", &["python"]),
+    ("exits", &["javascript"]),
+    ("cloc", &["javascript"]),
+    ("tloc", &["python", "javascript", "typescript"]),
+];
+
+fn is_excepted(metric: &str, lang: &str) -> bool {
+    COVERAGE_EXCEPTIONS
+        .iter()
+        .any(|(m, langs)| *m == metric && langs.contains(&lang))
+}
+
+/// True if `metric` is non-zero on at least one internal (non-external) file node
+/// of this golden.
+fn metric_present(golden: &Value, metric: &str) -> bool {
+    golden["graphs"]["files"]["nodes"]
+        .as_array()
+        .expect("nodes array")
+        .iter()
+        .any(|n| {
+            !n["external"].as_bool().unwrap_or(false)
+                && n.get(metric)
+                    .and_then(Value::as_f64)
+                    .is_some_and(|v| v != 0.0)
+        })
+}
+
+/// Coverage invariant: every centrally-computed metric must be exercised with a
+/// non-zero value in EVERY language's golden, except the documented per-language
+/// gaps in `COVERAGE_EXCEPTIONS`.
+///
+/// This is the guard the root-vs-sum bug slipped past: a metric that silently
+/// reads its no-signal value gets pruned out of the golden, and without this test
+/// nothing notices it is unexercised. The catalog is sourced from the spec
+/// functions themselves, so a newly-added metric is automatically required to
+/// appear in a golden — add a fixture that produces it, or (if the analyzer
+/// cannot) a documented `COVERAGE_EXCEPTIONS` entry.
+#[test]
+fn every_central_metric_is_exercised_per_language() {
+    let (complexity, _) = code_ranker_complexity::metric_specs();
+    let (coupling, _) = code_ranker_graph::coupling_specs();
+    // `cycle` is a string classification ("mutual"/"chain"), not a numeric metric;
+    // its per-kind coverage is guarded by the verbatim golden match, so exclude it
+    // from this numeric-presence catalog.
+    let catalog: Vec<String> = complexity
+        .keys()
+        .chain(coupling.keys())
+        .filter(|k| *k != "cycle")
+        .cloned()
+        .collect();
+
+    let goldens: Vec<(&str, Value)> = LANGS.iter().map(|l| (*l, read_golden(l))).collect();
+
+    let mut unexercised = Vec::new();
+    let mut stale_exceptions = Vec::new();
+    for (lang, golden) in &goldens {
+        for metric in &catalog {
+            let present = metric_present(golden, metric);
+            match (is_excepted(metric, lang), present) {
+                (false, false) => unexercised.push(format!("{lang}:{metric}")),
+                // An exception that is no longer absent — the analyzer now emits
+                // it, so the gap closed and the entry must be removed.
+                (true, true) => stale_exceptions.push(format!("{lang}:{metric}")),
+                _ => {}
+            }
+        }
+    }
+
+    assert!(
+        unexercised.is_empty(),
+        "central metrics never exercised (non-zero) in a language's golden — \
+         unguarded against the root-vs-sum class of bug. Add a fixture that \
+         produces them, or a documented COVERAGE_EXCEPTIONS entry + docs/e2e.md \
+         row. Missing: {unexercised:?}"
+    );
+    assert!(
+        stale_exceptions.is_empty(),
+        "stale COVERAGE_EXCEPTIONS: these metrics are now emitted for the listed \
+         language, so the exception (and its docs/e2e.md row) must be removed: \
+         {stale_exceptions:?}"
+    );
 }

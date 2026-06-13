@@ -165,16 +165,32 @@ fn parse_metrics(path: &Path, src: Vec<u8>) -> Option<(FuncSpace, f64)> {
     }
 }
 
-/// Write the metric attributes for one file node. Each value is omitted when it
-/// rounds to zero; the LOC block is gated on `sloc > 0` and the Halstead block
-/// on `volume > 0` (matching the historical behavior).
+/// The value at which a per-file metric carries no signal and is **omitted** from
+/// output (see [`code_ranker_plugin_api::level::AttributeSpec::omit_at`]). `0` for
+/// almost everything; `1` for `cyclomatic` — McCabe counts the single
+/// straight-line path even for branch-free code, so a function-less file would
+/// otherwise report a vacuous `1`. [`write_metrics`] gates on this value and
+/// [`metric_specs`] publishes the same value on each spec, so the two never drift.
+fn metric_omit_at(key: &str) -> f64 {
+    match key {
+        "cyclomatic" => 1.0,
+        _ => 0.0,
+    }
+}
+
+/// Write the metric attributes for one file node. Each value is omitted at its
+/// `omit_at` (0 for most metrics, 1 for `cyclomatic`); the LOC block is
+/// additionally gated on `sloc > 0` and the Halstead block on `volume > 0`.
 fn write_metrics(node: &mut code_ranker_plugin_api::node::Node, s: &FuncSpace, tloc: f64) {
     let m = &s.metrics;
     let mut put = |key: &str, v: f64| {
         let a = num_attr(v);
-        if matches!(&a, code_ranker_plugin_api::attrs::AttrValue::Int(0))
-            || matches!(&a, code_ranker_plugin_api::attrs::AttrValue::Float(f) if *f == 0.0)
-        {
+        // Drop the metric when it sits at its no-signal value (`omit_at`): absent
+        // from the JSON, blank in the viewer. `0` for almost everything; `1` for
+        // `cyclomatic`, whose floor is `1` — so a function-less file omits it
+        // rather than showing a meaningless `1`. The same per-key value is
+        // published on the spec, so the frontend knows what an absent cell means.
+        if a == num_attr(metric_omit_at(key)) {
             node.attrs.remove(key);
         } else {
             node.attrs.insert(key.to_string(), a);
@@ -184,26 +200,17 @@ fn write_metrics(node: &mut code_ranker_plugin_api::node::Node, s: &FuncSpace, t
     // `cyclomatic()` / `cognitive()` return only the ROOT space's own value —
     // for a file that is a constant 1 (no top-level branching) and 0
     // respectively. The real complexity lives in the child function spaces, so we
-    // read the aggregated `*_sum` — the file's total complexity over its functions.
-    //
-    // Complexity is a per-function property. A file with no functions (pure
-    // declarations: type defs, a clap CLI model, a re-export `mod.rs`) has only
-    // the root space, so `cyclomatic_sum` is a vacuous 1 and `cognitive_sum` is 0.
-    // Emit neither, so cyclomatic gets the same "drop when empty" treatment `put`
-    // already gives cognitive's 0, instead of showing a meaningless 1. A file with
-    // at least one function always sums to >= 2 (root 1 + each function's own >= 1).
-    if m.cyclomatic.cyclomatic_sum() > 1.0 {
-        put("cyclomatic", m.cyclomatic.cyclomatic_sum());
-        put("cognitive", m.cognitive.cognitive_sum());
-    }
-    put("exits", m.nexits.exit());
-    let args = if m.nargs.fn_args() > 0.0 {
-        m.nargs.fn_args()
-    } else {
-        m.nargs.closure_args()
-    };
-    put("args", args);
-    put("closures", m.nom.closures());
+    // read the aggregated `*_sum` — the file's total complexity over its
+    // functions. A function-less file sums to the `omit_at` floor (cyclomatic 1,
+    // cognitive 0) and is dropped by `put`.
+    put("cyclomatic", m.cyclomatic.cyclomatic_sum());
+    put("cognitive", m.cognitive.cognitive_sum());
+    // Like cyclomatic/cognitive, these are per-function counts: the root space's
+    // own value is 0 for a file (the real counts live in the child function
+    // spaces), so read the aggregated `*_sum` — never the root accessor.
+    put("exits", m.nexits.exit_sum());
+    put("args", m.nargs.fn_args_sum() + m.nargs.closure_args_sum());
+    put("closures", m.nom.closures_sum());
 
     put("mi", m.mi.mi_original());
     put("mi_sei", m.mi.mi_sei());
@@ -252,7 +259,7 @@ pub fn metric_specs() -> (
 ) {
     use Direction::{HigherBetter, LowerBetter};
     use ValueType::Float;
-    let specs = attr_dict(vec![
+    let mut specs = attr_dict(vec![
         (
             "cyclomatic",
             SpecRow {
@@ -485,6 +492,11 @@ pub fn metric_specs() -> (
             },
         ),
     ]);
+    // Publish each metric's no-signal value on its spec, from the same source
+    // `write_metrics` gates on — so the emitted JSON and the declared spec agree.
+    for (key, spec) in specs.iter_mut() {
+        spec.omit_at = metric_omit_at(key);
+    }
     let mut groups = BTreeMap::new();
     groups.insert(
         "complexity".to_string(),
@@ -589,17 +601,19 @@ mod tests {
     }
 
     #[test]
-    fn cyclomatic_and_cognitive_aggregate_over_child_functions() {
-        // Regression: `write_metrics` once read the ROOT space value, which for a
-        // file is a constant 1 (cyclomatic) / 0 (cognitive) — every file looked
-        // identical. The real signal lives in the child function spaces, so we
-        // sum over them.
+    fn per_function_metrics_aggregate_over_child_functions() {
+        // Regression for the whole "root-vs-sum" class: `write_metrics` once read
+        // the ROOT space value for `cyclomatic` / `cognitive` / `exits` / `args` /
+        // `closures`, which for a file is the vacuous root count (0, or 1 for
+        // cyclomatic) — every file looked identical. The real signal lives in the
+        // child function spaces, so each must be the SUM over them.
         //
-        // Two functions: `a` has two nested `if`s (cyclomatic 3, cognitive > 0),
-        // `b` has one `if` (cyclomatic 2). File-level cyclomatic must therefore be
-        // the SUM (well above the root's constant 1), not the root value.
-        let src = "fn a(x: i32) -> i32 { if x > 0 { if x > 1 { 1 } else { 2 } } else { 3 } }\n\
-                   fn b(x: i32) -> i32 { if x > 0 { 1 } else { 2 } }\n";
+        // `a` takes 2 args, nests two `if`s, and `return`s; `b` defines a 1-arg
+        // closure. So the file must surface: cyclomatic (summed branches), a
+        // non-zero cognitive (nesting), exits (the `return`), args (2 fn + 1
+        // closure = 3), and closures (1).
+        let src = "fn a(x: i32, y: i32) -> i32 { if x > 0 { if x > 1 { return x; } y } else { 3 } }\n\
+                   fn b() -> i32 { let f = |z: i32| z + 1; f(2) }\n";
         let (space, tloc) =
             parse_metrics(Path::new("t.rs"), src.as_bytes().to_vec()).expect("parses");
         let mut node = code_ranker_plugin_api::node::Node {
@@ -611,15 +625,24 @@ mod tests {
         };
         write_metrics(&mut node, &space, tloc);
 
-        // Summed over both functions (a=3, b=2, plus the root) → well above the
-        // old constant 1, proving aggregation over child spaces rather than root.
+        // Each is summed over the child functions — well above the vacuous root
+        // value, proving aggregation rather than a root-only read.
         let cyc = metric(&node, "cyclomatic").expect("cyclomatic present");
-        assert!(cyc >= 5.0, "cyclomatic should be summed (>=5), got {cyc}");
-
-        // Cognitive used to be absent entirely (root structural is 0, dropped by
-        // `put`). The nested `if` in `a` must now surface a non-zero value.
+        assert!(cyc > 1.0, "cyclomatic should be summed, got {cyc}");
         let cog = metric(&node, "cognitive").expect("cognitive present");
         assert!(cog > 0.0, "cognitive should be summed, got {cog}");
+        let exits = metric(&node, "exits").expect("exits present");
+        assert!(exits >= 1.0, "exits should count the `return`, got {exits}");
+        let args = metric(&node, "args").expect("args present");
+        assert!(
+            args >= 3.0,
+            "args should sum fn (2) + closure (1), got {args}"
+        );
+        let closures = metric(&node, "closures").expect("closures present");
+        assert!(
+            closures >= 1.0,
+            "closures should count the closure, got {closures}"
+        );
     }
 
     #[test]

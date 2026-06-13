@@ -8,7 +8,8 @@ either a source `file` or a third-party `external` library.
 The model is a **generic property graph**: a node has a free-form string `kind`,
 a `name`, and a **flat attribute map** (no nested `complexity` / `coupling` /
 `loc` / `halstead` objects). Every metric's label, formula, live derivation
-(`calc`), direction and calibrated thresholds are described by the level's
+(`calc`), direction, calibrated thresholds and no-signal value (`omit_at`) are
+described by the level's
 `node_attributes` dictionary, so a consumer can render any metric without
 hardcoding it — see the main [DESIGN](DESIGN.md) §3.1/§3.7 and [PRD](PRD.md) §7.3.
 
@@ -43,17 +44,20 @@ An `external` node (Rust — carries `version` + the cargo-cache `path`):
   "external": true, "version": "1.21.4", "path": "{registry}/once_cell-1.21.4" }
 ```
 
-All attributes are **flat**, and a metric is **omitted when it rounds to zero** —
+All attributes are **flat**, and a metric is **omitted at its no-signal value** —
 absent from this JSON and shown as a blank in the HTML viewer, so a present key
-always carries a meaningful non-zero value. Numeric values use 3-significant-digit
+always carries a meaningful value. Numeric values use 3-significant-digit
 rounding; an integral value serializes without a decimal point (`1.0` → `1`).
 
-**One exception** to the zero rule: `cyclomatic`. Its floor is `1`, not `0`
-(McCabe counts the single straight-line path even for branch-free code), so a
-function-less file — a pure type or `clap` declaration — would emit a vacuous
-`1`. Instead, `cyclomatic` (and its companion `cognitive`) are omitted entirely
-when the file has no functions, so "no value" reads consistently across both
-metrics rather than `cyclomatic` showing a meaningless `1`.
+Each metric's no-signal value is declared on its spec as **`omit_at`** (see
+`node_attributes` below). It is `0` for almost everything — and, being the
+default, is left off the wire. The one non-zero case is **`cyclomatic`**, whose
+floor is `1`, not `0` (McCabe counts the single straight-line path even for
+branch-free code): a function-less file — a pure type or `clap` declaration —
+would emit a vacuous `1`, so its spec carries `"omit_at": 1` and the metric (with
+its companion `cognitive`) is dropped instead. A consumer reads `omit_at` to know
+what an absent cell means (e.g. treat it as that value when sorting); when the
+field is absent, the value is `0`.
 
 Python / JS / TS file nodes carry the same keys minus `crate` / `items` /
 `unsafe` (Rust-only); their `external` nodes carry neither `version` nor `path`

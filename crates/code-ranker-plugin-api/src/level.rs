@@ -104,6 +104,19 @@ pub struct AttributeSpec {
     /// Optional two-tier thresholds (language-calibrated).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thresholds: Option<Thresholds>,
+    /// Value at which this metric carries no signal and is **omitted** from the
+    /// node (absent in the JSON, blank in the viewer). `0` for almost everything;
+    /// `1` for `cyclomatic` (McCabe's floor — a function-less file would otherwise
+    /// report a vacuous `1`). Published so the frontend knows what an absent cell
+    /// means (and may treat it as this value when sorting). Default `0` is omitted
+    /// from the wire.
+    #[serde(default, skip_serializing_if = "f64_is_zero")]
+    pub omit_at: f64,
+}
+
+/// `skip_serializing_if` helper: the default `omit_at` (`0`) stays off the wire.
+fn f64_is_zero(v: &f64) -> bool {
+    *v == 0.0
 }
 
 impl AttributeSpec {
@@ -121,6 +134,7 @@ impl AttributeSpec {
             abbreviate: None,
             group: None,
             thresholds: None,
+            omit_at: 0.0,
         }
     }
 }
@@ -144,6 +158,8 @@ pub struct SpecRow {
     pub calc: &'static str,
     pub direction: Direction,
     pub abbreviate: bool,
+    /// See [`AttributeSpec::omit_at`]. Defaults to `0`.
+    pub omit_at: f64,
 }
 
 impl Default for SpecRow {
@@ -159,6 +175,7 @@ impl Default for SpecRow {
             calc: "",
             direction: Direction::Neutral,
             abbreviate: false,
+            omit_at: 0.0,
         }
     }
 }
@@ -178,6 +195,7 @@ impl SpecRow {
             abbreviate: self.abbreviate.then_some(true),
             group: opt(self.group),
             thresholds: None,
+            omit_at: self.omit_at,
         }
     }
 }

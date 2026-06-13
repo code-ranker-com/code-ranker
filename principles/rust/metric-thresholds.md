@@ -34,9 +34,12 @@ that about half of projects have at least one (≈ "above the median project").
 | `fan_out` | 8 | 18 | ~52 % / ~10 % |
 | `item_count` | 20 | 50 | ~43 % / ~10 % |
 
-`cyclomatic` and `cognitive` are **not tracked for Rust**: file-level cyclomatic
-is ≈ 1 (it is not aggregated across a file's functions) and cognitive is not
-emitted, so neither has a usable distribution to calibrate against.
+`cyclomatic` and `cognitive` are now **aggregated across a file's functions** and
+emitted (the file value is the sum over its functions; a function-less file — a
+pure type/`clap` declaration — omits both rather than reporting a vacuous `1`).
+They are **not yet threshold-calibrated for Rust**, though: no `info` / `warning`
+line is set, so they surface as raw metrics and sort keys but raise no violations.
+Calibrating a distribution against a Rust corpus is future work.
 
 ### Notes & caveats
 

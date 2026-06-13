@@ -115,6 +115,11 @@ fn classify(n: i32) -> &'static str {   //   base                 = 1
 ```
 
 A `cyclomatic` of N means you need at least N test cases to cover every path.
+The example above is one function; the **file-level** `cyclomatic` is the **sum
+over every function** in the file, so it tracks the file's total branching
+burden. A file with no functions (a pure type or `clap` declaration) carries no
+function-level paths, so the metric is **omitted** rather than reported as a
+bare `1`.
 
 ### `cognitive` — how hard it is to *read*
 
@@ -123,7 +128,8 @@ control-flow that humans find confusing. A branch at the top level costs 1; the
 same branch nested two levels deep costs 1 + 2 = 3. A flat sequence of `if`s is
 cheap; a deeply nested pyramid is expensive even at the same cyclomatic count.
 Linear code, early returns, and `&&`/`||` chains add little; `break`/`continue`
-to a label and re-nesting add a lot.
+to a label and re-nesting add a lot. Like `cyclomatic`, the file-level value is
+the **sum over every function**; a function-less file omits it.
 
 ### `exits`, `args`, `closures` — structural counts
 

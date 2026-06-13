@@ -26,8 +26,8 @@ file uses `unsafe`, an `unsafe` count):
   "crate": "rust-sample",
   "items": 2,
   "unsafe": 1,
-  "cyclomatic": 1,
-  "loc": 30, "sloc": 14, "lloc": 1, "cloc": 11, "blank": 5,
+  "cyclomatic": 6, "cognitive": 4,
+  "loc": 30, "sloc": 14, "lloc": 8, "cloc": 11, "blank": 5,
   "length": 69, "vocabulary": 32, "volume": 345, "effort": 4413.97,
   "time": 245.22, "bugs": 0.0896,
   "mi": 85.054, "mi_sei": 87.531,
@@ -43,11 +43,21 @@ An `external` node (Rust — carries `version` + the cargo-cache `path`):
   "external": true, "version": "1.21.4", "path": "{registry}/once_cell-1.21.4" }
 ```
 
-All attributes are **flat**, and a metric is **omitted when it rounds to zero**.
-Numeric values use 3-significant-digit rounding; an integral value serializes
-without a decimal point (`1.0` → `1`). Python / JS / TS file nodes carry the same
-keys minus `crate` / `items` / `unsafe` (Rust-only); their `external` nodes carry neither
-`version` nor `path` (no on-disk package is resolved).
+All attributes are **flat**, and a metric is **omitted when it rounds to zero** —
+absent from this JSON and shown as a blank in the HTML viewer, so a present key
+always carries a meaningful non-zero value. Numeric values use 3-significant-digit
+rounding; an integral value serializes without a decimal point (`1.0` → `1`).
+
+**One exception** to the zero rule: `cyclomatic`. Its floor is `1`, not `0`
+(McCabe counts the single straight-line path even for branch-free code), so a
+function-less file — a pure type or `clap` declaration — would emit a vacuous
+`1`. Instead, `cyclomatic` (and its companion `cognitive`) are omitted entirely
+when the file has no functions, so "no value" reads consistently across both
+metrics rather than `cyclomatic` showing a meaningless `1`.
+
+Python / JS / TS file nodes carry the same keys minus `crate` / `items` /
+`unsafe` (Rust-only); their `external` nodes carry neither `version` nor `path`
+(no on-disk package is resolved).
 
 ---
 
@@ -177,8 +187,8 @@ extension); coupling and `cycle` are added by `code-ranker-graph`.
 
 | key | metric | notes |
 |-----|--------|-------|
-| `cyclomatic` | **Cyclomatic complexity** (McCabe) — `branches + 1`. | Min 1. For Rust this is whole-file and typically ≈ 1. |
-| `cognitive` | **Cognitive complexity** (SonarSource) — penalises nesting. | Min 0; often absent for Rust files. |
+| `cyclomatic` | **Cyclomatic complexity** (McCabe) — `branches + 1`, summed over the file's functions. | A function-less file (pure declarations) is omitted rather than shown as a bare `1`. |
+| `cognitive` | **Cognitive complexity** (SonarSource) — penalises nesting, summed over the file's functions. | Omitted when `0` (no functions, or none with cognitive load). |
 | `exits` | Number of exit points (`return` / `throw`). | |
 | `args` | Number of function / closure arguments. | |
 | `closures` | Number of closures defined in the file. | |

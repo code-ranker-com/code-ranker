@@ -182,15 +182,20 @@ fn write_metrics(node: &mut code_ranker_plugin_api::node::Node, s: &FuncSpace, t
     };
 
     // `cyclomatic()` / `cognitive()` return only the ROOT space's own value —
-    // for a file that is 1 (no top-level branching) and 0 respectively, so every
-    // file would read a constant. The real complexity lives in the child function
-    // spaces, exposed via the aggregated `*_sum` / `*_max`. `sum` is the file's
-    // total complexity (correlates with size, flags monster files); `max` is the
-    // single worst function (independent of size).
-    put("cyclomatic", m.cyclomatic.cyclomatic_sum());
-    put("cyclomatic_max", m.cyclomatic.cyclomatic_max());
-    put("cognitive", m.cognitive.cognitive_sum());
-    put("cognitive_max", m.cognitive.cognitive_max());
+    // for a file that is a constant 1 (no top-level branching) and 0
+    // respectively. The real complexity lives in the child function spaces, so we
+    // read the aggregated `*_sum` — the file's total complexity over its functions.
+    //
+    // Complexity is a per-function property. A file with no functions (pure
+    // declarations: type defs, a clap CLI model, a re-export `mod.rs`) has only
+    // the root space, so `cyclomatic_sum` is a vacuous 1 and `cognitive_sum` is 0.
+    // Emit neither, so cyclomatic gets the same "drop when empty" treatment `put`
+    // already gives cognitive's 0, instead of showing a meaningless 1. A file with
+    // at least one function always sums to >= 2 (root 1 + each function's own >= 1).
+    if m.cyclomatic.cyclomatic_sum() > 1.0 {
+        put("cyclomatic", m.cyclomatic.cyclomatic_sum());
+        put("cognitive", m.cognitive.cognitive_sum());
+    }
     put("exits", m.nexits.exit());
     let args = if m.nargs.fn_args() > 0.0 {
         m.nargs.fn_args()
@@ -255,21 +260,8 @@ pub fn metric_specs() -> (
                 label: "Cyclomatic",
                 name: "Cyclomatic complexity",
                 short: "Cyclomatic",
-                description: "Number of linearly independent paths through the code (branches + 1). Summed across every function in the file, so it reflects the file's total branching burden. See `cyclomatic_max` for the single most complex function.",
+                description: "Number of independent paths through the code — roughly the minimum number of test cases needed to cover every branch.<br>A function starts at 1 and gains +1 per decision point: each `if` / `else if`, every `match` / `switch` arm, every loop, and each `&&` / `||` in a condition.<br>Summed across every function in the file, so it grows with both size and branching — the file's total branching burden.<br>Counts paths only, ignoring how deeply they nest. For a readability-weighted view see `cognitive`.",
                 formula: "Σ (branches + 1) over functions",
-                direction: LowerBetter,
-                ..Default::default()
-            },
-        ),
-        (
-            "cyclomatic_max",
-            SpecRow {
-                group: "complexity",
-                label: "Cyclomatic (max)",
-                name: "Cyclomatic complexity (max function)",
-                short: "Cyclo max",
-                description: "Cyclomatic complexity of the single most complex function in the file. Unlike the summed `cyclomatic`, this is independent of file size — it pinpoints one hard-to-test function.",
-                formula: "max (branches + 1) over functions",
                 direction: LowerBetter,
                 ..Default::default()
             },
@@ -281,19 +273,7 @@ pub fn metric_specs() -> (
                 label: "Cognitive",
                 name: "Cognitive complexity",
                 short: "Cognitive",
-                description: "Measures how difficult the code is to understand, accounting for nesting depth and non-structural control flow. Summed across every function in the file. See `cognitive_max` for the single hardest function.",
-                direction: LowerBetter,
-                ..Default::default()
-            },
-        ),
-        (
-            "cognitive_max",
-            SpecRow {
-                group: "complexity",
-                label: "Cognitive (max)",
-                name: "Cognitive complexity (max function)",
-                short: "Cog max",
-                description: "Cognitive complexity of the single hardest-to-understand function in the file. Unlike the summed `cognitive`, this is independent of file size.",
+                description: "How hard the code is for a human to follow — not just how many paths it has.<br>Like `cyclomatic` it adds +1 for each break in linear flow (`if`, `else`, `match`, loops, `catch`, chained `&&` / `||`), but it also adds an extra +1 for every level of nesting: an `if` inside a loop inside an `if` costs far more than three flat `if`s.<br>That nesting penalty is the point — deeply indented logic is what actually strains a reader, so a high `cognitive` next to a modest `cyclomatic` flags tangled, hard-to-read code.<br>Summed across every function in the file.",
                 direction: LowerBetter,
                 ..Default::default()
             },
@@ -613,11 +593,11 @@ mod tests {
         // Regression: `write_metrics` once read the ROOT space value, which for a
         // file is a constant 1 (cyclomatic) / 0 (cognitive) — every file looked
         // identical. The real signal lives in the child function spaces, so we
-        // must sum (and max) over them.
+        // sum over them.
         //
         // Two functions: `a` has two nested `if`s (cyclomatic 3, cognitive > 0),
         // `b` has one `if` (cyclomatic 2). File-level cyclomatic must therefore be
-        // the SUM (strictly above the single worst function), not the root's 1.
+        // the SUM (well above the root's constant 1), not the root value.
         let src = "fn a(x: i32) -> i32 { if x > 0 { if x > 1 { 1 } else { 2 } } else { 3 } }\n\
                    fn b(x: i32) -> i32 { if x > 0 { 1 } else { 2 } }\n";
         let (space, tloc) =
@@ -631,21 +611,43 @@ mod tests {
         };
         write_metrics(&mut node, &space, tloc);
 
+        // Summed over both functions (a=3, b=2, plus the root) → well above the
+        // old constant 1, proving aggregation over child spaces rather than root.
         let cyc = metric(&node, "cyclomatic").expect("cyclomatic present");
-        let cyc_max = metric(&node, "cyclomatic_max").expect("cyclomatic_max present");
-        // Summed over both functions → well above the old constant 1, and strictly
-        // greater than the worst single function (proves aggregation, not root).
-        assert!(cyc > 1.0, "cyclomatic should be summed, got {cyc}");
-        assert!(
-            cyc > cyc_max,
-            "summed cyclomatic {cyc} must exceed the worst function {cyc_max}"
-        );
-        assert!(cyc_max >= 3.0, "worst function is `a` (>=3), got {cyc_max}");
+        assert!(cyc >= 5.0, "cyclomatic should be summed (>=5), got {cyc}");
 
         // Cognitive used to be absent entirely (root structural is 0, dropped by
         // `put`). The nested `if` in `a` must now surface a non-zero value.
         let cog = metric(&node, "cognitive").expect("cognitive present");
         assert!(cog > 0.0, "cognitive should be summed, got {cog}");
-        assert!(metric(&node, "cognitive_max").is_some(), "cognitive_max present");
+    }
+
+    #[test]
+    fn declaration_only_file_emits_no_complexity() {
+        // No functions → only the root space → cyclomatic is a vacuous 1 and
+        // cognitive is 0. Both must be dropped (not shown as a meaningless "1"),
+        // matching how `put` already drops cognitive's 0. Mirrors real files like
+        // a clap CLI model or a type-definitions module.
+        let src = "pub struct Cli { pub verbose: bool }\n\
+                   pub enum Mode { A, B }\n";
+        let (space, tloc) =
+            parse_metrics(Path::new("t.rs"), src.as_bytes().to_vec()).expect("parses");
+        let mut node = code_ranker_plugin_api::node::Node {
+            id: "t.rs".into(),
+            kind: "file".into(),
+            name: "t.rs".into(),
+            parent: None,
+            attrs: Default::default(),
+        };
+        write_metrics(&mut node, &space, tloc);
+
+        assert!(
+            metric(&node, "cyclomatic").is_none(),
+            "a function-less file must not emit a vacuous cyclomatic"
+        );
+        assert!(
+            metric(&node, "cognitive").is_none(),
+            "a function-less file must not emit cognitive"
+        );
     }
 }

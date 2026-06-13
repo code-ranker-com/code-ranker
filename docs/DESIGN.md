@@ -476,7 +476,10 @@ halstead / loc / maintainability), which the orchestrator merges into each
 level's dictionaries and then prunes to the keys actually present.
 
 **Metrics written per file** (flat `attrs` keys; each omitted when it rounds to
-zero; the LOC block is gated on `sloc > 0`, the Halstead block on `volume > 0`):
+zero; the LOC block is gated on `sloc > 0`, the Halstead block on `volume > 0`,
+and the complexity pair — `cyclomatic` / `cognitive` — on the file having
+functions, i.e. `cyclomatic_sum > 1`, so a function-less file omits both rather
+than reporting a vacuous `cyclomatic` of `1`):
 
 | Group | Keys |
 |----------|------|

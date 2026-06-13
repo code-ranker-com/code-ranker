@@ -151,21 +151,12 @@
           "value_type": "int"
         },
         "cognitive": {
-          "description": "Measures how difficult the code is to understand, accounting for nesting depth and non-structural control flow. Summed across every function in the file. See `cognitive_max` for the single hardest function.",
+          "description": "How hard the code is for a human to follow — not just how many paths it has.<br>Like `cyclomatic` it adds +1 for each break in linear flow (`if`, `else`, `match`, loops, `catch`, chained `&&` / `||`), but it also adds an extra +1 for every level of nesting: an `if` inside a loop inside an `if` costs far more than three flat `if`s.<br>That nesting penalty is the point — deeply indented logic is what actually strains a reader, so a high `cognitive` next to a modest `cyclomatic` flags tangled, hard-to-read code.<br>Summed across every function in the file.",
           "direction": "lower_better",
           "group": "complexity",
           "label": "Cognitive",
           "name": "Cognitive complexity",
           "short": "Cognitive",
-          "value_type": "int"
-        },
-        "cognitive_max": {
-          "description": "Cognitive complexity of the single hardest-to-understand function in the file. Unlike the summed `cognitive`, this is independent of file size.",
-          "direction": "lower_better",
-          "group": "complexity",
-          "label": "Cognitive (max)",
-          "name": "Cognitive complexity (max function)",
-          "short": "Cog max",
           "value_type": "int"
         },
         "cycle": {
@@ -175,23 +166,13 @@
           "value_type": "str"
         },
         "cyclomatic": {
-          "description": "Number of linearly independent paths through the code (branches + 1). Summed across every function in the file, so it reflects the file's total branching burden. See `cyclomatic_max` for the single most complex function.",
+          "description": "Number of independent paths through the code — roughly the minimum number of test cases needed to cover every branch.<br>A function starts at 1 and gains +1 per decision point: each `if` / `else if`, every `match` / `switch` arm, every loop, and each `&&` / `||` in a condition.<br>Summed across every function in the file, so it grows with both size and branching — the file's total branching burden.<br>Counts paths only, ignoring how deeply they nest. For a readability-weighted view see `cognitive`.",
           "direction": "lower_better",
           "formula": "Σ (branches + 1) over functions",
           "group": "complexity",
           "label": "Cyclomatic",
           "name": "Cyclomatic complexity",
           "short": "Cyclomatic",
-          "value_type": "int"
-        },
-        "cyclomatic_max": {
-          "description": "Cyclomatic complexity of the single most complex function in the file. Unlike the summed `cyclomatic`, this is independent of file size — it pinpoints one hard-to-test function.",
-          "direction": "lower_better",
-          "formula": "max (branches + 1) over functions",
-          "group": "complexity",
-          "label": "Cyclomatic (max)",
-          "name": "Cyclomatic complexity (max function)",
-          "short": "Cyclo max",
           "value_type": "int"
         },
         "effort": {
@@ -363,10 +344,8 @@
           "bugs": 0.0354,
           "closures": 1,
           "cognitive": 3,
-          "cognitive_max": 1,
           "cycle": "chain",
           "cyclomatic": 4,
-          "cyclomatic_max": 2,
           "effort": 1095.257,
           "fan_in": 2,
           "fan_out": 2,
@@ -400,10 +379,8 @@
           "bugs": 0.0095,
           "closures": 1,
           "cognitive": 3,
-          "cognitive_max": 1,
           "cycle": "chain",
           "cyclomatic": 3,
-          "cyclomatic_max": 1,
           "effort": 152.156,
           "fan_in": 2,
           "fan_out": 2,
@@ -428,10 +405,8 @@
           "bugs": 0.0325,
           "closures": 1,
           "cognitive": 3,
-          "cognitive_max": 1,
           "cycle": "chain",
           "cyclomatic": 4,
-          "cyclomatic_max": 2,
           "effort": 964.295,
           "fan_in": 2,
           "fan_out": 1,

@@ -743,9 +743,12 @@ Optional `AttributeSpec` fields are omitted when absent.
 no `file:` prefix, and it carries no `path` attribute) or `"external"` (a
 3rd-party library, id `ext:<name>`, marked `external: true`; for Rust it also
 carries `version` and `path` = the crate's cargo-cache directory). All
-attributes are **flat** and a metric is **omitted when it rounds to zero**.
-Numeric values use 3-significant-digit rounding; integral values serialize
-without a decimal point. `fan_in` / `fan_out` / `hk` count internal flow edges
+attributes are **flat** and a metric is **omitted when it rounds to zero** —
+empty / default values are not stored, in both the JSON and the HTML viewer
+(see `docs/DESIGN.md` for the gating rules and their one exception). Numeric
+values use 3-significant-digit rounding; integral values serialize without a
+decimal point.
+`fan_in` / `fan_out` / `hk` count internal flow edges
 only; edges whose target is external are counted in `fan_out_external`. `cycle`
 (`"mutual"` / `"chain"`) is present only on nodes in a cycle. `unsafe` (Rust-only)
 is a per-file count of `unsafe` usages, present only when non-zero.

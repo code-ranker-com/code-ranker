@@ -600,6 +600,262 @@ mod tests {
         }
     }
 
+    /// Parse `src` as a file at `path` (extension picks the language) and read one
+    /// metric — the in-process building block for the metamorphic tests below.
+    fn metric_of(path: &str, src: &str, key: &str) -> Option<f64> {
+        let (space, tloc) = parse_metrics(Path::new(path), src.as_bytes().to_vec())?;
+        let mut node = code_ranker_plugin_api::node::Node {
+            id: path.into(),
+            kind: "file".into(),
+            name: path.into(),
+            parent: None,
+            attrs: Default::default(),
+        };
+        write_metrics(&mut node, &space, tloc);
+        metric(&node, key)
+    }
+
+    // ---- Layer 1: metamorphic FP / FN matrix (see docs/metric-correctness.md) --
+    //
+    // Asserts the AST-Accurate principle across `metric × language × lexical
+    // position × direction`: a control-flow / exit keyword appearing only as a
+    // look-alike must NOT move the per-function metrics (no false positive); every
+    // real construct form MUST be counted (no false negative). Pure in-process
+    // parses — ~0 cost against the 20s budget. (LOC / Halstead are intentionally
+    // NOT in the keyword-invariance set: a real comment line legitimately changes
+    // `cloc`, a string legitimately adds Halstead operands — that is not an FP.)
+
+    /// A Rust function carrying real branching (so all five per-function metrics
+    /// are non-zero), with an optional doc-comment prefix and an optional
+    /// statement injected into the body. Used to build FP-matrix variants.
+    fn rs_src(doc: &str, body_inject: &str) -> String {
+        format!(
+            "{doc}fn f(a: i32, b: i32) -> i32 {{\n\
+             {body_inject}    let g = |x: i32| x + 1;\n\
+                 if a > 0 {{ return g(b); }}\n\
+                 a + b\n\
+             }}\n"
+        )
+    }
+
+    #[test]
+    fn rust_complexity_fp_matrix() {
+        // Every lexical position that could smuggle a keyword in as text. None may
+        // change cyclomatic / cognitive / exits / args / closures vs the base.
+        let base = rs_src("", "");
+        let kw = "if match while for loop return unsafe and or";
+        let positions: &[(&str, String)] = &[
+            (
+                "line comment",
+                rs_src("", &format!("    // {kw} && || ?\n")),
+            ),
+            (
+                "block comment",
+                rs_src("", &format!("    /* {kw} && || ? */\n")),
+            ),
+            ("doc comment", rs_src(&format!("/// {kw}\n"), "")),
+            (
+                "string",
+                rs_src("", &format!("    let _s = \"{kw} && || ?\";\n")),
+            ),
+            (
+                "raw string",
+                rs_src("", &format!("    let _r = r#\"{kw} && ||\"#;\n")),
+            ),
+            (
+                "identifier",
+                rs_src(
+                    "",
+                    "    let if_match_return_loop = 0; let _ = if_match_return_loop;\n",
+                ),
+            ),
+            (
+                "format string",
+                rs_src("", "    let _f = format!(\"if {} while\", a);\n"),
+            ),
+            (
+                "macro body",
+                rs_src("", "    let _m = vec![\"if\", \"match\", \"while\"];\n"),
+            ),
+            (
+                "raw identifier",
+                rs_src("", "    let r#match = 1; let _ = r#match;\n"),
+            ),
+        ];
+        for key in ["cyclomatic", "cognitive", "exits", "args", "closures"] {
+            let want = metric_of("t.rs", &base, key);
+            for (pos, src) in positions {
+                assert_eq!(
+                    metric_of("t.rs", src, key),
+                    want,
+                    "metric `{key}` moved when a keyword appeared only in: {pos}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn cyclomatic_counts_every_branch_form() {
+        // FN guard: every branch form the analyzer recognizes must raise
+        // cyclomatic above a branch-free baseline. (Exact per-form increments are
+        // the analyzer's rule — layer 4; here we only assert "detected".)
+        let baseline =
+            metric_of("t.rs", "fn f() -> i32 { 0 }\n", "cyclomatic").expect("baseline cyclomatic");
+        let forms: &[(&str, &str)] = &[
+            ("if", "fn f(a: i32) -> i32 { if a > 0 { 1 } else { 2 } }\n"),
+            (
+                "else-if",
+                "fn f(a: i32) -> i32 { if a > 0 { 1 } else if a < 0 { 2 } else { 3 } }\n",
+            ),
+            (
+                "match",
+                "fn f(a: i32) -> i32 { match a { 0 => 1, _ => 2 } }\n",
+            ),
+            (
+                "while",
+                "fn f(mut a: i32) -> i32 { while a > 0 { a -= 1; } a }\n",
+            ),
+            (
+                "for",
+                "fn f(a: i32) -> i32 { let mut s = 0; for i in 0..a { s += i; } s }\n",
+            ),
+            ("loop", "fn f() -> i32 { loop { break; } 0 }\n"),
+            (
+                "&&",
+                "fn f(a: i32, b: i32) -> i32 { let _ = a > 0 && b > 0; 0 }\n",
+            ),
+            (
+                "||",
+                "fn f(a: i32, b: i32) -> i32 { let _ = a > 0 || b > 0; 0 }\n",
+            ),
+            ("?", "fn f() -> Option<i32> { let x = Some(1)?; Some(x) }\n"),
+            (
+                "if let",
+                "fn f() -> i32 { if let Some(x) = Some(1) { x } else { 0 } }\n",
+            ),
+            (
+                "while let",
+                "fn f() -> i32 { let mut it = [1].into_iter(); let mut n = 0; while let Some(_) = it.next() { n += 1; } n }\n",
+            ),
+        ];
+        for (name, src) in forms {
+            let c = metric_of("t.rs", src, "cyclomatic")
+                .unwrap_or_else(|| panic!("cyclomatic missing for `{name}`"));
+            assert!(
+                c > baseline,
+                "branch form `{name}` not counted (cyclomatic {c} <= baseline {baseline})"
+            );
+        }
+        // Magnitude anchor: one extra `if` adds exactly 1.
+        let one = metric_of(
+            "t.rs",
+            "fn f(a: i32) -> i32 { if a > 0 { 1 } else { 2 } }\n",
+            "cyclomatic",
+        )
+        .unwrap();
+        let two = metric_of(
+            "t.rs",
+            "fn f(a: i32) -> i32 { if a > 0 { 1 } else if a < 0 { 2 } else { 3 } }\n",
+            "cyclomatic",
+        )
+        .unwrap();
+        assert_eq!(two - one, 1.0, "one extra real `if` must add exactly 1");
+    }
+
+    #[test]
+    fn rust_complexity_fn_per_metric() {
+        // FN guard for the non-cyclomatic per-function metrics: a real construct
+        // must surface the metric.
+        let cognitive = metric_of(
+            "t.rs",
+            "fn f(a: i32, b: i32) -> i32 { if a > 0 { if b > 0 { 1 } else { 2 } } else { 3 } }\n",
+            "cognitive",
+        )
+        .expect("cognitive present");
+        assert!(cognitive > 0.0, "nested branches must raise cognitive");
+
+        let exits = metric_of("t.rs", "fn f(a: i32) -> i32 { return a; }\n", "exits")
+            .expect("exits present");
+        assert!(exits >= 1.0, "a real `return` must be counted as an exit");
+
+        let args = metric_of(
+            "t.rs",
+            "fn f(a: i32, b: i32, c: i32) -> i32 { a + b + c }\n",
+            "args",
+        )
+        .expect("args present");
+        assert!(
+            args >= 3.0,
+            "three parameters must count as >=3 args, got {args}"
+        );
+
+        let closures = metric_of(
+            "t.rs",
+            "fn f() -> i32 { let g = |x: i32| x + 1; g(1) }\n",
+            "closures",
+        )
+        .expect("closures present");
+        assert!(closures >= 1.0, "a real closure must be counted");
+    }
+
+    #[test]
+    fn cross_language_complexity_fp_matrix() {
+        // FP invariance for cyclomatic / cognitive (computed for all four
+        // languages) across each language's own look-alike positions.
+        let cases: &[(&str, &str, &[&str])] = &[
+            (
+                "t.rs",
+                "fn f(a: i32) -> i32 { if a > 0 { 1 } else { 2 } }\n",
+                &[
+                    "// if while for return\nfn f(a: i32) -> i32 { if a > 0 { 1 } else { 2 } }\n",
+                    "fn f(a: i32) -> i32 { let _ = \"if while for return\"; if a > 0 { 1 } else { 2 } }\n",
+                    "fn f(a: i32) -> i32 { let if_while = 0; let _ = if_while; if a > 0 { 1 } else { 2 } }\n",
+                ],
+            ),
+            (
+                "t.py",
+                "def f(x):\n    if x > 0:\n        return 1\n    return 2\n",
+                &[
+                    "# if while for return\ndef f(x):\n    if x > 0:\n        return 1\n    return 2\n",
+                    "def f(x):\n    s = \"if while for return\"\n    if x > 0:\n        return 1\n    return 2\n",
+                    "def f(x):\n    \"\"\"if while for return\"\"\"\n    if x > 0:\n        return 1\n    return 2\n",
+                    "def f(x):\n    s = f\"if {x} while\"\n    if x > 0:\n        return 1\n    return 2\n",
+                ],
+            ),
+            (
+                "t.js",
+                "export function f(x) { if (x > 0) { return 1; } return 2; }\n",
+                &[
+                    "// if while for return\nexport function f(x) { if (x > 0) { return 1; } return 2; }\n",
+                    "export function f(x) { /* if while for */ if (x > 0) { return 1; } return 2; }\n",
+                    "export function f(x) { const s = \"if while for\"; void s; if (x > 0) { return 1; } return 2; }\n",
+                    "export function f(x) { const s = `if ${x} while`; void s; if (x > 0) { return 1; } return 2; }\n",
+                ],
+            ),
+            (
+                "t.ts",
+                "export function f(x: number): number { if (x > 0) { return 1; } return 2; }\n",
+                &[
+                    "// if while for return\nexport function f(x: number): number { if (x > 0) { return 1; } return 2; }\n",
+                    "export function f(x: number): number { const s: string = \"if while for\"; void s; if (x > 0) { return 1; } return 2; }\n",
+                    "export function f(x: number): number { const s = `if ${x} while`; void s; if (x > 0) { return 1; } return 2; }\n",
+                ],
+            ),
+        ];
+        for (path, base, traps) in cases {
+            for key in ["cyclomatic", "cognitive"] {
+                let want = metric_of(path, base, key);
+                for trap in *traps {
+                    assert_eq!(
+                        metric_of(path, trap, key),
+                        want,
+                        "{path} metric `{key}` moved on a keyword look-alike"
+                    );
+                }
+            }
+        }
+    }
+
     #[test]
     fn per_function_metrics_aggregate_over_child_functions() {
         // Regression for the whole "root-vs-sum" class: `write_metrics` once read

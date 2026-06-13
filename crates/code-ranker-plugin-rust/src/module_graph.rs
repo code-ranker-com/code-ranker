@@ -1232,6 +1232,29 @@ mod tests {
         assert_eq!(count_unsafe("fn safe() { let _ = 1 + 1; }"), 0);
     }
 
+    #[test]
+    fn unsafe_ignores_keyword_lookalikes() {
+        // Layer-1 metamorphic FP guard (see docs/metric-correctness.md): the word
+        // `unsafe` appearing only as an identifier, a comment, a doc-comment, or a
+        // string literal — with no real `unsafe` construct — must count 0. This is
+        // the AST-Accurate principle: we count syntax nodes, not text.
+        let src = r#"
+            // unsafe unsafe — just a comment mentioning unsafe
+            /// doc comment: this fn is not unsafe
+            fn super_unsafe_fn() -> &'static str {
+                let unsafe_mode = "unsafe { } unsafe fn impl trait";
+                unsafe_mode
+            }
+            struct UnsafeWrapper;
+            enum UnsafeKind { A, B }
+        "#;
+        assert_eq!(
+            count_unsafe(src),
+            0,
+            "`unsafe` in names/comments/strings must not be counted"
+        );
+    }
+
     fn use_paths(src: &str) -> Vec<Vec<String>> {
         let f = syn::parse_file(src).unwrap();
         let mut out = Vec::new();
@@ -1576,6 +1599,26 @@ mod tests {
         assert!(
             !c.paths.iter().any(|p| p == &vec!["plain".to_string()]),
             "single-segment call ignored"
+        );
+    }
+
+    #[test]
+    fn collector_ignores_paths_in_strings_and_comments() {
+        // Layer-1 metamorphic FP guard (see docs/metric-correctness.md): a
+        // qualified path that appears only inside a comment or a string literal is
+        // not a path expression, so it yields no dependency edge — we collect AST
+        // path nodes, not text.
+        let f = syn::parse_file(
+            "// commands::go() once_cell::sync::Lazy\n\
+             fn run() { let _ = \"once_cell::sync::Lazy and commands::go\"; }",
+        )
+        .unwrap();
+        let mut c = CratePathCollector::default();
+        syn::visit::Visit::visit_file(&mut c, &f);
+        assert!(
+            c.paths.is_empty(),
+            "no path should come from comment/string text, got {:?}",
+            c.paths
         );
     }
 

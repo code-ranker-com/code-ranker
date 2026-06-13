@@ -629,4 +629,40 @@ mod tests {
         assert!(a_node.attrs.contains_key("visibility"), "visibility attr");
         assert!(a_node.attrs.contains_key("loc"), "loc attr");
     }
+
+    #[test]
+    fn import_in_comment_or_string_is_not_an_edge() {
+        // Layer-1 metamorphic FP guard (docs/metric-correctness.md): an import that
+        // appears only in a comment, a docstring, or a string literal must NOT
+        // create a dependency edge — imports are read from AST nodes, not text.
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        write(root, "pkg/__init__.py", "");
+        write(
+            root,
+            "pkg/a.py",
+            "\"\"\"from pkg import b and import os\"\"\"\n\
+             # from pkg import b\n\
+             note = \"from pkg import b\"\n\
+             \n\
+             def helper():\n\
+             \x20   return note\n",
+        );
+        write(root, "pkg/b.py", "def greet():\n    return \"hi\"\n");
+
+        let g = PythonPlugin
+            .analyze(root, "files", &PluginInput::default())
+            .expect("python plugin runs");
+
+        let a_id = root.join("pkg/a.py").to_string_lossy().into_owned();
+        let b_id = root.join("pkg/b.py").to_string_lossy().into_owned();
+        assert!(
+            !g.edges.iter().any(|e| e.source == a_id && e.target == b_id),
+            "an import in a comment/docstring/string must not produce an edge"
+        );
+        assert!(
+            !has_node(&g, "ext:os"),
+            "`import os` only in text must not produce an external node"
+        );
+    }
 }

@@ -647,6 +647,52 @@ mod tests {
     }
 
     #[test]
+    fn import_path_in_comment_or_string_is_not_an_edge() {
+        // Layer-1 metamorphic FP guard (docs/metric-correctness.md): a module path
+        // that appears only inside a comment, a string, or a template literal must
+        // NOT create a dependency edge — imports are read from AST nodes, not text.
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        write_file(
+            root,
+            "src/a.ts",
+            "// import { greet } from \"./b\";\n\
+             const note = \"import { greet } from './b'\";\n\
+             const tpl = `import './b'`;\n\
+             void note;\n\
+             void tpl;\n\
+             export function helper() { return 1; }\n",
+        );
+        write_file(
+            root,
+            "src/b.ts",
+            "export function greet() { return \"hi\"; }\n",
+        );
+
+        let graph = analyze_ecmascript(
+            root,
+            &["ts"],
+            |ext| match ext {
+                "ts" => Some(tree_sitter_javascript::LANGUAGE.into()),
+                _ => None,
+            },
+            &["ts", "tsx", "js", "jsx"],
+            false,
+        )
+        .expect("analyze_ecmascript should succeed");
+
+        let a_id = root.join("src/a.ts").to_string_lossy().into_owned();
+        let b_id = root.join("src/b.ts").to_string_lossy().into_owned();
+        assert!(
+            !graph
+                .edges
+                .iter()
+                .any(|e| e.source == a_id && e.target == b_id),
+            "a path in a comment/string/template must not produce an edge"
+        );
+    }
+
+    #[test]
     fn ecmascript_is_test_path_matches_conventions() {
         for p in [
             "src/a.test.ts",

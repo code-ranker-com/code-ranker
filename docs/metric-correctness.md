@@ -227,9 +227,9 @@ The home crate is always the one that **computes** the metric.
 
 | home | test location | layers | covers | status |
 |---|---|---|---|---|
-| `code-ranker-complexity` | `src/lib.rs` `#[cfg(test)]` (move to `tests/` if it grows) | 1, 2, 3 | `cyclomatic` `cognitive` `exits` `args` `closures`, Halstead, LOC, `mi`/`mi_sei` — driven via `parse_metrics` on per-language snippets: keyword-injection invariance (FP), +1-construct increment (FN / magnitude), hand-labelled exact-count anchors | 1 partial ✅, 2 / 3 ⏳ |
-| `code-ranker-plugin-rust` | `src/module_graph.rs` `#[cfg(test)]` | 1, 3 | `unsafe` `items` `loc` + edge detection: a keyword in an identifier / comment / string / macro body → no count / edge; a real construct or `use` → exact | partial ✅, FP-matrix ⏳ |
-| `code-ranker-plugin-python` / `-javascript` / `-typescript` | each plugin's `#[cfg(test)]` | 1, 3 | per-language edge detection + FP invariance (a path inside a string / comment → no edge) | ⏳ |
+| `code-ranker-complexity` | `src/lib.rs` `#[cfg(test)]` (move to `tests/` if it grows) | 1, 2, 3 | `cyclomatic` `cognitive` `exits` `args` `closures`, Halstead, LOC, `mi`/`mi_sei` — driven via `parse_metrics` on per-language snippets: keyword-injection invariance (FP), +1-construct increment (FN / magnitude), hand-labelled exact-count anchors | 1 ✅ (FP matrix over 9 positions × 5 metrics, branch-form FN, cross-language); 2 / 3 ⏳ |
+| `code-ranker-plugin-rust` | `src/module_graph.rs` `#[cfg(test)]` | 1, 3 | `unsafe` `items` `loc` + edge detection: a keyword in an identifier / comment / string / macro body → no count / edge; a real construct or `use` → exact | 1 ✅ (`unsafe` + bare-path FP); broader positions ⏳ |
+| `code-ranker-plugin-python` / `-javascript` / `-typescript` | each plugin's `#[cfg(test)]` | 1, 3 | per-language edge detection + FP invariance (a path inside a string / comment → no edge) | 1 ✅ (import-path FP); 3 ⏳ |
 | `code-ranker-graph` | `src/hk.rs` / `src/cycles.rs` `#[cfg(test)]` | algorithmic | `fan_in` / `fan_out` / `hk` aggregation, `cycle` classification (mutual / chain) — graph maths, not a text-FP class | ✅ |
 | `code-ranker-cli` | `tests/e2e.rs` | 3 (realistic), golden, coverage | full-pipeline JSON pinned per language; the `every_central_metric_is_exercised_per_language` coverage invariant; one binary smoke test | ✅ |
 | `code-ranker-cli` or a new `xtask` | `tests/differential.rs`, feature-gated / `#[ignore]` | 4 | vs `cargo-geiger` (`unsafe`), `tokei` / `scc` (LOC), `rustc` / `rust-analyzer` (edges) over a small corpus | ⏳ nightly |

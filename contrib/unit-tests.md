@@ -32,10 +32,14 @@ Every test must pass all three:
 - **Independent** — no shared state. A test that needs a workspace creates its own temp
   dir. `cargo test` runs them in parallel, in any order.
 - **Synchronous** — pure logic is `#[test]`, never `async`.
-- **No new crate dependencies for testing** — use `assert!(matches!(...))`, not
-  `assert_matches!`; manual `vec![] + loop` for table-driven cases, not `rstest`.
-  `tempfile` (already a workspace dependency) is the one allowed helper, for temp-dir
-  isolation.
+- **No new *external* crate dependencies for testing** — use
+  `assert!(matches!(...))`, not `assert_matches!`; manual `vec![] + loop` for
+  table-driven cases, not `rstest`. `tempfile` (already a workspace dependency) is
+  the allowed external helper, for temp-dir isolation. The one internal helper is
+  **`code-ranker-test-support`** (a `publish = false`, path-only dev-dependency —
+  cargo strips it from published manifests — shared by the language-plugin tests
+  for `write_file` and graph-assertion boilerplate): internal shared test code, not
+  a third-party test framework.
 
 ## What belongs in unit tests
 

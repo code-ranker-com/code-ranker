@@ -150,11 +150,28 @@ fn classify(n: i32) -> &'static str {   //   base                 = 1
 ```
 
 A `cyclomatic` of N means you need at least N test cases to cover every path.
-The example above is one function; the **file-level** `cyclomatic` is the **sum
-over every function** in the file, so it tracks the file's total branching
-burden. A file with no functions (a pure type or `clap` declaration) carries no
-function-level paths, so the metric is **omitted** rather than reported as a
-bare `1`.
+The example above is one function; the **file-level** `cyclomatic` sums the
+per-function values **plus the file unit's own base path of 1**. McCabe's own
+multi-subroutine form is `V(G) = E − N + 2P` with `P` = number of functions,
+which equals `Σ` over functions of `(E − N + 2)`; `rust-code-analysis` (our
+analyzer of record) models the file itself as one more unit space with a base
+path of `1` and reports `cyclomatic_sum()` = that file unit `+ Σ over functions`.
+We emit the analyzer's value verbatim — it is the analyzer's definition of the
+file's complexity, and it is the same value fed into `mi` (below), so the two stay
+coherent. A file with no functions (a pure type or `clap` declaration) is left
+with only the file unit's vacuous `1`, so the metric is **omitted** (`omit_at`
+= 1) rather than reported as a bare `1`.
+
+> **Sources:** McCabe, "A Complexity Measure" (1976); the multi-component form
+> `V(G) = E − N + 2P` and its equality with the per-function sum are described in
+> [Wikipedia: Cyclomatic complexity](https://en.wikipedia.org/wiki/Cyclomatic_complexity);
+> the per-method sum is the
+> [Weighted Methods per Class](https://pdepend.org/documentation/software-metrics/weighted-method-count.html)
+> (Chidamber–Kemerer) metric, reported by SciTools as *SumCyclomatic*. Per that
+> theory the per-function sum carries no container term; `rust-code-analysis`
+> additionally counts the file unit's own base path, and `code-ranker` follows the
+> analyzer (its source of truth) rather than re-deriving the textbook value, so
+> `cyclomatic` and the analyzer-computed `mi` use one consistent number.
 
 ### `cognitive` — how hard it is to *read*
 
@@ -171,7 +188,17 @@ the **sum over every function**; a function-less file omits it.
 Per-function tallies, **summed over the file's functions** (like `cyclomatic` —
 not read from the file root, which is why a function-less file omits them):
 
-- **`exits`** — explicit exit points: each `return` and each `?` (try) operator.
+- **`exits`** — the number of *possible exit points* of a function: each explicit
+  `return` and each `?` (try) operator, **plus the function's normal
+  value-returning exit** (a function that declares a return type `-> T` exits at
+  least once with a value). "Number of exit points" is not a McCabe/Halstead
+  metric and has no single canonical definition; this is the rule
+  `rust-code-analysis` (our analyzer of record) applies, and it is the source of
+  truth here. Consequence: a one-line `fn f() -> i32 { return 1; }` reports
+  `exits = 2` (the explicit `return` plus the value-returning exit), and a
+  `-> ()` function with no `return` reports `0`. The `-> T`-gated normal exit is a
+  deliberate analyzer approximation, documented rather than "corrected" (a precise
+  count would need real control-flow analysis the analyzer does not do).
 - **`args`** — parameter count, summed over functions **and** closures.
 - **`closures`** — number of closures (`|…| …`) defined.
 

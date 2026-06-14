@@ -1285,42 +1285,102 @@ mod tests {
     }
 
     #[test]
-    fn resolves_crate_path() {
-        let mut idx: HashMap<Vec<String>, NodeId> = HashMap::new();
-        idx.insert(vec![], "ROOT".into());
-        idx.insert(vec!["a".into()], "A".into());
-        idx.insert(vec!["a".into(), "b".into()], "AB".into());
-        let r = resolve_use_path(
-            &["crate".into(), "a".into(), "b".into()],
-            &[],
-            &idx,
-            &HashMap::new(),
-            &HashMap::new(),
-            &HashMap::new(),
-            &ReexportMap::new(),
-            0,
+    fn resolve_use_path_simple_cases() {
+        // Single-shot resolutions over a bare module index + externs, with no
+        // deps / foreign libs / re-exports in play. Those richer mechanisms keep
+        // their own dedicated tests below (follows_reexport_to_definer,
+        // resolves_cross_crate_*), since each needs a distinct fixture and asserts
+        // more than one outcome — collapsing them here would hurt clarity.
+        let s = |x: &str| x.to_string();
+        // (label, use_path, current_module, index_entries, extern_entries, want)
+        struct Case {
+            label: &'static str,
+            path: Vec<String>,
+            current: Vec<String>,
+            index: Vec<(Vec<String>, &'static str)>,
+            externs: Vec<(&'static str, &'static str)>,
+            want: Option<&'static str>,
+        }
+        let cases = vec![
+            Case {
+                label: "crate::a::b → AB",
+                path: vec![s("crate"), s("a"), s("b")],
+                current: vec![],
+                index: vec![
+                    (vec![], "ROOT"),
+                    (vec![s("a")], "A"),
+                    (vec![s("a"), s("b")], "AB"),
+                ],
+                externs: vec![],
+                want: Some("AB"),
+            },
+            Case {
+                label: "super::super::x → root sibling X",
+                path: vec![s("super"), s("super"), s("x")],
+                current: vec![s("a"), s("b")],
+                index: vec![
+                    (vec![], "ROOT"),
+                    (vec![s("a")], "A"),
+                    (vec![s("a"), s("b")], "AB"),
+                    (vec![s("x")], "X"),
+                ],
+                externs: vec![],
+                want: Some("X"),
+            },
+            Case {
+                label: "extern crate serde::Deserialize",
+                path: vec![s("serde"), s("Deserialize")],
+                current: vec![],
+                index: vec![],
+                externs: vec![("serde", "crate:serde")],
+                want: Some("crate:serde"),
+            },
+            Case {
+                label: "std is suppressed",
+                path: vec![s("std"), s("collections")],
+                current: vec![],
+                index: vec![],
+                externs: vec![],
+                want: None,
+            },
+        ];
+        let mut fails = Vec::new();
+        for c in &cases {
+            let idx: HashMap<Vec<String>, NodeId> = c
+                .index
+                .iter()
+                .cloned()
+                .map(|(k, v)| (k, v.into()))
+                .collect();
+            let externs: HashMap<String, NodeId> = c
+                .externs
+                .iter()
+                .map(|(k, v)| (k.to_string(), (*v).into()))
+                .collect();
+            let got = resolve_use_path(
+                &c.path,
+                &c.current,
+                &idx,
+                &externs,
+                &HashMap::new(),
+                &HashMap::new(),
+                &ReexportMap::new(),
+                0,
+            );
+            if got.as_deref() != c.want {
+                fails.push(format!(
+                    "{}: want {:?}, got {:?}",
+                    c.label,
+                    c.want,
+                    got.as_deref()
+                ));
+            }
+        }
+        assert!(
+            fails.is_empty(),
+            "resolve_use_path cases failed:\n{}",
+            fails.join("\n")
         );
-        assert_eq!(r.as_deref(), Some("AB"));
-    }
-
-    #[test]
-    fn resolves_super_super_to_root_sibling() {
-        let mut idx: HashMap<Vec<String>, NodeId> = HashMap::new();
-        idx.insert(vec![], "ROOT".into());
-        idx.insert(vec!["a".into()], "A".into());
-        idx.insert(vec!["a".into(), "b".into()], "AB".into());
-        idx.insert(vec!["x".into()], "X".into());
-        let r = resolve_use_path(
-            &["super".into(), "super".into(), "x".into()],
-            &["a".into(), "b".into()],
-            &idx,
-            &HashMap::new(),
-            &HashMap::new(),
-            &HashMap::new(),
-            &ReexportMap::new(),
-            0,
-        );
-        assert_eq!(r.as_deref(), Some("X"));
     }
 
     #[test]
@@ -1383,38 +1443,6 @@ mod tests {
             0,
         );
         assert_eq!(r0.as_deref(), Some("DOMAIN"));
-    }
-
-    #[test]
-    fn resolves_extern_crate() {
-        let mut externs: HashMap<String, NodeId> = HashMap::new();
-        externs.insert("serde".into(), "crate:serde".into());
-        let r = resolve_use_path(
-            &["serde".into(), "Deserialize".into()],
-            &[],
-            &HashMap::new(),
-            &externs,
-            &HashMap::new(),
-            &HashMap::new(),
-            &ReexportMap::new(),
-            0,
-        );
-        assert_eq!(r.as_deref(), Some("crate:serde"));
-    }
-
-    #[test]
-    fn ignores_std() {
-        let r = resolve_use_path(
-            &["std".into(), "collections".into()],
-            &[],
-            &HashMap::new(),
-            &HashMap::new(),
-            &HashMap::new(),
-            &HashMap::new(),
-            &ReexportMap::new(),
-            0,
-        );
-        assert_eq!(r, None);
     }
 
     #[test]

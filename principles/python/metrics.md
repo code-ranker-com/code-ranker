@@ -19,6 +19,9 @@ Three rules hold for **every** metric:
   f-string — **does not count**. No false positives from text.
 - **Per-function metrics are summed over the file's functions** and **omitted at
   their no-signal value** (`omit_at`; `1` for `cyclomatic`, `0` for the rest).
+  `cyclomatic` is the analyzer's whole-file value — the per-function McCabe sum
+  plus the file unit's own base path; see the
+  [Rust spec §cyclomatic](../rust/metrics.md) for the definition and citations.
 - **Dynamic forms are not resolved.** `importlib.import_module`, `__import__`,
   `eval` take string arguments and are *not* analyzed — a deliberate blind spot,
   not a missed count (mirrors how Rust does not expand macros).

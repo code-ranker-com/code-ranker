@@ -167,10 +167,11 @@ fn parse_metrics(path: &Path, src: Vec<u8>) -> Option<(FuncSpace, f64)> {
 
 /// The value at which a per-file metric carries no signal and is **omitted** from
 /// output (see [`code_ranker_plugin_api::level::AttributeSpec::omit_at`]). `0` for
-/// almost everything; `1` for `cyclomatic` — McCabe counts the single
-/// straight-line path even for branch-free code, so a function-less file would
-/// otherwise report a vacuous `1`. [`write_metrics`] gates on this value and
-/// [`metric_specs`] publishes the same value on each spec, so the two never drift.
+/// almost everything; `1` for `cyclomatic` — the analyzer gives the file unit a
+/// McCabe base path of `1`, so a function-less file reports a vacuous `1` that
+/// carries no signal and must be dropped. [`write_metrics`] gates emission on this
+/// value and [`metric_specs`] publishes the same value on each spec, so the two
+/// never drift.
 fn metric_omit_at(key: &str) -> f64 {
     match key {
         "cyclomatic" => 1.0,
@@ -197,12 +198,18 @@ fn write_metrics(node: &mut code_ranker_plugin_api::node::Node, s: &FuncSpace, t
         }
     };
 
-    // `cyclomatic()` / `cognitive()` return only the ROOT space's own value —
-    // for a file that is a constant 1 (no top-level branching) and 0
-    // respectively. The real complexity lives in the child function spaces, so we
-    // read the aggregated `*_sum` — the file's total complexity over its
-    // functions. A function-less file sums to the `omit_at` floor (cyclomatic 1,
-    // cognitive 0) and is dropped by `put`.
+    // The file's complexity is the analyzer's whole-file value: `rust-code-analysis`
+    // (our analyzer of record) models the file as a unit space plus one space per
+    // function, gives each a McCabe base path of `1`, and `cyclomatic_sum()` sums
+    // them — so the file value is the file unit (1) plus the sum over its
+    // functions. We emit that value verbatim, for two reasons:
+    //   • it is what the analyzer of record defines as the file's cyclomatic, and
+    //   • `mi`/`mi_sei` (also from the analyzer) are computed from this same
+    //     `cyclomatic_sum()`, so emitting it keeps `cyclomatic` and `mi` coherent.
+    // Per-function McCabe (textbook `V(G)=E−N+2P` = Σ over functions) is the
+    // theory; the analyzer adds the file unit's own base path on top — documented
+    // in principles/<lang>/metrics.md §cyclomatic. A function-less file is the
+    // vacuous floor `1` and is dropped by `put` (omit_at 1).
     put("cyclomatic", m.cyclomatic.cyclomatic_sum());
     put("cognitive", m.cognitive.cognitive_sum());
     // Like cyclomatic/cognitive, these are per-function counts: the root space's
@@ -1043,9 +1050,144 @@ mod tests {
         );
     }
 
+    // ---- Layer 3: asserted anchors (see docs/metric-correctness.md) -----------
+    //
+    // Layers 1 & 2 prove RELATIVE behaviour (noise-invariance, +1 per construct)
+    // but never pin an ABSOLUTE value, so a uniform offset/scale bug (every count
+    // shifted by +1, or doubled) would pass green. These anchors pin exact values
+    // hand-derived from principles/<lang>/metrics.md, catching that scale class.
+
+    #[test]
+    fn complexity_absolute_anchors_hand_derived() {
+        // Integer counting metrics, pinned to EXACT file-level values, hand-derived
+        // from the spec's rules (metrics.md §cyclomatic / §exits,args,closures).
+        //
+        // These pin the analyzer-of-record's whole-file values (what we emit):
+        //   • `cyclomatic` = the file unit's base path (1) + Σ over functions of
+        //     (1 + branch points). Per-function McCabe (`V(G)=E−N+2P` = Σ over
+        //     functions) is the theory; the analyzer adds the file unit on top and
+        //     we emit it verbatim (it is also the value `mi` is computed from).
+        //     `classify` = file 1 + fn 4 (base1+if+else-if+||) = 5.
+        //   • `exits` = Σ over functions of (a value-returning `-> T` exit +
+        //     explicit return/?). "Exit points" has no canonical theory, so the
+        //     analyzer's rule is the source of truth (metrics.md §exits). The
+        //     `-> i32` snippets below read 2 (the explicit return + the `-> T` exit).
+        //   • `args` / `closures` / `cognitive` have no file-unit offset.
+        // All pinned so any drift from the analyzer's output is caught.
+        let classify = "fn classify(n: i32) -> &'static str {\n\
+            \x20   if n < 0 { \"neg\" } else if n == 0 || n == 1 { \"small\" } else { \"big\" }\n\
+            }\n";
+        let two_closures =
+            "fn f() { let g = |x: i32| x + 1; let h = |y: i32| y; let _ = (g, h); }\n";
+        // (label, path, src, key, exact_expected)
+        let cases: &[(&str, &str, &str, &str, f64)] = &[
+            // file unit 1 + fn(base1 + if + else-if + ||) = 1 + 4 = 5.
+            ("classify", "t.rs", classify, "cyclomatic", 5.0),
+            // file unit 1 + fn(base1 + 1 if) = 1 + 2 = 3 (else is free).
+            (
+                "single if",
+                "t.rs",
+                "fn f(a: i32) -> i32 { if a > 0 { 1 } else { 2 } }\n",
+                "cyclomatic",
+                3.0,
+            ),
+            // 1 explicit return + 1 value-returning exit (`-> i32`) → 2.
+            (
+                "one return",
+                "t.rs",
+                "fn f() -> i32 { return 1; }\n",
+                "exits",
+                2.0,
+            ),
+            // 1 `?` + 1 value-returning exit (`-> Option`) → 2.
+            (
+                "one try op",
+                "t.rs",
+                "fn f() -> Option<i32> { let x = Some(1)?; Some(x) }\n",
+                "exits",
+                2.0,
+            ),
+            (
+                "three params",
+                "t.rs",
+                "fn f(a: i32, b: i32, c: i32) -> i32 { a + b + c }\n",
+                "args",
+                3.0,
+            ),
+            ("two closures", "t.rs", two_closures, "closures", 2.0),
+            ("two closure args", "t.rs", two_closures, "args", 2.0),
+            // cross-language scale anchors (one Python, one TS) — same shape, so a
+            // language that silently mis-scales (offset/×N) is caught too.
+            // file unit 1 + fn(base1 + 1 if) = 3.
+            (
+                "py single if",
+                "t.py",
+                "def f(x):\n    if x > 0:\n        return 1\n    return 2\n",
+                "cyclomatic",
+                3.0,
+            ),
+            // file unit 1 + fn(base1 + 1 if) = 3.
+            (
+                "ts single if",
+                "t.ts",
+                "export function f(x: number): number { if (x > 0) { return 1; } return 2; }\n",
+                "cyclomatic",
+                3.0,
+            ),
+        ];
+        let mut fails = Vec::new();
+        for (label, path, src, key, want) in cases {
+            match metric_of(path, src, key) {
+                Some(got) if got == *want => {}
+                other => fails.push(format!("{label}: {key} want {want}, got {other:?}")),
+            }
+        }
+        assert!(
+            fails.is_empty(),
+            "failing integer anchors:\n{}",
+            fails.join("\n")
+        );
+    }
+
+    #[test]
+    fn complexity_frozen_scale_anchors() {
+        // Algorithm-specific metrics (cognitive nesting weights, Halstead
+        // dictionaries, MI) cannot be hand-derived reliably, so they are FROZEN
+        // anchors: values produced by `rust-code-analysis` for one fixed snippet,
+        // verified once. Their job is to catch a uniform offset/scale regression
+        // (a library bump that doubles `volume`, an MI formula edit) — not to
+        // claim an independent ground truth. They change only when the underlying
+        // algorithm changes, and that change should be deliberate.
+        let classify = "fn classify(n: i32) -> &'static str {\n\
+            \x20   if n < 0 { \"neg\" } else if n == 0 || n == 1 { \"small\" } else { \"big\" }\n\
+            }\n";
+        // (key, expected, abs_tolerance)
+        let cases: &[(&str, f64, f64)] = &[
+            ("cognitive", 4.0, 0.0),   // exact integer
+            ("vocabulary", 18.0, 0.0), // η₁ + η₂, exact integer
+            ("length", 28.0, 0.0),     // N₁ + N₂, exact integer
+            ("volume", 116.757, 0.01), // length × log₂(vocabulary)
+            ("effort", 875.684, 0.01), // difficulty × volume
+            ("mi", 127.299, 0.01),     // maintainability index
+            ("mi_sei", 108.463, 0.01), // SEI variant
+        ];
+        let mut fails = Vec::new();
+        for (key, want, tol) in cases {
+            match metric_of("t.rs", classify, key) {
+                Some(got) if (got - *want).abs() <= *tol => {}
+                other => fails.push(format!("{key}: want {want} (±{tol}), got {other:?}")),
+            }
+        }
+        assert!(
+            fails.is_empty(),
+            "failing scale anchors:\n{}",
+            fails.join("\n")
+        );
+    }
+
     #[test]
     fn declaration_only_file_emits_no_complexity() {
-        // No functions → only the root space → cyclomatic is a vacuous 1 and
+        // No functions → only the file unit space → cyclomatic is a vacuous 1 and
         // cognitive is 0. Both must be dropped (not shown as a meaningless "1"),
         // matching how `put` already drops cognitive's 0. Mirrors real files like
         // a clap CLI model or a type-definitions module.

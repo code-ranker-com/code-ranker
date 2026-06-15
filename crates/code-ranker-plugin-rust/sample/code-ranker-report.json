@@ -1518,7 +1518,7 @@
     }
   ],
   "versions": {
-    "code-ranker": "1.1.0",
+    "code-ranker": "2.0.0",
     "rustc": "1.95.0"
   },
   "workspace": "/home/user/code-ranker"

@@ -312,9 +312,24 @@ function buildDOT(nodes, edges, level, viewport) {
   for (const n of boxNodes) { const k = groupKeyAtDig(level, n, frontierDig); (boxes.get(k) || boxes.set(k, []).get(k)).push(n); }
   for (const [k, ns] of boxes) {
     const gCyc = aggCycleStatus(ns.map(n => cycleOf?.get(n.id) || 'none'));
+    // In a metric size-mode (loc/hk) EVERY node is a sized circle — including a
+    // collapsed folder, drawn at the aggregate metric of the files it hides (same
+    // math as an overview group circle), so the metric reads consistently across
+    // overview groups, revealed files and collapsed folders. Kept grey so it still
+    // reads as a folder, distinct from the blue file circles.
+    if (isMetric) {
+      const aggB = ns.reduce((s, n) => s + metricNodeVal(baselineById.get(n.id), sizeMode), 0);
+      const aggC = ns.reduce((s, n) => s + metricNodeVal(currentById.get(n.id),  sizeMode), 0);
+      const agg  = Math.max(aggB, aggC) || ns.reduce((s, n) => s + metricNodeVal(n, sizeMode), 0);
+      const d    = metricGroupDiam(agg, sizeMode);
+      const lbl  = agg > 0 ? fmtMetricShort(agg) : '';
+      const fs   = metricFontSize(d);
+      dot += `  ${dotId(k)} [label=${dotId(lbl)} fontsize=${fs} fontcolor="#555555" fillcolor="#ececec" color="#bbbbbb" width=${d} shape=circle style=filled fixedsize=true class="cycle-status-${gCyc}"]\n`;
+      continue;
+    }
     const lbl  = `${stripDirPrefix(focusBase, groupLabel(level, k, frontierDig))} (${ns.length})`;
-    // Collapsed folders are grey (matching the expanded dir sub-clusters) so they
-    // read as folders, distinct from the blue file nodes.
+    // Default (box) mode: collapsed folders are grey (matching the expanded dir
+    // sub-clusters) so they read as folders, distinct from the file nodes.
     dot += `  ${dotId(k)} [label=${dotId(lbl)} fillcolor="#ececec" color="#bbbbbb" fontcolor="#555555" shape=box style=filled fontname="Helvetica" fontsize=11 class="cycle-status-${gCyc}"]\n`;
   }
 

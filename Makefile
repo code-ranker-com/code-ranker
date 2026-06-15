@@ -91,9 +91,9 @@ release:
 
 publish:
 	@VERSION=$$(grep -E '^version = "' Cargo.toml | head -1 | sed -E 's/version = "(.*)"/\1/'); \
-	  echo "dispatching Release for v$$VERSION (crates=$${CRATES:-false} pypi=$${PYPI:-false} docker=$${DOCKER:-false} github_release=$${GITHUB_RELEASE:-false})"; \
+	  echo "dispatching Release for v$$VERSION (crates=$${CRATES:-true} pypi=$${PYPI:-true} docker=$${DOCKER:-true} github_release=$${GITHUB_RELEASE:-true})"; \
 	  gh workflow run publish.yml --repo ffedoroff/code-ranker \
 	    -f version="$$VERSION" \
-	    -f crates="$${CRATES:-false}" -f pypi="$${PYPI:-false}" \
-	    -f docker="$${DOCKER:-false}" -f github_release="$${GITHUB_RELEASE:-false}"; \
+	    -f crates="$${CRATES:-true}" -f pypi="$${PYPI:-true}" \
+	    -f docker="$${DOCKER:-true}" -f github_release="$${GITHUB_RELEASE:-true}"; \
 	  echo "  ✓ dispatched — watch: gh run list --repo ffedoroff/code-ranker --limit 6"

@@ -32,7 +32,12 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
-          for c in code-ranker-plugin-api code-ranker-graph code-ranker-complexity code-ranker-plugin-javascript code-ranker-plugin-python code-ranker-plugin-rust code-ranker-plugin-typescript code-ranker-viewer code-ranker; do
+          # crates.io renders a per-crate README. We keep a single source of
+          # truth (the repo-root README.md) and drop a copy into each crate dir
+          # right before publishing; cargo auto-detects a package-root README.md
+          # when no `readme` field is set. `--allow-dirty` tolerates the copy.
+          for d in crates/*/; do cp README.md "$d/README.md"; done
+          for c in code-ranker-plugin-api code-ranker-graph code-ranker-ecmascript-core code-ranker-plugin-javascript code-ranker-plugin-python code-ranker-plugin-rust code-ranker-plugin-typescript code-ranker-viewer code-ranker; do
             echo "==> publishing $c"
             attempt=0
             until cargo publish -p "$c" --allow-dirty 2>&1 | tee /tmp/pub-$c.log | grep -qE "Published"; do

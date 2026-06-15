@@ -208,7 +208,11 @@ mod tests {
 
         let a = graph.nodes.iter().find(|n| n.name == "a.rs").unwrap();
         assert_eq!(a.id, "{target}/a.rs");
-        assert_eq!(a.parent.as_deref(), Some("{target}/mod.rs"), "parent remapped");
+        assert_eq!(
+            a.parent.as_deref(),
+            Some("{target}/mod.rs"),
+            "parent remapped"
+        );
         assert_eq!(
             a.attrs.get("path"),
             Some(&AttrValue::Str("{reg}/dep/lib.rs".into())),

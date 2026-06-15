@@ -7,11 +7,13 @@ other languages follow the same shape in their sibling folders under
 
 | Mode | What it does | Needs a token? | Reference file |
 |---|---|---|---|
-| **Minimal** | Generates a JSON snapshot + HTML viewer on every run, kept as artifacts. Runs as an advisory linter. | No | [`minimal.example.yml`](./minimal.example.yml) |
+| **Minimal** | Generates a JSON snapshot + HTML viewer + a Code Quality report on every run. JSON/HTML are kept as artifacts; the Code Quality report is handed to GitLab (`reports:codequality`) so findings show inline in the MR. Advisory. | No | [`minimal.example.yml`](./minimal.example.yml) |
 | **Diff** | On an MR, compares the current code against the **target branch** and renders an HTML diff with a verdict. | Yes (read-only) | [`diff.example.yml`](./diff.example.yml) |
 
-Both modes keep the same artifacts (`code-ranker-<hash>.json` and
-`code-ranker-<hash>.html`) and both run the job as **advisory**
+Both modes keep the same downloadable artifacts (`code-ranker-<hash>.json` and
+`code-ranker-<hash>.html`); Minimal additionally emits a Code Quality report for
+native GitLab findings (see [Native findings via Code Quality](#native-findings-via-code-quality)).
+Both run the job as **advisory**
 (`allow_failure: true`) so a failed analysis never blocks the pipeline. Pick
 Minimal to start; add the diff wiring once you want per-MR regression diffs. The
 two reference files are drop-in jobs — copy one into your `.gitlab-ci.yml` and
@@ -89,14 +91,41 @@ code-ranker's, and it disappears once the cache is reused.
 
 The job does exactly two things:
 
-1. `code-ranker report . --output.json.path=… --output.html.path=…` — analyze the
-   workspace and emit both a JSON snapshot and a self-contained HTML viewer.
-2. Keep both as artifacts (`when: always`, so they survive even if a later step
-   fails).
+1. `code-ranker report . --output.json.path=… --output.html.path=… --output.codequality.path=…`
+   — analyze the workspace and emit a JSON snapshot, a self-contained HTML viewer,
+   and a GitLab Code Quality report of the rule violations.
+2. Keep them as artifacts (`when: always`, so they survive even if a later step
+   fails), and hand the Code Quality report to GitLab as
+   `artifacts:reports:codequality`.
 
-Artifacts are named by commit hash (`code-ranker-<hash>.json/.html`) so every run
-is identifiable and never collides. The job is `allow_failure: true` — it
+The JSON/HTML are named by commit hash (`code-ranker-<hash>.json/.html`) so every
+run is identifiable and never collides. The job is `allow_failure: true` — it
 surfaces structure for reviewers but never blocks anything.
+
+### Native findings via Code Quality
+
+The JSON snapshot and HTML viewer are **downloadable** artifacts — a reviewer
+opens the HTML. To surface the findings **inside GitLab** — inline on the MR diff
+and in the pipeline **Code Quality** widget — the job also emits a Code Quality
+(CodeClimate) report and registers it as `artifacts:reports:codequality`. Each
+violation becomes an issue with a stable `fingerprint` (keyed on `rule:location`,
+no line) so GitLab tracks the same finding across pipelines and shows only what a
+merge request *adds*.
+
+> **This is GA — it works on current GitLab with no feature flag.** It is the
+> recommended native path. For a hard pass/fail gate use `code-ranker check`
+> (below); Code Quality is advisory (it annotates, never blocks).
+
+**SARIF alternative.** code-ranker also emits SARIF
+(`--output.sarif.path=…` + `reports: sarif:`), which GitLab ingests into its
+*security* views — but only on **GitLab ≥ 18.11 with the `sarif_ingestion`
+feature flag enabled** (off by default; an admin turns it on). On older instances
+prefer Code Quality. Check your instance version with `echo "$CI_SERVER_VERSION"`
+in a job, or `glab api version`.
+
+The Code Quality report uses a **fixed** filename (`gl-code-quality-report.json`,
+not `-<hash>`-named) because `artifacts:reports:` is resolved when the pipeline
+config is parsed, before the script computes the hash.
 
 **Want a hard gate?** Use `code-ranker check .` instead — it evaluates thresholds
 and cycle rules and **exits non-zero** on violation (it writes no files). Drop

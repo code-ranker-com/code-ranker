@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 const DEFAULT_JSON_PATH: &str = ".code-ranker/{ts}-{git-hash-3}.json";
 const DEFAULT_HTML_PATH: &str = ".code-ranker/{ts}-{git-hash-3}.html";
 const DEFAULT_SARIF_PATH: &str = ".code-ranker/{ts}-{git-hash-3}.sarif";
+const DEFAULT_CODEQUALITY_PATH: &str = ".code-ranker/{ts}-{git-hash-3}.codequality.json";
 /// The prompt defaults to a per-principle Markdown file; the scorecard is a
 /// console overview and defaults to the stdout stream.
 const DEFAULT_PROMPT_PATH: &str = ".code-ranker/{ts}-{git-hash-3}-{preset}.md";
@@ -24,11 +25,13 @@ pub(crate) struct ReportOutputs {
     pub(crate) json: bool,
     pub(crate) html: bool,
     pub(crate) sarif: bool,
+    pub(crate) codequality: bool,
     pub(crate) prompt: bool,
     pub(crate) scorecard: bool,
     pub(crate) json_path: Option<String>,
     pub(crate) html_path: Option<String>,
     pub(crate) sarif_path: Option<String>,
+    pub(crate) codequality_path: Option<String>,
     pub(crate) prompt_path: Option<String>,
     pub(crate) scorecard_path: Option<String>,
 }
@@ -53,6 +56,7 @@ pub(crate) fn run_report(
     let json_path = out.json_path.as_deref();
     let html_path = out.html_path.as_deref();
     let sarif_path = out.sarif_path.as_deref();
+    let codequality_path = out.codequality_path.as_deref();
     let prompt_path = out.prompt_path.as_deref();
     let scorecard_path = out.scorecard_path.as_deref();
 
@@ -86,7 +90,14 @@ pub(crate) fn run_report(
     let mut want_json = want_format(out.json, json_path, &a.output.json);
     let mut want_html = want_format(out.html, html_path, &a.output.html);
     let want_sarif = want_format(out.sarif, sarif_path, &a.output.sarif);
-    if !want_json && !want_html && !want_sarif && !want_prompt && !want_scorecard {
+    let want_codequality = want_format(out.codequality, codequality_path, &a.output.codequality);
+    if !want_json
+        && !want_html
+        && !want_sarif
+        && !want_codequality
+        && !want_prompt
+        && !want_scorecard
+    {
         want_json = true;
         want_html = true;
     }
@@ -143,6 +154,20 @@ pub(crate) fn run_report(
         let mut sarif = crate::check::sarif_document(&a.violations);
         sarif.push('\n');
         write_artifact(&dest, &sarif, "sarif")?;
+    }
+
+    if want_codequality {
+        // GitLab Code Quality (CodeClimate) report of the current rule violations
+        // — the same document `check --output-format codequality` emits, written
+        // as an artifact for `artifacts:reports:codequality`. Absolute (a
+        // `--baseline` here only diffs the HTML); GitLab dedups by fingerprint.
+        let tpl = codequality_path
+            .or(a.output.codequality.path.as_deref())
+            .unwrap_or(DEFAULT_CODEQUALITY_PATH);
+        let dest = render_name(tpl, &target, commit, generated_at);
+        let mut cq = crate::check::codequality_document(&a.violations);
+        cq.push('\n');
+        write_artifact(&dest, &cq, "codequality")?;
     }
 
     if want_prompt || want_scorecard {

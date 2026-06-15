@@ -115,7 +115,8 @@ group are present in every format.
 | `human` (default) | the block header | Rich, self-contained blocks as shown above. |
 | `json` | `"rule"` + `"group"` fields | Array of `{rule, group, graph, location, message, weight}`. |
 | `github` | annotation title (`code-ranker threshold.file.loc`) | GitHub Actions `::error` workflow commands. |
-| `sarif` | `ruleId` | SARIF 2.1.0; the rules that fired are described under `tool.driver.rules` (id, group, rationale, helpUri). |
+| `sarif` | `ruleId` | SARIF 2.1.0; the rules that fired are described under `tool.driver.rules` (id, group, rationale, helpUri). For GitHub code scanning / GitLab ≥18.11. |
+| `codequality` | `check_name` | GitLab Code Quality (CodeClimate) array; each issue has `description`, `severity`, `location.path` + `lines.begin`, and a stable `fingerprint` (`rule:location`). For the GitLab MR widget (GA). |
 
 ## Rule groups
 

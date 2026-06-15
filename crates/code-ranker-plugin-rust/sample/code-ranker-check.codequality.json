@@ -1,0 +1,26 @@
+[
+  {
+    "check_name": "cycle.chain",
+    "description": "{target}/src/chain/one.rs: chain cycle: {target}/src/chain/one.rs → {target}/src/chain/three.rs → {target}/src/chain/two.rs → (back to start)",
+    "fingerprint": "cycle.chain:{target}/src/chain/one.rs",
+    "location": {
+      "lines": {
+        "begin": 2
+      },
+      "path": "src/chain/one.rs"
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "cycle.mutual",
+    "description": "{target}/src/a.rs: mutual cycle between {target}/src/a.rs ↔ {target}/src/b.rs",
+    "fingerprint": "cycle.mutual:{target}/src/a.rs",
+    "location": {
+      "lines": {
+        "begin": 4
+      },
+      "path": "src/a.rs"
+    },
+    "severity": "major"
+  }
+]

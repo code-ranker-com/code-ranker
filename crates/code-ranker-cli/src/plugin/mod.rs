@@ -137,9 +137,11 @@ mod tests {
     use std::path::PathBuf;
 
     /// The registry is the single source of truth for which languages exist. Every
-    /// registered plugin MUST ship both committed e2e goldens — the `report`
-    /// snapshot (`code-ranker-report.json`) and the `check` SARIF
-    /// (`code-ranker-check.sarif`) — under `crates/code-ranker-plugin-<name>/sample/`.
+    /// registered plugin MUST ship the committed e2e goldens — the `report`
+    /// snapshot (`code-ranker-report.json`), the `check` SARIF
+    /// (`code-ranker-check.sarif`), and the `check` Code Quality
+    /// (`code-ranker-check.codequality.json`) — under
+    /// `crates/code-ranker-plugin-<name>/sample/`.
     ///
     /// This guard makes adding a language fail the build until its goldens are
     /// committed, instead of the gap going unnoticed because no e2e case names it.
@@ -159,7 +161,11 @@ mod tests {
                 .join("crates")
                 .join(format!("code-ranker-plugin-{name}"))
                 .join("sample");
-            for golden in ["code-ranker-report.json", "code-ranker-check.sarif"] {
+            for golden in [
+                "code-ranker-report.json",
+                "code-ranker-check.sarif",
+                "code-ranker-check.codequality.json",
+            ] {
                 let path = sample.join(golden);
                 assert!(
                     path.is_file(),

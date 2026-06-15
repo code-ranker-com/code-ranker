@@ -359,6 +359,42 @@ fn rust_sample_report_sarif() {
     }
 }
 
+/// `--output-format codequality` emits a GitLab Code Quality (CodeClimate) array:
+/// each issue has a stable `fingerprint`, a repo-relative `location.path`, a
+/// `lines.begin`, and a `severity` — the shape GitLab ingests as
+/// `artifacts:reports:codequality`.
+#[test]
+fn rust_sample_check_codequality() {
+    let (_ok, stdout, _e) = run_check_capture("rust", &["--output-format", "codequality"]);
+    let v: Value = serde_json::from_str(&stdout).expect("codequality json");
+    let issues = v.as_array().expect("array of issues");
+    assert!(!issues.is_empty(), "sample fires issues: {stdout}");
+    for i in issues {
+        assert!(i["fingerprint"].is_string(), "stable fingerprint: {i}");
+        assert!(i["location"]["path"].is_string(), "repo-relative path: {i}");
+        assert!(
+            i["location"]["lines"]["begin"].is_number(),
+            "begin line: {i}"
+        );
+        assert_eq!(i["severity"], "major", "severity present: {i}");
+    }
+}
+
+/// `report --output.codequality` writes the same Code Quality document as `check`,
+/// as an artifact. `--output.codequality.path=stdout` streams it so json/html are
+/// not also produced.
+#[test]
+fn rust_sample_report_codequality() {
+    let (ok, stdout, stderr) = run_report_capture("rust", &["--output.codequality.path=stdout"]);
+    assert!(ok, "report does not gate, so it succeeds: {stderr}");
+    let v: Value =
+        serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("codequality: {e}: {stdout}"));
+    assert!(
+        !v.as_array().expect("array").is_empty(),
+        "the sample's violations are reported: {stdout}"
+    );
+}
+
 /// `--output-format github` emits `::error` workflow annotations with file/line.
 #[test]
 fn rust_sample_check_github_annotations() {
@@ -635,6 +671,47 @@ fn javascript_sample_check_sarif_matches_golden() {
 #[test]
 fn typescript_sample_check_sarif_matches_golden() {
     assert_check_sarif_matches_golden("typescript");
+}
+
+/// `check --output-format codequality` must match the committed golden for the
+/// language, char-for-char. The Code Quality array has no volatile fields (no tool
+/// version), is `{target}`-relative, and serde sorts object keys, so it is compared
+/// verbatim.
+fn assert_check_codequality_matches_golden(lang: &str) {
+    let (_ok, stdout, stderr) = run_check_capture(lang, &["--output-format", "codequality"]);
+    let fresh: Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|e| panic!("[{lang}] fresh codequality: {e}: {stderr}"));
+    let path = sample_dir(lang).join("code-ranker-check.codequality.json");
+    let golden: Value = serde_json::from_str(
+        &std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read golden {}: {e}", path.display())),
+    )
+    .expect("parse golden codequality");
+    assert_eq!(
+        serde_json::to_string_pretty(&fresh).unwrap(),
+        serde_json::to_string_pretty(&golden).unwrap(),
+        "[{lang}] check Code Quality differs from golden. If intentional, regenerate it (see docs/e2e.md)."
+    );
+}
+
+#[test]
+fn rust_sample_check_codequality_matches_golden() {
+    assert_check_codequality_matches_golden("rust");
+}
+
+#[test]
+fn python_sample_check_codequality_matches_golden() {
+    assert_check_codequality_matches_golden("python");
+}
+
+#[test]
+fn javascript_sample_check_codequality_matches_golden() {
+    assert_check_codequality_matches_golden("javascript");
+}
+
+#[test]
+fn typescript_sample_check_codequality_matches_golden() {
+    assert_check_codequality_matches_golden("typescript");
 }
 
 /// Every language whose golden is committed.

@@ -107,15 +107,22 @@ bumps; that is why a single shared version is safe.
   `tool.driver.version` (the crate version), blanked on both sides at comparison
   time. The test asserts that field carries the live crate version, then compares
   the rest **character-for-character**.
+- `crates/code-ranker-plugin-<lang>/sample/code-ranker-check.codequality.json` —
+  the **golden Code Quality** (CodeClimate) report for
+  `check --output-format codequality`: a flat array of issues, each with a stable
+  `fingerprint` (`<rule>:<location>`), `severity`, and `location.path` +
+  `lines.begin`. No volatile fields, so it is compared verbatim.
 - `crates/code-ranker-cli/tests/e2e.rs` — the test: runs the binary on each
   sample, asserts the volatile header fields changed, normalizes them to a
   canonical value on both sides, and compares the whole structure
   **character-for-character** (100% match required). The same file also holds the
-  SARIF golden checks (`*_sample_check_sarif_matches_golden`).
+  SARIF golden checks (`*_sample_check_sarif_matches_golden`) and the Code Quality
+  golden checks (`*_sample_check_codequality_matches_golden`).
 - `crates/code-ranker-cli/src/plugin/mod.rs` — `every_registered_plugin_has_committed_goldens`:
   a guard unit test driven by the **plugin registry** (the single source of truth for
   which languages exist). It asserts every registered plugin ships *both* goldens
-  (`code-ranker-report.json` and `code-ranker-check.sarif`), so adding a new language
+  (`code-ranker-report.json`, `code-ranker-check.sarif`, and
+  `code-ranker-check.codequality.json`), so adding a new language
   fails the build until its fixtures are committed — the gap can't slip through by
   simply lacking an e2e case.
 
@@ -188,6 +195,18 @@ done
 
 The committed file keeps the real `tool.driver.version`; the test blanks it on both
 sides, so a release bump never forces a regeneration here.
+
+### Regenerating the Code Quality goldens
+
+Same shape, fully deterministic (no volatile fields), so compared verbatim:
+
+```sh
+for lang in rust python javascript typescript; do
+  dir="crates/code-ranker-plugin-$lang/sample"
+  "$bin" check "$dir" --config "$dir/code-ranker.toml" \
+    --output-format codequality > "$dir/code-ranker-check.codequality.json" || true
+done
+```
 
 ## Coverage matrix
 

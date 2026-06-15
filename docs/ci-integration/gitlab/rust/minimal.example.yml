@@ -43,7 +43,8 @@ code-ranker:
         --git.dirty-files=0 \
         --git.origin="$CI_PROJECT_URL" \
         --output.json.path="code-ranker-${H}.json" \
-        --output.html.path="code-ranker-${H}.html"
+        --output.html.path="code-ranker-${H}.html" \
+        --output.codequality.path="gl-code-quality-report.json"
 
   artifacts:
     when: always
@@ -51,6 +52,20 @@ code-ranker:
     paths:
       - "code-ranker-*.json"
       - "code-ranker-*.html"
+      - "gl-code-quality-report.json"
+    # Native findings: GitLab ingests the Code Quality (CodeClimate) report and
+    # shows the rule violations inline in the MR diff + the pipeline Code Quality
+    # widget. This is GA — works on current GitLab, no feature flag. The path is
+    # fixed (not `${H}`-named) because `reports:` is resolved at config time,
+    # before the script runs.
+    reports:
+      codequality: gl-code-quality-report.json
+    # SARIF alternative (GitLab >= 18.11 with the `sarif_ingestion` flag ON, which
+    # is off by default — ask your admin). Surfaces findings in the security views
+    # instead. Add `--output.sarif.path="gl-code-ranker.sarif"` to the report
+    # command above and uncomment:
+    #   reports:
+    #     sarif: gl-code-ranker.sarif
 
   rules:
     # Skip tag pipelines; run on MRs and on the default branch.

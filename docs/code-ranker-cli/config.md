@@ -54,15 +54,19 @@ path = "{project-dir}-{ts}.json"   # default if unset: .code-ranker/{ts}-{git-ha
 [output.html]                # `report` HTML viewer artifact
 path = "{project-dir}-{ts}.html"   # default if unset: .code-ranker/{ts}-{git-hash-3}.html
 
-[output.sarif]               # `report` SARIF 2.1.0 artifact (rule violations)
+[output.sarif]               # `report` SARIF 2.1.0 artifact (GitHub code scanning / GitLab >=18.11)
 path = "{project-dir}-{ts}.sarif"  # default if unset: .code-ranker/{ts}-{git-hash-3}.sarif
 # enabled = true             # write SARIF on every report run (opt-in; not in the default set)
+
+[output.codequality]         # `report` GitLab Code Quality (CodeClimate) artifact
+path = "gl-code-quality-report.json"  # default if unset: .code-ranker/{ts}-{git-hash-3}.codequality.json
+# enabled = true             # write Code Quality on every report run (opt-in)
 ```
 
 The threshold scope is always `file` — a single source file on the one graph
 code-ranker builds.
 
-### `[output.json]` / `[output.html]` / `[output.sarif]` — report artifacts
+### `[output.json]` / `[output.html]` / `[output.sarif]` / `[output.codequality]` — report artifacts
 
 Each table configures one `code-ranker report` artifact: `path` is the destination
 (a filename template, or `stdout`/`-`), and `enabled` (a bool) forces the format on
@@ -172,19 +176,19 @@ pre-existing ones; on `report` it turns the HTML into a baseline↔current diff.
 code-ranker check . --baseline .code-ranker/main.json
 ```
 
-### `--output.json` / `--output.html` / `--output.sarif` / `--output.<fmt>.path` (report)
+### `--output.json` / `--output.html` / `--output.sarif` / `--output.codequality` / `--output.<fmt>.path` (report)
 
-Select which artifacts `report` writes and where. `--output.json` / `--output.html` /
-`--output.sarif` select a format (path from config/default); `--output.<fmt>.path=…`
-selects it and sets the destination (a template, or `stdout`/`-`). With none given,
-`json` + `html` are written to `.code-ranker/` (`sarif` is opt-in).
+Select which artifacts `report` writes and where. `--output.<fmt>` selects a format
+(path from config/default); `--output.<fmt>.path=…` selects it and sets the
+destination (a template, or `stdout`/`-`). With none given, `json` + `html` are
+written to `.code-ranker/` (`sarif` and `codequality` are opt-in).
 
 ```bash
-code-ranker report .                              # json + html, default names
-code-ranker report . --output.html                # only HTML, default path
-code-ranker report . --output.json.path=stdout    # JSON to stdout, no HTML
-code-ranker report . --output.sarif.path=stdout   # SARIF to stdout, nothing else
-code-ranker report . --output.sarif               # SARIF to .code-ranker/…sarif
+code-ranker report .                                    # json + html, default names
+code-ranker report . --output.html                      # only HTML, default path
+code-ranker report . --output.json.path=stdout          # JSON to stdout, no HTML
+code-ranker report . --output.sarif.path=stdout         # SARIF to stdout, nothing else
+code-ranker report . --output.codequality.path=stdout   # GitLab Code Quality to stdout
 ```
 
 ### `--exit-zero`

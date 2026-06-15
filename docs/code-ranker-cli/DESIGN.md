@@ -99,7 +99,8 @@ the snapshot's `graphs` map under `"files"`.
   (`CYC`/`CPX`/`CPL`/`SIZ`; from `THRESHOLD_METRICS` for thresholds, `RULES` for
   cycles), with the curated `RULES` catalog supplying why/fix and `rule_tuning`
   deriving the flag/config knob, documented in [ERRORS.md](ERRORS.md)). Prints diagnostics in the selected `--output-format`
-  (`human` / `json` / `github` / `sarif`): `human` (`print_human_diagnostics`)
+  (`human` / `json` / `github` / `sarif` / `codequality`; the last is the GitLab
+  Code Quality / CodeClimate array, `codequality_document`): `human` (`print_human_diagnostics`)
   renders each finding as a self-contained block (rule id, group, `where` = `id —
   path`, `issue`, `why`, `fix`, `tune`, `ref`) so it doubles as an AI prompt;
   the `ref` link and the `sarif` `helpUri` are absolute GitHub URLs (`DOCS_URL` →
@@ -130,15 +131,16 @@ the snapshot's `graphs` map under `"files"`.
 - **`report`** (`run_report`): runs the shared analysis core (analyzing the
   directory or reading the snapshot), then writes artifacts. Which formats are
   written, and where, is decided by one flag family, `--output.<fmt>[.path]`
-  (`<fmt>` = `json` / `html` / `sarif` / `prompt` / `scorecard`), backed by
-  `want_format`: a `--output.<fmt>` presence flag or a `--output.<fmt>.path`
-  selects that format; for `json`/`html`/`sarif` the `[output.<fmt>]` config
-  (`enabled`, else a configured `path`) is consulted next; if **nothing** selects
-  anything across all formats, **both** `json` and `html` are written
-  (`sarif`/`prompt`/`scorecard` are opt-in and never default). The `sarif`
-  artifact reuses `check::sarif_document` over the analysis's rule violations, so
-  `report` and `check --output-format sarif` produce the identical document (a
-  `--baseline` only affects the HTML diff, not the SARIF). Each `.path` is a name template, or `stdout`/`-`
+  (`<fmt>` = `json` / `html` / `sarif` / `codequality` / `prompt` / `scorecard`),
+  backed by `want_format`: a `--output.<fmt>` presence flag or a `--output.<fmt>.path`
+  selects that format; for `json`/`html`/`sarif`/`codequality` the `[output.<fmt>]`
+  config (`enabled`, else a configured `path`) is consulted next; if **nothing**
+  selects anything across all formats, **both** `json` and `html` are written
+  (`sarif`/`codequality`/`prompt`/`scorecard` are opt-in and never default). The
+  `sarif` and `codequality` artifacts reuse `check::sarif_document` /
+  `check::codequality_document` over the analysis's rule violations, so `report`
+  and the matching `check --output-format` produce the identical document (a
+  `--baseline` only affects the HTML diff, not the findings). Each `.path` is a name template, or `stdout`/`-`
   to write to the stdout stream (`is_stream` / `write_artifact`). The JSON
   snapshot records `config_file` when a config was found. Names are templates
   (`render_name`) with placeholders `{project-dir}`, `{ts}`, `{git-hash}`
@@ -149,8 +151,9 @@ the snapshot's `graphs` map under `"files"`.
   `generated_at` (for a snapshot input it is the original analysis time).
   Resolved as **`--output.<fmt>.path` flag
   › `[output.<fmt>] path` config › built-in default**
-  (`DEFAULT_JSON_PATH` / `DEFAULT_HTML_PATH` / `DEFAULT_SARIF_PATH` =
-  `.code-ranker/{ts}-{git-hash-3}.{json,html,sarif}`;
+  (`DEFAULT_JSON_PATH` / `DEFAULT_HTML_PATH` / `DEFAULT_SARIF_PATH` /
+  `DEFAULT_CODEQUALITY_PATH` =
+  `.code-ranker/{ts}-{git-hash-3}.{json,html,sarif,codequality.json}`;
   `DEFAULT_PROMPT_PATH` = `.code-ranker/{ts}-{git-hash-3}-{preset}.md`;
   `DEFAULT_SCORECARD_PATH` = `stdout`).
   The HTML viewer template and all assets (CSS, JS) are embedded in the binary
@@ -251,7 +254,7 @@ This section notes the implementation binding.
 - **Technology**: built-in Rust linter in `code-ranker-cli`
 - **Location**: `crates/code-ranker-cli/src/check.rs` (`run_check`,
   `emit_diagnostics`)
-- **Output**: diagnostics in `--output-format human|json|github|sarif` plus an
+- **Output**: diagnostics in `--output-format human|json|github|sarif|codequality` plus an
   exit code. With `--baseline <snapshot>` the gate is relative (fails only on new
   violations) and emits an `improved` / `degraded` / `neutral` verdict.
 

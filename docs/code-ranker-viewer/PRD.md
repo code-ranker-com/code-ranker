@@ -226,9 +226,12 @@ does not exist, exactly like internal nodes/edges.
 **Current is shown by default.** The display mode is controlled by **three buttons** —
 `■` (box/label mode), `SLOC` (circles sized by source lines), `HK` (circles
 sized by Henry-Kafura) — reflected in the `mode=` URL parameter. In metric
-modes (SLOC/HK): in group view circles are sized by the aggregate value across
-the group's files (`max(baselineAgg, currentAgg)`); in drilled file view each
-circle is resized to the active side's value around its fixed centre. The
+modes (SLOC/HK) **every node is a sized circle** — never a box. In group view
+circles are sized by the aggregate value across the group's files
+(`max(baselineAgg, currentAgg)`); in the drilled file view each revealed file
+circle is resized to the active side's value around its fixed centre, and a
+**collapsed folder** is itself a circle sized by the aggregate metric of the files
+it hides (so the metric stays readable in both the crate and file tiers). The
 active side is reflected in `side=baseline|current`, the node-table title, and
 header badges. Header slots, review mode, snapshot swap, cycle annotation
 (side-aware red stroke from backend `cycles`), internal blue nodes, and amber

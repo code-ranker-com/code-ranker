@@ -208,7 +208,7 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "code-ranker"
-version = "2.0.0"
+version = "3.0.0-alpha.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -231,7 +231,7 @@ dependencies = [
 
 [[package]]
 name = "code-ranker-ecmascript-core"
-version = "2.0.0"
+version = "3.0.0-alpha.1"
 dependencies = [
  "anyhow",
  "code-ranker-graph",
@@ -246,7 +246,7 @@ dependencies = [
 
 [[package]]
 name = "code-ranker-graph"
-version = "2.0.0"
+version = "3.0.0-alpha.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -257,7 +257,7 @@ dependencies = [
 
 [[package]]
 name = "code-ranker-plugin-api"
-version = "2.0.0"
+version = "3.0.0-alpha.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -266,7 +266,7 @@ dependencies = [
 
 [[package]]
 name = "code-ranker-plugin-javascript"
-version = "2.0.0"
+version = "3.0.0-alpha.1"
 dependencies = [
  "anyhow",
  "code-ranker-ecmascript-core",
@@ -278,7 +278,7 @@ dependencies = [
 
 [[package]]
 name = "code-ranker-plugin-python"
-version = "2.0.0"
+version = "3.0.0-alpha.1"
 dependencies = [
  "anyhow",
  "code-ranker-graph",
@@ -292,7 +292,7 @@ dependencies = [
 
 [[package]]
 name = "code-ranker-plugin-rust"
-version = "2.0.0"
+version = "3.0.0-alpha.1"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -307,7 +307,7 @@ dependencies = [
 
 [[package]]
 name = "code-ranker-plugin-typescript"
-version = "2.0.0"
+version = "3.0.0-alpha.1"
 dependencies = [
  "anyhow",
  "code-ranker-ecmascript-core",
@@ -319,14 +319,14 @@ dependencies = [
 
 [[package]]
 name = "code-ranker-test-support"
-version = "2.0.0"
+version = "3.0.0-alpha.1"
 dependencies = [
  "code-ranker-plugin-api",
 ]
 
 [[package]]
 name = "code-ranker-viewer"
-version = "2.0.0"
+version = "3.0.0-alpha.1"
 dependencies = [
  "anyhow",
  "code-ranker-graph",

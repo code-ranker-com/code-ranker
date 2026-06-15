@@ -1,6 +1,6 @@
 //! `check` — the linter: evaluate rules (and, with `--baseline`, regressions),
-//! render diagnostics (human / json / github / sarif), and the `--suggest-config`
-//! current-values dump.
+//! render diagnostics (human / json / github / sarif / codequality), and the
+//! `--suggest-config` current-values dump.
 
 use crate::analyze::{analyze_input, load_snapshot_any, project_name};
 use crate::cli::{AnalyzeArgs, OutputFormat};
@@ -136,6 +136,7 @@ fn emit_diagnostics(
             }
         }
         OutputFormat::Sarif => println!("{}", sarif_document(violations)),
+        OutputFormat::Codequality => println!("{}", codequality_document(violations)),
     }
 }
 
@@ -410,6 +411,36 @@ pub(crate) fn sarif_document(violations: &[config::Violation]) -> String {
     serde_json::to_string_pretty(&doc).unwrap_or_else(|_| "{}".into())
 }
 
+/// GitLab **Code Quality** report (the CodeClimate-derived JSON GitLab ingests as
+/// `artifacts:reports:codequality`). A flat array of issues; GitLab renders them
+/// in the MR widget / diff. Each issue carries the dotted rule id as `check_name`,
+/// the human message, a `major` severity, the repo-relative `location.path` +
+/// `lines.begin`, and a stable `fingerprint` keyed on `(rule, location)` — no line
+/// number, so GitLab tracks the same finding across pipelines even when code
+/// shifts (the same identity SARIF and `check --baseline` use). Unlike GitHub
+/// SARIF this needs no feature flag and works on current GitLab.
+pub(crate) fn codequality_document(violations: &[config::Violation]) -> String {
+    let issues: Vec<serde_json::Value> = violations
+        .iter()
+        .map(|v| {
+            serde_json::json!({
+                "description": v.summary(),
+                "check_name": v.rule,
+                // Readable composite identity (no hashing) — a finding has at most
+                // one (rule, location), so it is unique; line excluded so a shift
+                // does not reopen it.
+                "fingerprint": format!("{}:{}", v.rule, v.location),
+                "severity": "major",
+                "location": {
+                    "path": violation_rel_path(&v.location).unwrap_or(v.location.as_str()),
+                    "lines": { "begin": v.line.unwrap_or(1) },
+                },
+            })
+        })
+        .collect();
+    serde_json::to_string_pretty(&issues).unwrap_or_else(|_| "[]".into())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -465,6 +496,27 @@ mod tests {
         let doc = sarif_document(&[viol("", None)]);
         let v: serde_json::Value = serde_json::from_str(&doc).unwrap();
         assert!(v["runs"][0]["results"][0].get("locations").is_none());
+    }
+
+    #[test]
+    fn codequality_issue_has_fingerprint_path_and_line() {
+        let doc = codequality_document(&[viol("{target}/src/x.rs", Some(7))]);
+        let v: serde_json::Value = serde_json::from_str(&doc).unwrap();
+        let issue = &v[0];
+        assert_eq!(issue["check_name"], "threshold.file.loc");
+        assert_eq!(issue["severity"], "major");
+        assert_eq!(issue["location"]["path"], "src/x.rs");
+        assert_eq!(issue["location"]["lines"]["begin"], 7);
+        // Stable identity = rule:location, no line (so a shift does not reopen it).
+        assert_eq!(issue["fingerprint"], "threshold.file.loc:{target}/src/x.rs");
+    }
+
+    #[test]
+    fn codequality_whole_file_metric_defaults_line_to_one() {
+        // A whole-file metric has no line → CodeClimate needs one, default 1.
+        let doc = codequality_document(&[viol("{target}/src/x.rs", None)]);
+        let v: serde_json::Value = serde_json::from_str(&doc).unwrap();
+        assert_eq!(v[0]["location"]["lines"]["begin"], 1);
     }
 
     #[test]

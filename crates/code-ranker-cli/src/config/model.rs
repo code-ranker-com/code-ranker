@@ -17,13 +17,15 @@ pub struct Config {
 }
 
 /// Per-format output config: `[output.json]` / `[output.html]` /
-/// `[output.sarif]`, each with a `path` template and an optional `enabled` flag.
+/// `[output.sarif]` / `[output.codequality]`, each with a `path` template and an
+/// optional `enabled` flag.
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(default, deny_unknown_fields)]
 pub struct OutputConfig {
     pub json: OutputArtifact,
     pub html: OutputArtifact,
     pub sarif: OutputArtifact,
+    pub codequality: OutputArtifact,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]

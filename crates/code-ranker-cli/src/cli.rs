@@ -23,6 +23,7 @@ pub(crate) enum OutputFormat {
     Json,
     Github,
     Sarif,
+    Codequality,
 }
 
 /// Common input + analysis options shared by `check` and `report`.
@@ -146,6 +147,16 @@ pub(crate) enum Command {
         /// Placeholders: {project-dir}, {ts}, {git-hash}, {git-hash-N}. Selects SARIF.
         #[arg(long = "output.sarif.path", value_name = "PATH")]
         output_sarif_path: Option<String>,
+
+        /// Emit a GitLab Code Quality (CodeClimate) report of rule violations
+        /// (path from --output.codequality.path / config / default).
+        #[arg(long = "output.codequality")]
+        output_codequality: bool,
+
+        /// Code Quality destination: a path or name template, or `stdout`/`-`.
+        /// Placeholders: {project-dir}, {ts}, {git-hash}, {git-hash-N}. Selects it.
+        #[arg(long = "output.codequality.path", value_name = "PATH")]
+        output_codequality_path: Option<String>,
 
         /// Emit the AI prompt for one principle (default to a `…-{preset}.md` file).
         #[arg(long = "output.prompt")]

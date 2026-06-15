@@ -329,7 +329,7 @@ mod tests {
         let groups = annotate_cycles(&mut g, &flow());
         assert!(groups.is_empty(), "a self-loop is not a cycle");
         assert!(
-            g.nodes[0].attrs.get("cycle").is_none(),
+            !g.nodes[0].attrs.contains_key("cycle"),
             "no cycle attribute on a self-looping node"
         );
     }
@@ -354,7 +354,7 @@ mod tests {
         for n in &g.nodes {
             let in_cycle = n.id == "a" || n.id == "b";
             assert_eq!(
-                n.attrs.get("cycle").is_some(),
+                n.attrs.contains_key("cycle"),
                 in_cycle,
                 "node {} cycle-annotation should be {in_cycle}",
                 n.id

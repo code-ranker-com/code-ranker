@@ -15,7 +15,7 @@ e2e:
 	cargo test -p code-ranker --test e2e
 
 clippy:
-	cargo clippy --workspace -- -D warnings
+	cargo clippy --workspace --all-targets -- -D warnings
 
 fmt:
 	cargo fmt --all

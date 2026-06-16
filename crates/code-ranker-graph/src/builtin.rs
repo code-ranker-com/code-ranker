@@ -1,27 +1,22 @@
-//! New data model for `metrics/builtin.toml` — the redesigned schema with
-//! `[categories.*]`, `[ast.*]` (tier-1 measured), `[fields.*]` (derived, each a
-//! `cel` formula), and the view sections `[tableview]` / `[cardview]` /
-//! `[report.json.aggregate]`.
+//! The metric catalog, read from `metrics/builtin.toml`: `[categories.*]`,
+//! `[ast.*]` (tier-1 measured), `[fields.*]` (derived, each a `cel` formula), and
+//! the view sections `[tableview]` / `[cardview]` / `[report.json.aggregate]`.
+//! The crate root re-exports the accessors below; the tier-1 input types
+//! (`MetricInputs` / `FunctionUnit`) come from `code-ranker-plugin-api`.
 //!
-//! This module is the **active** source for the metric catalog; the legacy
-//! [`crate::metrics`] module is kept alongside (its `MetricInputs` / `FunctionUnit`
-//! types are reused here). The crate root re-exports the accessors below.
-//!
-//! Wire-compatibility with the previous schema is deliberate, so the existing
-//! goldens stay byte-identical:
+//! Wire encoding:
 //! - the executable `cel` formula is internal; the emitted [`AttributeSpec`]
 //!   carries `formula` (from `formula_human`) and `calc` (from `formula_js`);
 //! - `name` / `short` fall back to `label` (a field only spells out what differs);
-//! - `\n` in a description (TOML multiline) is re-encoded as `<br>` on the wire
-//!   (the viewer will later map it back);
-//! - the `stats` block is still produced by [`crate::stats::compute_stats`] over
-//!   the keys whose `[report.json.aggregate]` entry is a plain mean
+//! - `\n` in a description (TOML multiline) is encoded as `<br>` on the wire;
+//! - the `stats` block is produced by [`crate::stats::compute_stats`] over the
+//!   keys whose `[report.json.aggregate]` entry is a plain mean
 //!   (`agg('<k>','avg','not_empty')`); the richer aggregate formulas are parsed
 //!   and available but not yet wired into the built-in stats.
 
 use crate::attrs::num_attr;
-use crate::metrics::MetricInputs;
 use crate::registry::{Engine, MetricDef, Scope};
+use code_ranker_plugin_api::metrics::MetricInputs;
 use code_ranker_plugin_api::{
     attrs::ValueType,
     level::{AttributeGroup, AttributeSpec, Direction},
@@ -160,7 +155,7 @@ pub fn views() -> Views {
 }
 
 /// Re-encode a TOML multiline description (`\n` paragraph breaks) as the `<br>`
-/// the wire/viewer historically carried.
+/// the wire/viewer expects.
 fn br(s: &str) -> String {
     s.replace('\n', "<br>")
 }
@@ -222,8 +217,8 @@ pub fn metric_specs() -> (
     (specs, BUILTIN.categories.clone())
 }
 
-/// The metric keys aggregated into the per-graph `stats` block via the legacy
-/// mean (`compute_stats`). Derived from `[report.json.aggregate]`: the keys whose
+/// The metric keys aggregated into the per-graph `stats` block via the mean
+/// (`compute_stats`). Derived from `[report.json.aggregate]`: the keys whose
 /// formula is a plain mean of their own metric over `not_empty`
 /// (`agg('<k>', 'avg', 'not_empty')`). The richer aggregate formulas (percentiles,
 /// `all` population, …) are parsed but not yet wired into the built-in stats.
@@ -246,9 +241,9 @@ pub fn aggregate_formulas() -> BTreeMap<String, String> {
 }
 
 /// Write all built-in metrics for one unit onto `node`: the tier-1 measured
-/// values (LOC block gated on `sloc > 0`, mirroring historical behaviour) plus
-/// the derived metrics computed by the engine from `[fields.*]`. Each value is
-/// dropped at its `omit_at`.
+/// values (the LOC block is emitted only when `sloc > 0`) plus the derived
+/// metrics computed by the engine from `[fields.*]`. Each value is dropped at its
+/// `omit_at`.
 pub fn write_metrics(node: &mut Node, i: &MetricInputs) {
     {
         let mut put = |key: &str, v: f64| {

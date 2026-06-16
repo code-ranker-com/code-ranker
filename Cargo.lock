@@ -316,7 +316,6 @@ dependencies = [
  "cargo_metadata",
  "code-ranker-graph",
  "code-ranker-plugin-api",
- "code-ranker-test-support",
  "proc-macro2",
  "serde",
  "syn",
@@ -329,13 +328,6 @@ dependencies = [
  "tree-sitter-typescript",
  "walkdir",
  "which",
-]
-
-[[package]]
-name = "code-ranker-test-support"
-version = "3.0.0-alpha.1"
-dependencies = [
- "code-ranker-plugin-api",
 ]
 
 [[package]]

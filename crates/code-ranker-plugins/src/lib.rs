@@ -9,6 +9,11 @@ pub mod config;
 pub mod engine;
 pub mod languages;
 
+/// Test-only helpers shared across the per-language tests (reachable as
+/// `crate::test_support::*` from the `#[path]`-wired test modules).
+#[cfg(test)]
+mod test_support;
+
 pub use languages::javascript::JavascriptPlugin;
 pub use languages::python::PythonPlugin;
 pub use languages::rust::RustPlugin;

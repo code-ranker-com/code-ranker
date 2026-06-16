@@ -29,7 +29,13 @@ fn function_units_extracts_fns_and_methods() {
         }],
         edges: vec![],
     };
-    let units = RustPlugin.function_units(&graph);
+    // The plugin now returns (node, inputs) pairs (the orchestrator writes the
+    // metrics); this test only checks the node structure.
+    let units: Vec<_> = RustPlugin
+        .function_units(&graph)
+        .into_iter()
+        .map(|(n, _)| n)
+        .collect();
     assert!(
         units.iter().any(|n| n.name == "add" && n.kind == "fn"),
         "fn add: {:?}",

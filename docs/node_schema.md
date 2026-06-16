@@ -192,11 +192,11 @@ external libraries are never read. Each is omitted when it rounds to its
 
 Tier-1 counts (`cognitive`, `exits`, `args`, `closures`, LOC, Halstead base
 counts) come from each plugin's `metrics()` step, which runs its in-tree
-`tree-sitter` engine and produces a `code_ranker_graph::MetricInputs`. The tier-2
-metrics below (`cyclomatic`, Halstead `volume`/`effort`/…, `mi`/`mi_sei`) are
+`tree-sitter` engine and produces a `code_ranker_plugin_api::MetricInputs`. The
+tier-2 metrics below (`cyclomatic`, Halstead `volume`/`effort`/…, `mi`/`mi_sei`) are
 **declarative** — CEL `formula` + spec in `code-ranker-graph/metrics/builtin.toml`,
-evaluated by the registry engine and written via
-`code_ranker_graph::write_metrics`. User metrics (`[metrics.<key>]`) are emitted
+evaluated by the registry engine; the orchestrator writes both tiers onto the node
+via `code_ranker_graph::write_metrics`. User metrics (`[metrics.<key>]`) are emitted
 the same way. Coupling and `cycle` are added by `code-ranker-graph`.
 
 ### Complexity — `cyclomatic`, `cognitive`, `exits`, `args`, `closures`

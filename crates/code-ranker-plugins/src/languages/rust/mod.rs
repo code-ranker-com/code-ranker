@@ -4,6 +4,7 @@ use code_ranker_plugin_api::{
     graph::Graph,
     level::{AttributeSpec, EdgeKindSpec, Grouping, Level, NodeKindSpec, Thresholds},
     log,
+    metrics::MetricInputs,
     node::Node,
     plugin::{LanguagePlugin, PluginInput, Preset},
 };
@@ -123,27 +124,27 @@ impl LanguagePlugin for RustPlugin {
         Ok(collapse_to_files(internal))
     }
 
-    fn metrics(&self, graph: &mut Graph) -> usize {
+    fn metrics(&self, graph: &Graph) -> Vec<(String, MetricInputs)> {
         // Each `.rs` file node is re-read (by its absolute-path `id`) and measured
         // by our `tree-sitter-rust` engine; `#[cfg(test)]` / `#[test]` items are
         // stripped first so metrics reflect production code only (their lines
-        // become `tloc`).
-        let mut annotated = 0;
-        for node in &mut graph.nodes {
+        // become `tloc`). The orchestrator writes the returned inputs.
+        let mut out = Vec::new();
+        for node in &graph.nodes {
             if node.kind != code_ranker_plugin_api::node::FILE {
                 continue;
             }
             let Ok(src) = std::fs::read(&node.id) else {
                 continue;
             };
-            if rust_file_metrics(node, &src) {
-                annotated += 1;
+            if let Some(m) = rust_file_metrics(&src) {
+                out.push((node.id.clone(), m));
             }
         }
-        annotated
+        out
     }
 
-    fn function_units(&self, graph: &Graph) -> Vec<Node> {
+    fn function_units(&self, graph: &Graph) -> Vec<(Node, MetricInputs)> {
         let mut out = Vec::new();
         for node in &graph.nodes {
             if node.kind != code_ranker_plugin_api::node::FILE {
@@ -155,15 +156,14 @@ impl LanguagePlugin for RustPlugin {
             // Mirror file metrics: strip inline tests so test fns never appear.
             let (prod, _tloc) = strip_cfg_test(&src);
             for u in dialect::compute_functions(&prod) {
-                let mut fnode = Node {
+                let fnode = Node {
                     id: format!("{}#{}@{}", node.id, u.name, u.start_line),
                     kind: u.kind.clone(),
                     name: u.name.clone(),
                     parent: Some(node.id.clone()),
                     attrs: Default::default(),
                 };
-                code_ranker_graph::write_metrics(&mut fnode, &u.inputs);
-                out.push(fnode);
+                out.push((fnode, u.inputs));
             }
         }
         out
@@ -331,18 +331,16 @@ fn function_node_kinds() -> BTreeMap<String, NodeKindSpec> {
     crate::config::node_kinds(&CONFIG)
 }
 
-/// Compute and write Rust complexity metrics for one file node from its source
-/// bytes. `#[cfg(test)]` / `#[test]` / `#[bench]` items are stripped first (their
-/// lines become `tloc`), then the generic engine via the rust dialect runs. Returns `true`
-/// if metrics were written (`false` if the source did not parse).
-fn rust_file_metrics(node: &mut Node, src: &[u8]) -> bool {
+/// Measure Rust complexity metrics for one file from its source bytes.
+/// `#[cfg(test)]` / `#[test]` / `#[bench]` items are stripped first (their lines
+/// become `tloc`), then the generic engine via the rust dialect runs. Returns the
+/// measured [`MetricInputs`] (`None` if the source did not parse); the orchestrator
+/// writes them onto the node.
+fn rust_file_metrics(src: &[u8]) -> Option<MetricInputs> {
     let (prod, tloc) = strip_cfg_test(src);
-    let Some(mut m) = dialect::compute(&prod) else {
-        return false;
-    };
+    let mut m = dialect::compute(&prod)?;
     m.tloc = tloc as f64;
-    code_ranker_graph::write_metrics(node, &m);
-    true
+    Some(m)
 }
 
 /// True if any attribute gates an item to tests: `#[test]`, `#[bench]`, or

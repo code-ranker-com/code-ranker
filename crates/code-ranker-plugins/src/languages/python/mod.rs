@@ -3,6 +3,7 @@ use code_ranker_plugin_api::{
     default_cycle_kinds, default_node_kinds,
     graph::Graph,
     level::{Level, NodeKindSpec},
+    metrics::MetricInputs,
     node::Node,
     plugin::{LanguagePlugin, PluginInput, Preset},
 };
@@ -75,11 +76,11 @@ impl LanguagePlugin for PythonPlugin {
         structure::analyze(workspace, input.ignore_tests)
     }
 
-    fn metrics(&self, graph: &mut Graph) -> usize {
-        annotate_metrics(graph)
+    fn metrics(&self, graph: &Graph) -> Vec<(String, MetricInputs)> {
+        file_metrics(graph)
     }
 
-    fn function_units(&self, graph: &Graph) -> Vec<Node> {
+    fn function_units(&self, graph: &Graph) -> Vec<(Node, MetricInputs)> {
         function_nodes(graph)
     }
 
@@ -94,12 +95,13 @@ impl LanguagePlugin for PythonPlugin {
     }
 }
 
-/// Write Python complexity metrics onto every `file` node, parsing each file
-/// (by its absolute-path `id`) with our `tree-sitter-python` engine. Files that
-/// cannot be read or parsed are left untouched.
-fn annotate_metrics(graph: &mut Graph) -> usize {
-    let mut annotated = 0;
-    for node in &mut graph.nodes {
+/// Measure Python complexity metrics for every `file` node, parsing each file
+/// (by its absolute-path `id`) with our `tree-sitter-python` engine, returning a
+/// [`MetricInputs`] keyed by file node id (the orchestrator writes them). Files
+/// that cannot be read or parsed are skipped.
+fn file_metrics(graph: &Graph) -> Vec<(String, MetricInputs)> {
+    let mut out = Vec::new();
+    for node in &graph.nodes {
         if node.kind != code_ranker_plugin_api::node::FILE {
             continue;
         }
@@ -107,11 +109,10 @@ fn annotate_metrics(graph: &mut Graph) -> usize {
             continue;
         };
         if let Some(m) = dialect::compute(&src) {
-            code_ranker_graph::write_metrics(node, &m);
-            annotated += 1;
+            out.push((node.id.clone(), m));
         }
     }
-    annotated
+    out
 }
 
 /// Per-language unit kinds for the `functions` level (free-form `kind` strings,
@@ -122,12 +123,12 @@ fn function_node_kinds() -> BTreeMap<String, NodeKindSpec> {
     crate::config::node_kinds(&CONFIG)
 }
 
-/// Build function-level nodes for every `file` node, parsing each file (by its
-/// absolute-path `id`) and running the per-function engine. Each node carries its
-/// metrics and `parent` = the file id; the id is `<file>#<name>@<start_line>`
-/// (stable for diff / SARIF). Called before relativization, so file ids are
-/// absolute and readable.
-fn function_nodes(graph: &Graph) -> Vec<Node> {
+/// Build function-level units for every `file` node, parsing each file (by its
+/// absolute-path `id`) and running the per-function engine. Each pair is the
+/// unit's node (`parent` = file id, id `<file>#<name>@<start_line>`, stable for
+/// diff / SARIF, **no metrics yet**) plus its measured inputs (the orchestrator
+/// writes them). Called before relativization, so file ids are absolute and readable.
+fn function_nodes(graph: &Graph) -> Vec<(Node, MetricInputs)> {
     let mut out = Vec::new();
     for node in &graph.nodes {
         if node.kind != code_ranker_plugin_api::node::FILE {
@@ -137,15 +138,14 @@ fn function_nodes(graph: &Graph) -> Vec<Node> {
             continue;
         };
         for u in dialect::compute_functions(&src) {
-            let mut fnode = Node {
+            let fnode = Node {
                 id: format!("{}#{}@{}", node.id, u.name, u.start_line),
                 kind: u.kind.clone(),
                 name: u.name.clone(),
                 parent: Some(node.id.clone()),
                 attrs: Default::default(),
             };
-            code_ranker_graph::write_metrics(&mut fnode, &u.inputs);
-            out.push(fnode);
+            out.push((fnode, u.inputs));
         }
     }
     out

@@ -13,7 +13,6 @@ exclude = ["src/rust/tests/sample", "src/python/tests/sample", "src/javascript/t
 
 [dependencies]
 code-ranker-plugin-api = { workspace = true }
-code-ranker-graph = { workspace = true }
 anyhow = { workspace = true }
 walkdir = { workspace = true }
 cargo_metadata = { workspace = true }
@@ -33,5 +32,6 @@ tree-sitter-typescript = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
-# Path-only (no version): cargo strips it from the published manifest.
-code-ranker-test-support = { path = "../code-ranker-test-support" }
+# Tests assert end-to-end metric values via `write_metrics` (tier-1 → tier-2 CEL),
+# so the enrichment crate is a TEST-only dep; the library depends only on the API.
+code-ranker-graph = { workspace = true }

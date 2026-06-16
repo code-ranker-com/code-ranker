@@ -26,7 +26,7 @@
 //! is *syntax nodes, not text*, which holds either way.
 #![allow(dead_code)]
 
-use code_ranker_graph::{FunctionUnit, MetricInputs};
+use code_ranker_plugin_api::metrics::{FunctionUnit, MetricInputs};
 
 mod cognitive;
 mod core;

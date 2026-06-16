@@ -13,6 +13,7 @@
 //! `ecmascript::` path.
 
 use code_ranker_plugin_api::graph::Graph;
+use code_ranker_plugin_api::metrics::MetricInputs;
 use code_ranker_plugin_api::{default_cycle_kinds, default_node_kinds, level::Level, node::Node};
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -53,17 +54,18 @@ pub fn ecmascript_level(name: &str, cfg: &toml::Table) -> Level {
     }
 }
 
-/// Write ECMAScript complexity metrics onto every `file` node, shared by the
-/// JavaScript and TypeScript plugins. For each file the caller's `engine_for_ext`
-/// maps the file's extension to the tree-sitter `Language` and the
-/// `else_if_via_else_clause` flag (true for TypeScript, false for JS/TSX); files
-/// whose extension maps to `None`, or that cannot be read/parsed, are skipped.
-pub fn annotate_ecmascript_metrics(
-    graph: &mut Graph,
+/// Measure ECMAScript complexity metrics for every `file` node, shared by the
+/// JavaScript and TypeScript plugins, returning a [`MetricInputs`] keyed by file
+/// node id (the orchestrator writes them). For each file the caller's
+/// `engine_for_ext` maps the file's extension to the tree-sitter `Language` and
+/// the `else_if_via_else_clause` flag (true for TypeScript, false for JS/TSX);
+/// files whose extension maps to `None`, or that cannot be read/parsed, are skipped.
+pub fn ecmascript_metrics(
+    graph: &Graph,
     engine_for_ext: impl Fn(&str) -> Option<(tree_sitter::Language, bool)>,
-) -> usize {
-    let mut annotated = 0;
-    for node in &mut graph.nodes {
+) -> Vec<(String, MetricInputs)> {
+    let mut out = Vec::new();
+    for node in &graph.nodes {
         if node.kind != code_ranker_plugin_api::node::FILE {
             continue;
         }
@@ -78,11 +80,10 @@ pub fn annotate_ecmascript_metrics(
             continue;
         };
         if let Some(m) = dialect::compute(&src, &lang, else_if_via_else_clause) {
-            code_ranker_graph::write_metrics(node, &m);
-            annotated += 1;
+            out.push((node.id.clone(), m));
         }
     }
-    annotated
+    out
 }
 
 /// The optional `functions` [`Level`] both JS and TS plugins expose (off by
@@ -114,14 +115,15 @@ pub fn ecmascript_functions_level(cfg: &toml::Table) -> Level {
     }
 }
 
-/// Function-level metric nodes for every file node (one per function-like unit),
-/// for the optional `functions` level. Mirrors [`annotate_ecmascript_metrics`]:
-/// the grammar is injected per extension. Each node carries its metrics and
-/// `parent` = the file id; id is `<file>#<name>@<start_line>`.
+/// Function-level metric units for every file node (one per function-like unit),
+/// for the optional `functions` level. Mirrors [`ecmascript_metrics`]: the grammar
+/// is injected per extension. Each pair is the unit's node (`parent` = file id, id
+/// `<file>#<name>@<start_line>`, **no metrics yet**) plus its measured inputs (the
+/// orchestrator writes them).
 pub fn ecmascript_function_units(
     graph: &Graph,
     engine_for_ext: impl Fn(&str) -> Option<(tree_sitter::Language, bool)>,
-) -> Vec<Node> {
+) -> Vec<(Node, MetricInputs)> {
     let mut out = Vec::new();
     for node in &graph.nodes {
         if node.kind != code_ranker_plugin_api::node::FILE {
@@ -138,15 +140,14 @@ pub fn ecmascript_function_units(
             continue;
         };
         for u in dialect::compute_functions(&src, &lang, else_if) {
-            let mut fnode = Node {
+            let fnode = Node {
                 id: format!("{}#{}@{}", node.id, u.name, u.start_line),
                 kind: u.kind.clone(),
                 name: u.name.clone(),
                 parent: Some(node.id.clone()),
                 attrs: Default::default(),
             };
-            code_ranker_graph::write_metrics(&mut fnode, &u.inputs);
-            out.push(fnode);
+            out.push((fnode, u.inputs));
         }
     }
     out

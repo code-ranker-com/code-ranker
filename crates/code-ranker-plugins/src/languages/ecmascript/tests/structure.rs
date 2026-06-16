@@ -1,5 +1,5 @@
 use super::*;
-use code_ranker_test_support::{edge_count_from, write_file};
+use crate::test_support::{edge_count_from, write_file};
 use std::fs;
 use tempfile::TempDir;
 

@@ -25,8 +25,9 @@ plugin protocol.
 > (`code-ranker-plugins/src/engine/`, parameterized per language by a `Dialect`)
 > computes cyclomatic / cognitive / Halstead / MI / LOC with a single in-tree
 > `tree-sitter` walker that faithfully ports `rust-code-analysis`'s node-kind
-> rules (the neutral scaffolding — `MetricInputs` / `write_metrics` /
-> `metric_specs` — lives in `code-ranker-graph`). `rust-code-analysis` is the **algorithm of
+> rules (the neutral scaffolding — `write_metrics` / `metric_specs` — lives in
+> `code-ranker-graph`; the `MetricInputs` contract lives in `code-ranker-plugin-api`).
+> `rust-code-analysis` is the **algorithm of
 > record** those ports follow; it is not a dependency of `code-ranker` (the engines
 > are guarded by golden + anchor + metamorphic tests instead).
 > code-ranker's contribution is the graph, coupling, cycles, diff, report, and CI

@@ -81,7 +81,7 @@ The three pillars of the design are:
 | Requirement | Design Response |
 |-------------|-----------------|
 | `cpt-code-ranker-fr-rust-plugin` | Implemented by the `rust` module of the `code-ranker-plugins` crate (cargo metadata + `syn`), which collapses the module graph to a file graph. Dispatched in-process by `code-ranker-cli`'s `plugin` registry. Outputs a single snapshot `.json`. |
-| `cpt-code-ranker-fr-lang-plugins` (Python, JS/TS) | Python: the `python` module of `code-ranker-plugins` using `tree-sitter-python`. JS/TS: the `javascript` / `typescript` modules of `code-ranker-plugins`, thin adapters over the shared `ecmascript` module's engine (`tree-sitter-javascript` / `tree-sitter-typescript`), supporting both ESM and CommonJS. All emit `File` nodes + file→file `uses` edges + `External` library nodes, and annotate per-file complexity in their `metrics()` step. |
+| `cpt-code-ranker-fr-lang-plugins` (Python, JS/TS) | Python: the `python` module of `code-ranker-plugins` using `tree-sitter-python`. JS/TS: the `javascript` / `typescript` modules of `code-ranker-plugins`, thin adapters over the shared `ecmascript` module's engine (`tree-sitter-javascript` / `tree-sitter-typescript`), supporting both ESM and CommonJS. All emit `File` nodes + file→file `uses` edges + `External` library nodes, and measure per-file complexity in their `metrics()` step (the orchestrator writes it). |
 | `cpt-code-ranker-fr-file-graph` | All plugins emit a single file graph: `File` nodes with `uses` / `reexports` edges between files, plus `External` library nodes at depth 1 reached by `uses` edges flagged `external: true`. The Rust plugin derives it by collapsing its module graph; Python/JS/TS build it directly from import resolution. |
 | `cpt-code-ranker-fr-html-report` | Built-in Rust renderer in `code-ranker-cli`: `report` analyzes (or reads) the input, then renders an HTML template with inline assets alongside the JSON snapshot. |
 | `cpt-code-ranker-fr-node-sorting` | Node weight (fan-in + fan-out) is computed at render time and embedded in the HTML; client-side JavaScript sorts the table on user interaction. |
@@ -377,7 +377,7 @@ tier-2 is data**:
   `languages/<lang>/dialect.rs`) plus that language's `config.toml` role tables.
   It is a single faithful port of `rust-code-analysis`'s node-kind rules
   (`rust-code-analysis` is **not a dependency**). `engine::compute()` returns a
-  `code_ranker_graph::MetricInputs` (η₁/η₂/N₁/N₂, `spaces`/`branches`, LOC,
+  `code_ranker_plugin_api::MetricInputs` (η₁/η₂/N₁/N₂, `spaces`/`branches`, LOC,
   `cognitive`/`exits`/`args`/`closures`, `span_sloc`) — the tier-1 *measured*
   counts.
 - **Derived metrics are declarative**: a CEL `cel` formula + display spec per
@@ -387,8 +387,10 @@ tier-2 is data**:
   &MetricInputs)` writes the tier-1 values (LOC block gated on `sloc > 0`) plus
   the registry-derived values; `metric_specs()` reads the spec catalog from the
   same file. Both come from the graph crate's `builtin` module (`builtin.rs`,
-  which reads `builtin.toml`); `MetricInputs` / `FunctionUnit` live in its
-  `metrics` module. No derived-metric name is hardcoded in Rust.
+  which reads `builtin.toml`); the tier-1 input types `MetricInputs` /
+  `FunctionUnit` live in `code-ranker-plugin-api` (a plugin measures and returns
+  them; the orchestrator calls `write_metrics`). No derived-metric name is
+  hardcoded in Rust.
 
 The registry runs per **unit**: the same `MetricInputs` → metrics path serves the
 file node and (with the `functions` level on) each function node. User metrics
@@ -456,10 +458,10 @@ The Rust language plugin (the `rust` module of the `code-ranker-plugins` crate;
 implements `LanguagePlugin`; analysis in `analyze`), dispatched by
 `code-ranker-cli`. It produces the Rust module graph via syntactic
 analysis and collapses it to a file graph (see §3.7) before returning a generic
-`api::Graph` — **structure only from `analyze`** (its `metrics()` step adds
-complexity separately, producing a `code_ranker_graph::MetricInputs` with the
-shared generic engine via its Rust `Dialect`, then writing the derived metrics
-via `code_ranker_graph::write_metrics`).
+`api::Graph` — **structure only from `analyze`** (its `metrics()` step measures
+complexity separately, producing a `code_ranker_plugin_api::MetricInputs` with the
+shared generic engine via its Rust `Dialect`; the orchestrator then writes the
+derived metrics via `code_ranker_graph::write_metrics`).
 It builds with a module-local typed model (`rust/internal.rs` — `Node` / `Edge` /
 `Visibility`) for the syn/collapse passes and converts to the generic model at
 the boundary, so the `code-ranker-plugins` crate depends on `code-ranker-plugin-api`
@@ -533,8 +535,8 @@ has `fan_in` 0 and can appear isolated on the map.
 **Metric engine**: the Rust plugin uses the shared generic engine
 (`code-ranker-plugins/src/engine/`) via its Rust `Dialect`
 (`languages/rust/dialect.rs` + `languages/rust/config.toml`); its `metrics()`
-calls `engine::compute()` to produce a `code_ranker_graph::MetricInputs`, then
-writes the derived metrics via `code_ranker_graph::write_metrics`. The engine is
+calls `engine::compute()` to produce a `code_ranker_plugin_api::MetricInputs`, and
+the orchestrator writes the derived metrics via `code_ranker_graph::write_metrics`. The engine is
 a faithful port of `rust-code-analysis`'s node-kind rules, resolving node kinds
 **by name** so it is grammar-version-robust (`rust-code-analysis` is **not a
 dependency**). **Rust-only
@@ -590,7 +592,7 @@ structure only). `detect` matches
 `LanguagePlugin` trait): for each `.py` file node it runs the shared generic
 engine's `compute()` (via the Python `Dialect` in `languages/python/dialect.rs`,
 with `languages/python/config.toml`), producing a
-`code_ranker_graph::MetricInputs`, then writes the
+`code_ranker_plugin_api::MetricInputs`; the orchestrator then writes the
 derived metrics via `code_ranker_graph::write_metrics`.
 
 #### code-ranker-plugins · ecmascript module (shared engine)
@@ -602,18 +604,19 @@ modules are built on (the `ecmascript` module of the `code-ranker-plugins` crate
 It owns the file walker (`analyze_ecmascript`), the
 import/require specifier extractor + resolver, source-root detection, the
 `uses`-edge model, `ecmascript_level`, `ecmascript_is_test_path`,
-`external_package`, and the metric helper `annotate_ecmascript_metrics`. The
+`external_package`, and the metric helper `ecmascript_metrics`. The
 concrete tree-sitter grammar is **injected by the caller** (each plugin passes its
 own `tree-sitter-javascript` / `tree-sitter-typescript` `Language` + extension
 set), so this module names no language. It exists so the shared ECMAScript logic
 lives in a neutral module rather than inside one language plugin — making the JS and
 TS plugins **peers** that both depend on it, with **no plugin-to-plugin
-dependency**. Its `annotate_ecmascript_metrics` helper runs the shared generic
+dependency**. Its `ecmascript_metrics` helper runs the shared generic
 engine via the ECMAScript `Dialect` (`languages/ecmascript/dialect.rs` +
-`config.toml`) — `engine::compute()` returns a `code_ranker_graph::MetricInputs`,
-then it writes the derived metrics via `code_ranker_graph::write_metrics`. The
-`code-ranker-plugins` crate depends on `code-ranker-plugin-api` and
-`code-ranker-graph` (for `MetricInputs` / `write_metrics`).
+`config.toml`) — `engine::compute()` returns a `code_ranker_plugin_api::MetricInputs`,
+which the orchestrator writes via `code_ranker_graph::write_metrics`. The
+`code-ranker-plugins` crate depends only on `code-ranker-plugin-api` (the
+`MetricInputs` contract lives there); `code-ranker-graph` is a test-only
+dev-dependency, so the enrichment crate never leaks into the plugin library.
 
 #### code-ranker-plugins · javascript module (built-in)
 
@@ -665,7 +668,7 @@ follow the `src/` layout convention.
 
 **Complexity** is written by the plugin's `metrics()` (behind the
 `LanguagePlugin` trait), which delegates to the shared `ecmascript` module's
-`annotate_ecmascript_metrics` helper (the shared generic engine via the
+`ecmascript_metrics` helper (the shared generic engine via the
 ECMAScript `Dialect` + `code_ranker_graph::write_metrics`) for each
 `.js`/`.jsx`/`.mjs` file node.
 
@@ -684,7 +687,7 @@ grammars (`LANGUAGE_TYPESCRIPT` for `.ts`/`.mts`/`.cts`, `LANGUAGE_TSX` for
 the `ecmascript` module, NOT on the JavaScript plugin** — the two are
 siblings over a shared core (no plugin-to-plugin dependency). Same id scheme and
 visibility as the JS plugin. **Complexity**: its `metrics()` reuses the shared
-`annotate_ecmascript_metrics` helper with the TypeScript grammars
+`ecmascript_metrics` helper with the TypeScript grammars
 (`else_if_via_else_clause` = true for `.ts`/`.mts`/`.cts`, false for `.tsx`).
 
 #### code-ranker-cli · recommendation engine
@@ -748,7 +751,7 @@ See [§3.7 Plugin System](#37-plugin-system).
 | `code-ranker-cli` | `code-ranker-viewer` | `render_html_viewer()`, `extract_embedded_snapshot()` |
 | `code-ranker-plugins` (`rust`/`python`/`javascript`/`typescript` modules) | `code-ranker-plugin-api` | `impl LanguagePlugin` (name/detect/levels/analyze/metrics/is_test_path/versions/roots/metric_specs); generic `detect_with_marker` |
 | `code-ranker-plugins` (`rust`/`python`/`ecmascript` modules) | `code-ranker-graph` | `MetricInputs` + `write_metrics` (the neutral metric scaffolding); all measure tier-1 counts via the **one shared generic engine** (`src/engine/`), parameterized by each language's `Dialect` + `config.toml` |
-| `code-ranker-plugins` (`javascript`/`typescript` modules) | `code-ranker-plugins` (`ecmascript` module) | shared ECMAScript walker/resolver + ECMAScript `Dialect` + `ecmascript_level` + `annotate_ecmascript_metrics`; each injects its own grammar. **Neither plugin depends on the other.** |
+| `code-ranker-plugins` (`javascript`/`typescript` modules) | `code-ranker-plugins` (`ecmascript` module) | shared ECMAScript walker/resolver + ECMAScript `Dialect` + `ecmascript_level` + `ecmascript_metrics`; each injects its own grammar. **Neither plugin depends on the other.** |
 | `code-ranker-graph` | `code-ranker-plugin-api` | the generic model it operates on; the metric scaffolding (modules `metrics` + `builtin`) builds `MetricInputs`/`metric_specs` on its `AttributeSpec` / `AttrValue` types |
 | `code-ranker-viewer` | `code-ranker-graph` | `Snapshot`, `to_canonical_string` |
 | `code-ranker-cli` (`run_report`) | the analyzed snapshot (+ optional `--baseline`) | top-level metadata + `graphs` map; rendered via `code-ranker-viewer` |
@@ -1112,12 +1115,12 @@ code-ranker report /path/to/my-crate --plugin rust
       `Reexports` edges into `GraphBuilder`.
    f. External crates are added as opaque `Crate` nodes with
       `external = true`; their source is never read.
-4. Annotates complexity (the Rust plugin's `metrics()`):
+4. Annotates complexity (the Rust plugin's `metrics()` measures; the orchestrator writes):
    a. Walks all `.rs` files in the workspace with `walkdir`.
    b. For each file, parses it with the shared generic engine via the Rust
-      `Dialect` (`engine::compute`) to obtain a `code_ranker_graph::MetricInputs`.
-   c. Annotates each file-backed `Module` node with the derived whole-file metrics
-      (matched by canonical path) via `code_ranker_graph::write_metrics`.
+      `Dialect` (`engine::compute`) to obtain a `code_ranker_plugin_api::MetricInputs`.
+   c. The orchestrator annotates each file-backed `Module` node with the derived
+      whole-file metrics (matched by canonical path) via `code_ranker_graph::write_metrics`.
 5. Collapses the module graph to a **file graph** (in the `rust` module of `code-ranker-plugins`):
    a. Every `.rs` file becomes one `File` node (its id is the file's
       path — no `file:` prefix); inline
@@ -1201,10 +1204,9 @@ extension, not part of the base flat-attribute schema.)
 ```
 code-ranker/
   crates/
-    code-ranker-graph/             # Rust — graph types, JSON schema, StageTime, cycles/hk/stats + language-neutral metric scaffolding (MetricInputs, write_metrics, metric_specs; metrics/builtin.toml catalog)
-    code-ranker-plugin-api/        # Rust — the LanguagePlugin trait + detect_with_marker (plugin contract)
-    code-ranker-plugins/           # Rust — all language plugins: languages/{rust,python,javascript,typescript} (+ shared languages/ecmascript) over one generic engine/ (tree-sitter metric walker); src/config.rs + src/defaults.toml
-    code-ranker-test-support/      # Rust — shared test helpers (dev-only)
+    code-ranker-graph/             # Rust — graph types, JSON schema, StageTime, cycles/hk/stats + language-neutral metric scaffolding (write_metrics, metric_specs; metrics/builtin.toml catalog)
+    code-ranker-plugin-api/        # Rust — the LanguagePlugin trait + detect_with_marker + the MetricInputs/FunctionUnit metric contract (plugin contract)
+    code-ranker-plugins/           # Rust — all language plugins: languages/{rust,python,javascript,typescript} (+ shared languages/ecmascript) over one generic engine/ (tree-sitter metric walker); src/config.rs + src/defaults.toml; #[cfg(test)] test_support helpers
     code-ranker-viewer/            # Rust — HTML viewer: assets + render_html_viewer
     code-ranker-cli/               # Rust — orchestrator, plugin registry/dispatch, check linter, report
       src/

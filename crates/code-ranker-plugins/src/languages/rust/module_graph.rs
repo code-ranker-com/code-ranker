@@ -152,7 +152,7 @@ fn aggregate_crate_loc(builder: &mut GraphBuilder) {
             let loc = n.loc?;
             let parent = n.parent.as_deref()?;
             parent
-                .starts_with("crate:")
+                .starts_with(super::cfg::ID_CRATE.as_str())
                 .then(|| (parent.to_string(), loc))
         })
         .collect();
@@ -197,10 +197,10 @@ fn build_dep_maps(
 }
 
 fn is_supported_target(target: &Target) -> bool {
+    // Supported target kinds are DATA (`supported_targets` in `rust/config.toml`).
     target.kind.iter().any(|k| {
-        matches!(
-            k.as_str(),
-            "lib" | "rlib" | "dylib" | "cdylib" | "proc-macro" | "bin"
-        )
+        super::cfg::SUPPORTED_TARGETS
+            .iter()
+            .any(|t| t == k.as_str())
     })
 }

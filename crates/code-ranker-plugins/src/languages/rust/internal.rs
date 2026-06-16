@@ -19,13 +19,15 @@ pub(crate) enum Visibility {
 }
 
 impl Visibility {
-    /// Convert to the string form the plugin API expects.
+    /// Convert to the string form the plugin API expects. The output strings are
+    /// DATA (`[visibility]` in `rust/config.toml`); the variant→slot LOGIC stays
+    /// here. `Restricted` emits its path verbatim (no fixed vocabulary string).
     pub(crate) fn as_str(&self) -> &str {
         match self {
-            Visibility::Public => "public",
-            Visibility::Crate => "crate",
-            Visibility::Super => "super",
-            Visibility::Private => "private",
+            Visibility::Public => super::cfg::visibility("public"),
+            Visibility::Crate => super::cfg::visibility("crate"),
+            Visibility::Super => super::cfg::visibility("super"),
+            Visibility::Private => super::cfg::visibility("private"),
             Visibility::Restricted { path } => path.as_str(),
         }
     }

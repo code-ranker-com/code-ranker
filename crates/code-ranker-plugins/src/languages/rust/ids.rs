@@ -3,6 +3,7 @@
 //! root — which would otherwise close a `root → submodule → root` cycle.
 
 /// The canonical graph node id for a crate, derived from its cargo `pkg_id` repr.
+/// The `crate:` namespace prefix is DATA (`[ids].crate` in `rust/config.toml`).
 pub(crate) fn crate_node_id(pkg_id_repr: &str) -> String {
-    format!("crate:{pkg_id_repr}")
+    format!("{}{pkg_id_repr}", super::cfg::ID_CRATE.as_str())
 }

@@ -193,6 +193,19 @@ pub fn edge_kind_id<'a>(cfg: &'a Table, key: &'a str) -> Option<&'a str> {
     Some(key)
 }
 
+/// The identifier string the structure builder must tag a node attribute with.
+///
+/// Mirrors [`edge_kind_id`] for node attributes: the identifier *is* the
+/// `[node_attributes.<key>]` table key, so this looks `key` up in the merged
+/// config and returns it only when that attribute is declared — the builder never
+/// inserts an attr with a key the level descriptor (built from the same
+/// `[node_attributes]`) does not also publish. A missing key is an authoring bug,
+/// surfaced by the `.expect` callers.
+pub fn attr_key<'a>(cfg: &'a Table, key: &'a str) -> Option<&'a str> {
+    cfg.get("node_attributes")?.as_table()?.get(key)?;
+    Some(key)
+}
+
 /// Read the `[node_kinds]` table from a merged config as `kind → NodeKindSpec`
 /// (empty if absent). Used for the function-level unit kinds (`function`,
 /// `method`, …); the shared ones live in `defaults.toml`, language-specific ones

@@ -38,23 +38,62 @@ struct StructureKinds {
     test_files: Vec<String>,
     test_prefixes: Vec<String>,
     test_suffixes: Vec<String>,
+    /// `ext:` node-id namespace prefix for an external node (`[ids].external`,
+    /// inherited from `defaults.toml`).
+    ext_prefix: String,
+    /// The implicit package-init file stem (`pkg/__init__.py` → module `pkg`),
+    /// from `package_init_file`.
+    package_init_file: String,
+    /// Source extensions with a leading dot (`[".py"]`), derived from
+    /// `extensions` — the suffix `file_to_module_path` strips and
+    /// `py_is_test_path` gates on. Not re-spelled in the config.
+    dot_exts: Vec<String>,
+    /// tree-sitter field names the import walk navigates (`[fields]`).
+    field_name: String,
+    field_module_name: String,
+    /// Visibility output strings (`[visibility]`): `public` inherited from
+    /// `defaults.toml`, `restricted` / `private` from `python/config.toml`.
+    vis_public: String,
+    vis_restricted: String,
+    vis_private: String,
 }
 
 static KINDS: LazyLock<StructureKinds> = LazyLock::new(|| {
     let cfg = crate::config::load(include_str!("config.toml"));
     let s = crate::config::string_table(&cfg, "structure");
     let get = |k: &str| s.get(k).cloned().expect("[structure] key");
+    let extensions = crate::config::string_list(&cfg, "extensions");
+    let dot_exts = extensions.iter().map(|e| format!(".{e}")).collect();
+    let f = crate::config::string_table(&cfg, "fields");
+    let field = |k: &str| f.get(k).cloned().expect("[fields] key");
+    let vis = crate::config::string_table(&cfg, "visibility");
+    let vis_get = |k: &str| vis.get(k).cloned().expect("[visibility] key");
     StructureKinds {
         import_statement: get("import_statement"),
         import_from_statement: get("import_from_statement"),
         dotted_name: get("dotted_name"),
         aliased_import: get("aliased_import"),
-        extensions: crate::config::string_list(&cfg, "extensions"),
+        extensions,
         skip_dirs: crate::config::string_list(&cfg, "skip_dirs"),
         test_dirs: crate::config::string_list(&cfg, "test_dirs"),
         test_files: crate::config::string_list(&cfg, "test_files"),
         test_prefixes: crate::config::string_list(&cfg, "test_prefixes"),
         test_suffixes: crate::config::string_list(&cfg, "test_suffixes"),
+        ext_prefix: crate::config::string_table(&cfg, "ids")
+            .get("external")
+            .cloned()
+            .expect("python [ids].external (inherited from defaults.toml)"),
+        package_init_file: cfg
+            .get("package_init_file")
+            .and_then(|v| v.as_str())
+            .expect("python/config.toml `package_init_file`")
+            .to_string(),
+        dot_exts,
+        field_name: field("name"),
+        field_module_name: field("module_name"),
+        vis_public: vis_get("public"),
+        vis_restricted: vis_get("restricted"),
+        vis_private: vis_get("private"),
     }
 });
 
@@ -73,6 +112,17 @@ fn uses_edge_kind() -> &'static str {
     "uses"
 }
 
+/// A node-attribute key, validated against `[node_attributes]` (inherited from
+/// `defaults.toml`) so an inserted attr can never use an undeclared key. Mirrors
+/// `uses_edge_kind`.
+fn attr_key(key: &'static str) -> &'static str {
+    static CFG: LazyLock<toml::Table> =
+        LazyLock::new(|| crate::config::load(include_str!("config.toml")));
+    crate::config::attr_key(&CFG, key)
+        .unwrap_or_else(|| panic!("python [node_attributes] is missing `{key}`"));
+    key
+}
+
 /// Python test conventions: pytest/unittest files (`test_*.py`, `*_test.py`,
 /// `conftest.py`) and anything under a `tests/` directory.
 pub(super) fn py_is_test_path(rel_path: &str) -> bool {
@@ -81,7 +131,7 @@ pub(super) fn py_is_test_path(rel_path: &str) -> bool {
         .split('/')
         .any(|c| KINDS.test_dirs.iter().any(|d| d == c))
         || KINDS.test_files.iter().any(|f| f == file)
-        || (file.ends_with(".py")
+        || (KINDS.dot_exts.iter().any(|e| file.ends_with(e.as_str()))
             && KINDS
                 .test_prefixes
                 .iter()
@@ -175,9 +225,13 @@ fn file_to_module_path(workspace: &Path, path: &Path) -> Option<String> {
         .collect();
 
     let last = parts.last_mut()?;
-    if *last == "__init__.py" {
+    if *last == KINDS.package_init_file {
         parts.pop();
-    } else if let Some(stem) = last.strip_suffix(".py") {
+    } else if let Some(stem) = KINDS
+        .dot_exts
+        .iter()
+        .find_map(|e| last.strip_suffix(e.as_str()))
+    {
         *last = stem.to_string();
     } else {
         return None;
@@ -233,8 +287,11 @@ fn parse_and_add(
     let vis_str = py_visibility_str(parts[parts.len() - 1]);
 
     let mut file_attrs = BTreeMap::new();
-    file_attrs.insert("visibility".to_string(), AttrValue::Str(vis_str.into()));
-    file_attrs.insert("loc".to_string(), AttrValue::Int(loc));
+    file_attrs.insert(
+        attr_key("visibility").to_string(),
+        AttrValue::Str(vis_str.into()),
+    );
+    file_attrs.insert(attr_key("loc").to_string(), AttrValue::Int(loc));
 
     nodes.push(Node {
         id: file_id.clone(),
@@ -256,10 +313,10 @@ fn parse_and_add(
         if targets.is_empty() {
             // Unresolved → external (3rd-party / stdlib). One External node per top-level package.
             if let Some(top) = external_top_level(&imp.base) {
-                let ext_id = format!("ext:{top}");
+                let ext_id = format!("{}{top}", KINDS.ext_prefix);
                 if ext_seen.insert(ext_id.clone()) {
                     let mut ext_attrs = BTreeMap::new();
-                    ext_attrs.insert("external".to_string(), AttrValue::Bool(true));
+                    ext_attrs.insert(attr_key("external").to_string(), AttrValue::Bool(true));
                     nodes.push(Node {
                         id: ext_id.clone(),
                         kind: code_ranker_plugin_api::node::EXTERNAL.into(),
@@ -330,7 +387,7 @@ fn visit_imports<'t>(
             let mut ic = child.walk();
             for c in child.children(&mut ic) {
                 let actual = if c.kind() == KINDS.aliased_import {
-                    c.child_by_field_name("name").unwrap_or(c)
+                    c.child_by_field_name(&KINDS.field_name).unwrap_or(c)
                 } else {
                     c
                 };
@@ -346,7 +403,7 @@ fn visit_imports<'t>(
             }
         } else if kind == KINDS.import_from_statement {
             let base = child
-                .child_by_field_name("module_name")
+                .child_by_field_name(&KINDS.field_module_name)
                 .and_then(|n| n.utf8_text(source).ok())
                 .unwrap_or("")
                 .to_string();
@@ -355,14 +412,14 @@ fn visit_imports<'t>(
             let mut ic = child.walk();
             for c in child.children(&mut ic) {
                 let actual = if c.kind() == KINDS.aliased_import {
-                    c.child_by_field_name("name").unwrap_or(c)
+                    c.child_by_field_name(&KINDS.field_name).unwrap_or(c)
                 } else {
                     c
                 };
                 if actual.kind() == KINDS.dotted_name
                     && actual.start_byte()
                         != child
-                            .child_by_field_name("module_name")
+                            .child_by_field_name(&KINDS.field_module_name)
                             .map_or(0, |n| n.start_byte())
                     && let Ok(t) = actual.utf8_text(source)
                 {
@@ -452,12 +509,14 @@ fn absolute_base(base: &str, current_mod: &str) -> String {
 // ---------------------------------------------------------------------------
 
 fn py_visibility_str(name: &str) -> &'static str {
+    // Output strings are DATA (`[visibility]`); the `_`/`__` naming-convention
+    // LOGIC stays here as a Python syntax rule.
     if name.starts_with("__") && !name.ends_with("__") {
-        "private"
+        &KINDS.vis_private
     } else if name.starts_with('_') {
-        "restricted"
+        &KINDS.vis_restricted
     } else {
-        "public"
+        &KINDS.vis_public
     }
 }
 

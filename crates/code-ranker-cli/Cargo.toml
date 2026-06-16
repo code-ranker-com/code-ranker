@@ -16,10 +16,7 @@ path = "src/main.rs"
 [dependencies]
 code-ranker-graph = { workspace = true }
 code-ranker-plugin-api = { workspace = true }
-code-ranker-plugin-rust = { workspace = true }
-code-ranker-plugin-python = { workspace = true }
-code-ranker-plugin-javascript = { workspace = true }
-code-ranker-plugin-typescript = { workspace = true }
+code-ranker-plugins = { workspace = true }
 code-ranker-viewer = { workspace = true }
 anyhow = { workspace = true }
 globset = { workspace = true }

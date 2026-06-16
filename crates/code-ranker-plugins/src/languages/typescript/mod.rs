@@ -1,0 +1,110 @@
+//! TypeScript language plugin for Code Ranker.
+//!
+//! Handles `.ts` and `.tsx` files via `tree-sitter-typescript`, reusing the
+//! shared ECMAScript walker/resolver in the [`crate::languages::ecmascript`] module. It
+//! builds on that shared engine as a peer — never on the JavaScript plugin.
+
+use crate::languages::ecmascript::{
+    analyze_ecmascript, annotate_ecmascript_metrics, ecmascript_function_units,
+    ecmascript_functions_level, ecmascript_is_test_path, ecmascript_level,
+};
+use anyhow::Result;
+use code_ranker_plugin_api::{
+    graph::Graph,
+    level::Level,
+    plugin::{LanguagePlugin, PluginInput, Preset, detect_with_marker},
+};
+use std::path::Path;
+use std::sync::LazyLock;
+
+/// The TypeScript config: `typescript.toml` deep-merged over the shared
+/// `defaults.toml`, used to build the preset list (the common catalog +
+/// TypeScript's `doc_lang`).
+static CONFIG: LazyLock<toml::Table> =
+    LazyLock::new(|| crate::config::load(include_str!("config.toml")));
+
+/// The TypeScript language plugin (handles .ts / .tsx / .mts / .cts).
+pub struct TypescriptPlugin;
+
+impl LanguagePlugin for TypescriptPlugin {
+    fn name(&self) -> &str {
+        "typescript"
+    }
+
+    fn detect(&self, workspace: &Path, _input: &PluginInput) -> bool {
+        // Project-detect marker filenames are DATA: read from `config.toml`'s
+        // `detect_markers` (the detect logic stays in Rust). TS detects on
+        // `tsconfig.json`.
+        crate::config::string_list(&CONFIG, "detect_markers")
+            .iter()
+            .any(|m| detect_with_marker(workspace, m))
+    }
+
+    fn levels(&self) -> Vec<Level> {
+        vec![
+            ecmascript_level("files", &CONFIG),
+            ecmascript_functions_level(&CONFIG),
+        ]
+    }
+
+    fn analyze(&self, workspace: &Path, _level: &str, input: &PluginInput) -> Result<Graph> {
+        // File-collection extensions and the TS-first import-resolution order are
+        // DATA: read from `config.toml`'s `extensions` / `resolution_order`. The
+        // `ext → grammar` match below stays in Rust (string → grammar TYPE).
+        let exts = crate::config::string_list(&CONFIG, "extensions");
+        let exts: Vec<&str> = exts.iter().map(String::as_str).collect();
+        let order = crate::config::string_list(&CONFIG, "resolution_order");
+        let order: Vec<&str> = order.iter().map(String::as_str).collect();
+        analyze_ecmascript(
+            workspace,
+            &exts,
+            |ext| match ext {
+                "ts" | "mts" | "cts" => Some(tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()),
+                "tsx" => Some(tree_sitter_typescript::LANGUAGE_TSX.into()),
+                _ => None,
+            },
+            &order,
+            input.ignore_tests,
+        )
+    }
+
+    fn metrics(&self, graph: &mut Graph) -> usize {
+        // `else_if_via_else_clause` is true for TypeScript proper, false for TSX
+        // (the only per-dialect difference in the cognitive `else-if` rule).
+        annotate_ecmascript_metrics(graph, |ext| match ext {
+            "ts" | "mts" | "cts" => {
+                Some((tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(), true))
+            }
+            "tsx" => Some((tree_sitter_typescript::LANGUAGE_TSX.into(), false)),
+            _ => None,
+        })
+    }
+
+    fn function_units(&self, graph: &Graph) -> Vec<code_ranker_plugin_api::node::Node> {
+        ecmascript_function_units(graph, |ext| match ext {
+            "ts" | "mts" | "cts" => {
+                Some((tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(), true))
+            }
+            "tsx" => Some((tree_sitter_typescript::LANGUAGE_TSX.into(), false)),
+            _ => None,
+        })
+    }
+
+    fn is_test_path(&self, rel_path: &str) -> bool {
+        ecmascript_is_test_path(rel_path)
+    }
+
+    fn presets(&self, _input: &PluginInput) -> Vec<Preset> {
+        // The common catalog from `defaults.toml`, with `doc_url` resolved to
+        // `{doc_base}/typescript/<slug>.md` (TypeScript adds no presets of its own).
+        crate::config::resolved_presets(&CONFIG)
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+#[path = "tests/mod_rs.rs"]
+mod mod_rs_tests;

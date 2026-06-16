@@ -14,11 +14,7 @@ categories = ["development-tools", "command-line-utilities"]
 [workspace.dependencies]
 code-ranker-graph = { path = "crates/code-ranker-graph", version = "3.0.0-alpha.1" }
 code-ranker-plugin-api = { path = "crates/code-ranker-plugin-api", version = "3.0.0-alpha.1" }
-code-ranker-ecmascript-core = { path = "crates/code-ranker-ecmascript-core", version = "3.0.0-alpha.1" }
-code-ranker-plugin-rust = { path = "crates/code-ranker-plugin-rust", version = "3.0.0-alpha.1" }
-code-ranker-plugin-python = { path = "crates/code-ranker-plugin-python", version = "3.0.0-alpha.1" }
-code-ranker-plugin-javascript = { path = "crates/code-ranker-plugin-javascript", version = "3.0.0-alpha.1" }
-code-ranker-plugin-typescript = { path = "crates/code-ranker-plugin-typescript", version = "3.0.0-alpha.1" }
+code-ranker-plugins = { path = "crates/code-ranker-plugins", version = "3.0.0-alpha.1" }
 code-ranker-viewer = { path = "crates/code-ranker-viewer", version = "3.0.0-alpha.1" }
 
 anyhow = "1.0"

@@ -1,0 +1,158 @@
+# Python language config — inherits `../defaults.toml` (see `../config.rs`).
+#
+# Everything language-specific for Python that *can* be data lives here, so
+# `mod.rs` and `python_ts.rs` stay thin (wiring / walk logic only). Python adds
+# NO metric-lens presets of its own (it inherits the common catalog from
+# `defaults.toml`), no language-calibrated thresholds, and no spec overrides —
+# its only language-specific data is `doc_lang` plus the tree-sitter node-kind
+# tables the metric engine keys on:
+#
+#   doc_lang                      principle-corpus language for doc links:
+#                                 `doc_url` = `{doc_base}/python/<slug>.md`.
+#   [kinds] / [halstead] / [loc]  tree-sitter node-kind tables for the metric
+#                                 engine (`python_ts.rs`); the walk logic stays
+#                                 in Rust, *which* kinds it counts is data.
+
+# Principle-corpus language for doc links (`doc_base` inherited from defaults).
+doc_lang = "python"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# File-collection extensions, project-detect markers and walk skip-dirs — DATA,
+# not code (see `../README.md` §3). `extensions` is the source-file extension the
+# walker collects (`.py`). `detect_markers` are the project-root marker filenames
+# `detect()` looks for. `skip_dirs` are directory names the walk prunes by exact
+# match; the leading-`.` rule (skip any dotted dir) stays in Rust as a syntax
+# rule, not an enumerable list.
+# ──────────────────────────────────────────────────────────────────────────────
+
+extensions = ["py"]
+detect_markers = ["pyproject.toml", "setup.py", "setup.cfg"]
+skip_dirs = ["venv", "__pycache__", "node_modules"]
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Test-path conventions — DATA, not code (see `../README.md` §4). The
+# `py_is_test_path` predicate LOGIC (split on '/', exact match, prefix `&&`
+# `ends_with ".py"`, suffix `ends_with`) stays in Rust; *which* names it keys on is
+# data. `test_dirs` match a path component exactly; `test_files` match the filename
+# exactly; `test_prefixes` match a `.py` filename via `starts_with`; `test_suffixes`
+# match the filename via `ends_with`.
+# ──────────────────────────────────────────────────────────────────────────────
+
+test_dirs = ["tests", "test"]
+test_files = ["conftest.py"]
+test_prefixes = ["test_"]
+test_suffixes = ["_test.py"]
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Function-unit `kind` id strings the dialect's `fn_kind` emits. The
+# classification LOGIC (is the nearest enclosing scope a class?) stays in
+# `dialect.rs`; only the emitted id string is data. `method` inside a class,
+# `default` otherwise (a module-level / nested `function`). The `function` /
+# `method` NodeKindSpec display specs are inherited from `defaults.toml`.
+# ──────────────────────────────────────────────────────────────────────────────
+
+[units]
+method = "method"
+default = "function"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Import / dependency-graph tree-sitter NODE-KIND strings the structure builder
+# (`structure.rs`) keys on when extracting imports. The walk LOGIC stays in Rust;
+# *which* node kinds it matches is data. `aliased_import`'s `name` field, the
+# `import_from_statement`'s `module_name` field, and the dotted-name text are
+# navigated via the `child_by_field_name` API (kept in Rust per the README).
+# ──────────────────────────────────────────────────────────────────────────────
+
+[structure]
+import_statement = "import_statement"
+import_from_statement = "import_from_statement"
+dotted_name = "dotted_name"
+aliased_import = "aliased_import"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Node-kind tables for the generic metric engine (`crate::engine`).
+#
+# This is the data the engine keys on: which tree-sitter node `kind` strings fill
+# each engine ROLE. The engine resolves each `named` / `anon` list to the
+# grammar's numeric kind-ids and keys the shared walks on them; the Python
+# predicates live in `python/dialect.rs`. `[roles.one]` holds singleton ids the
+# dialect references directly; `[halstead]` / `[loc]` carry the operator/operand
+# and comment/statement role sets plus the `special` singletons the dialect's
+# context exceptions key on.
+#
+# Editing a list here changes what the engine counts with no code change. Keep it
+# in lock-step with the grammar version pinned in Cargo.toml.
+# ──────────────────────────────────────────────────────────────────────────────
+
+[roles]
+# Space-creating units (function_definition / class_definition; +1 each).
+space_kinds.named = ["function_definition", "class_definition"]
+# `lambda` is a cognitive-only space (a boolean-run boundary) but is NOT a
+# structural space — it is counted as a closure, not a space.
+closure_space_kinds.named = ["lambda"]
+# Cyclomatic branch tokens (anonymous keywords/operators).
+branch_kinds.anon = ["if", "elif", "for", "while", "except", "with", "assert", "and", "or"]
+# Value-returning exits.
+exit_kinds.named = ["return_statement"]
+# Punctuation children of a `parameters` node that don't count.
+non_arg_kinds.anon = ["(", ")", ","]
+
+# Singleton ids the dialect references directly (cognitive / loop-else / fn-kind).
+[roles.one]
+kw_else = { kind = "else", named = false }
+kw_and = { kind = "and", named = false }
+kw_or = { kind = "or", named = false }
+
+# ── Halstead operators / operands ─────────────────────────────────────────────
+[halstead]
+operators.anon = [
+    "import", ".", "from", ",", "as", "*", ">>", "assert", ":=", "return", "def",
+    "del", "raise", "pass", "break", "continue", "if", "elif", "else", "async", "for",
+    "in", "while", "try", "except", "finally", "with", "->", "=", "global", "exec",
+    "@", "not", "and", "or", "+", "-", "/", "%", "//", "**", "|", "&", "^", "<<", "~",
+    "<", "<=", "==", "!=", ">=", ">", "<>", "is", "+=", "-=", "*=", "/=", "@=", "//=",
+    "%=", "**=", ">>=", "<<=", "&=", "^=", "|=", "yield", "await", "print",
+]
+operands.named = ["identifier", "integer", "float", "true", "false", "none"]
+
+# Context-dependent operand: a `string` node is an operand UNLESS it is a bare
+# docstring (parent == `expression_statement` AND that parent has exactly one
+# child). The dialect's `hal_classify` keys on these singletons.
+[halstead.special]
+hal_string = { kind = "string" }
+hal_expression_statement = { kind = "expression_statement" }
+
+# ── LOC breakdown ─────────────────────────────────────────────────────────────
+[loc]
+noop_kinds.named = ["string_start", "string_end", "string_content", "block", "module"]
+comment_kinds.named = ["comment"]
+statement_kinds.named = [
+    "statement",
+    "simple_statements",
+    "import_statement",
+    "future_import_statement",
+    "import_from_statement",
+    "print_statement",
+    "assert_statement",
+    "return_statement",
+    "delete_statement",
+    "raise_statement",
+    "pass_statement",
+    "break_statement",
+    "continue_statement",
+    "if_statement",
+    "for_statement",
+    "while_statement",
+    "try_statement",
+    "with_statement",
+    "global_statement",
+    "nonlocal_statement",
+    "exec_statement",
+    "expression_statement",
+]
+
+# A `string` node is a docstring-comment when it is the sole child of an
+# `expression_statement`, else code; the dialect's `loc_node` keys on these.
+[loc.special]
+loc_string = { kind = "string" }
+loc_expression_statement = { kind = "expression_statement" }

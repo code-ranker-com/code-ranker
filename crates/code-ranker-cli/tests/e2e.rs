@@ -1,9 +1,10 @@
 //! End-to-end fixture tests.
 //!
-//! For every language's fixture project (colocated with its plugin crate at
-//! `crates/code-ranker-plugin-<lang>/sample/`), run the built `code-ranker` binary
-//! and compare its JSON report against the committed golden
-//! `crates/code-ranker-plugin-<lang>/sample/code-ranker-report.json`.
+//! For every language's fixture project (colocated with its language module in
+//! the merged plugins crate at `crates/code-ranker-plugins/src/languages/<lang>/tests/sample/`),
+//! run the built `code-ranker` binary and compare its JSON report against the
+//! committed golden
+//! `crates/code-ranker-plugins/src/languages/<lang>/tests/sample/code-ranker-report.json`.
 //!
 //! The committed golden keeps its RAW header (timestamp, command, git, versions,
 //! absolute paths, timings). The comparison therefore:
@@ -45,12 +46,16 @@ fn repo_root() -> PathBuf {
         .to_path_buf()
 }
 
-/// The fixture project for a language, now colocated with its plugin crate at
-/// `crates/code-ranker-plugin-<lang>/sample`.
+/// The fixture project for a language, colocated with its language module in the
+/// merged plugins crate at `crates/code-ranker-plugins/src/languages/<lang>/tests/sample`.
 fn sample_dir(lang: &str) -> PathBuf {
     repo_root()
         .join("crates")
-        .join(format!("code-ranker-plugin-{lang}"))
+        .join("code-ranker-plugins")
+        .join("src")
+        .join("languages")
+        .join(lang)
+        .join("tests")
         .join("sample")
 }
 

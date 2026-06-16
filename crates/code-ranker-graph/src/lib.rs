@@ -10,6 +10,7 @@
 //! as a `flow_kinds` set — there is no hardcoded `uses`/`contains` knowledge.
 
 pub mod attrs;
+pub mod builtin;
 pub mod cycles;
 pub mod finalize;
 pub mod hk;
@@ -26,9 +27,12 @@ pub use cycles::annotate_cycles;
 pub use finalize::finalize_graph;
 pub use hk::annotate_hk;
 pub use level_graph::{CycleGroup, LevelGraph, LevelUi};
-pub use metrics::{
-    FunctionUnit, MetricInputs, UiOrder, metric_specs, stat_keys, ui_order, write_metrics,
-};
+// The active metric catalog reads the redesigned `builtin.toml` schema (module
+// [`builtin`]); the legacy [`metrics`] module is kept alongside (reachable as
+// `metrics::*`) for its older accessors. `MetricInputs` / `FunctionUnit` live in
+// `metrics` and are reused by `builtin`.
+pub use builtin::{Views, metric_specs, stat_keys, views, write_metrics};
+pub use metrics::{FunctionUnit, MetricInputs};
 pub use registry::{Engine, MetricDef, Populations, RegistryError, Scope, apply_to_node};
 pub use relativize::{relativize_graph, relativize_level};
 pub use serialize::{to_canonical_string, to_canonical_string_pretty};

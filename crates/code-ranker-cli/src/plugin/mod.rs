@@ -1,6 +1,6 @@
 //! The plugin registry — the single place that names concrete language plugins.
 //! Everything else works only through the `LanguagePlugin` trait. Add a language
-//! by writing a `code-ranker-plugin-<lang>` crate and adding one line to
+//! by writing a `code_ranker_plugins::<lang>` module and adding one line to
 //! [`registry`].
 
 use anyhow::{Result, bail};
@@ -14,10 +14,10 @@ use std::path::Path;
 
 pub fn registry() -> Vec<Box<dyn LanguagePlugin>> {
     vec![
-        Box::new(code_ranker_plugin_rust::RustPlugin),
-        Box::new(code_ranker_plugin_python::PythonPlugin),
-        Box::new(code_ranker_plugin_javascript::JavascriptPlugin),
-        Box::new(code_ranker_plugin_typescript::TypescriptPlugin),
+        Box::new(code_ranker_plugins::languages::rust::RustPlugin),
+        Box::new(code_ranker_plugins::languages::python::PythonPlugin),
+        Box::new(code_ranker_plugins::languages::javascript::JavascriptPlugin),
+        Box::new(code_ranker_plugins::languages::typescript::TypescriptPlugin),
     ]
 }
 
@@ -97,11 +97,12 @@ pub fn thresholds(name: &str) -> BTreeMap<String, Thresholds> {
         .unwrap_or_default()
 }
 
-/// Let the matching plugin transform the generic default presets.
-pub fn presets(name: &str, defaults: Vec<Preset>, input: &PluginInput) -> Vec<Preset> {
+/// The matching plugin's Prompt-Generator presets (the common catalog plus any
+/// language-specific presets), built from its own config.
+pub fn presets(name: &str, input: &PluginInput) -> Vec<Preset> {
     match registry().iter().find(|p| p.name() == name) {
-        Some(p) => p.presets(defaults, input),
-        None => defaults,
+        Some(p) => p.presets(input),
+        None => Vec::new(),
     }
 }
 
@@ -153,11 +154,11 @@ mod tests {
     /// snapshot (`code-ranker-report.json`), the `check` SARIF
     /// (`code-ranker-check.sarif`), and the `check` Code Quality
     /// (`code-ranker-check.codequality.json`) — under
-    /// `crates/code-ranker-plugin-<name>/sample/`.
+    /// `crates/code-ranker-plugins/src/languages/<name>/tests/sample/`.
     ///
     /// This guard makes adding a language fail the build until its goldens are
     /// committed, instead of the gap going unnoticed because no e2e case names it.
-    /// The plugin's `name()` maps directly to the crate-directory suffix.
+    /// The plugin's `name()` maps directly to the language-module directory name.
     #[test]
     fn every_registered_plugin_has_committed_goldens() {
         // CARGO_MANIFEST_DIR = <repo>/crates/code-ranker-cli → repo root is 2 up.
@@ -171,7 +172,11 @@ mod tests {
             let name = plugin.name();
             let sample = repo
                 .join("crates")
-                .join(format!("code-ranker-plugin-{name}"))
+                .join("code-ranker-plugins")
+                .join("src")
+                .join("languages")
+                .join(name)
+                .join("tests")
                 .join("sample");
             for golden in [
                 "code-ranker-report.json",

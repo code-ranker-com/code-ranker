@@ -4,6 +4,12 @@
 use crate::attrs::Attributes;
 use serde::{Deserialize, Serialize};
 
+/// The node `kind` for a source file — the unit every plugin analyzes today.
+/// One source of truth for the literal so plugins don't sprinkle `"file"`.
+pub const FILE: &str = "file";
+/// The node `kind` for a third-party (external) dependency node.
+pub const EXTERNAL: &str = "external";
+
 /// Stable string key for a node. Scheme is the plugin's choice, e.g.
 /// `file:{path}` for a source file, `ext:{name}` for an external library.
 pub type NodeId = String;

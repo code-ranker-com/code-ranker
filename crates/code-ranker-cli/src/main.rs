@@ -6,7 +6,6 @@ mod git;
 mod logger;
 mod pipeline;
 mod plugin;
-mod presets;
 mod recommend;
 mod report;
 

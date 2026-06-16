@@ -3,7 +3,7 @@
 TypeScript support is **beta**. The complexity metrics use the same in-tree
 `tree-sitter` engine approach as Rust (and the shared `code-ranker-graph` metric
 scaffolding) — here the in-tree `tree-sitter` engine
-(`ecmascript_ts`, in `code-ranker-ecmascript-core`, shared with JavaScript/TSX, a port of `rust-code-analysis`'s
+(`ecmascript_ts`, in the `ecmascript` module of `code-ranker-plugins`, shared with JavaScript/TSX, a port of `rust-code-analysis`'s
 rules), not `syn`, invoked by the TypeScript plugin's `metrics()` step; this file
 is the TypeScript-specific normative spec. For the shared conceptual definitions of
 each metric (what `cyclomatic` / `cognitive` / Halstead / `mi` mean) see

@@ -10,10 +10,10 @@ Each fixture lives **next to its plugin crate** so the sample and the parser tha
 produces it sit together:
 
 ```
-crates/code-ranker-plugin-rust/sample/
-crates/code-ranker-plugin-python/sample/
-crates/code-ranker-plugin-javascript/sample/
-crates/code-ranker-plugin-typescript/sample/
+crates/code-ranker-plugins/src/rust/tests/sample/
+crates/code-ranker-plugins/src/python/tests/sample/
+crates/code-ranker-plugins/src/javascript/tests/sample/
+crates/code-ranker-plugins/src/typescript/tests/sample/
 ```
 
 Each project deliberately contains **both the dependency forms we DO detect and
@@ -51,8 +51,8 @@ regression (or a re-introduction of the root-vs-sum read) changes nothing the te
 can see. Adding coverage means changing a sample's source so the value becomes
 non-trivial, then regenerating its golden (below).
 
-**Per-language metric scope.** The in-tree per-language metric engines (`rust_ts` /
-`python_ts` / `ecmascript_ts`, in their language crates) do not
+**Per-language metric scope.** The shared generic metric engine
+(`code-ranker-plugins/src/engine/`, parameterized per language by a `Dialect`) does not
 emit every metric for every language, so "every metric" means *every metric the
 engine emits for that language* — and every metric is still guarded by **at least
 one** golden. Known gaps the fixtures cannot fill (the construct is present in each
@@ -91,15 +91,15 @@ bumps; that is why a single shared version is safe.
 
 ## How it works
 
-- `crates/code-ranker-plugin-<lang>/sample/code-ranker.toml` — a self-contained
+- `crates/code-ranker-plugins/src/<lang>/tests/sample/code-ranker.toml` — a self-contained
   config (plugin pinned, `ignore.tests = false` to override the **on-by-default**
   test skipping so test files stay in the graph and the fixture exercises them).
-- `crates/code-ranker-plugin-<lang>/sample/code-ranker-report.json` — the **golden**
+- `crates/code-ranker-plugins/src/<lang>/tests/sample/code-ranker-report.json` — the **golden**
   JSON report (`schema_version: "2"`). The graph is already relativized to the
   `{target}` placeholder (machine-independent). The header (`generated_at`,
   `command`, `git`, versions, absolute paths, `timings`) is kept frozen /
   anonymized in the committed file, and normalized only at comparison time.
-- `crates/code-ranker-plugin-<lang>/sample/code-ranker-check.sarif` — the **golden
+- `crates/code-ranker-plugins/src/<lang>/tests/sample/code-ranker-check.sarif` — the **golden
   SARIF** for `check --output-format sarif` on that sample: the fired-rules catalog
   (`tool.driver.rules`), the results, and each result's stable `partialFingerprints`
   (`codeRankerRuleLocation/v1` = `<rule>:<location>`, line-independent). Everything
@@ -107,7 +107,7 @@ bumps; that is why a single shared version is safe.
   `tool.driver.version` (the crate version), blanked on both sides at comparison
   time. The test asserts that field carries the live crate version, then compares
   the rest **character-for-character**.
-- `crates/code-ranker-plugin-<lang>/sample/code-ranker-check.codequality.json` —
+- `crates/code-ranker-plugins/src/<lang>/tests/sample/code-ranker-check.codequality.json` —
   the **golden Code Quality** (CodeClimate) report for
   `check --output-format codequality`: a flat array of issues, each with a stable
   `fingerprint` (`<rule>:<location>`), `severity`, and `location.path` +
@@ -149,7 +149,7 @@ export CARGO_NET_OFFLINE=true
 bin=target/debug/code-ranker
 
 for lang in rust python javascript typescript; do
-  dir="crates/code-ranker-plugin-$lang/sample"
+  dir="crates/code-ranker-plugins/src/$lang/tests/sample"
   "$bin" report "$dir" \
     --config "$dir/code-ranker.toml" \
     --output.json.path="$dir/code-ranker-report.json"
@@ -164,7 +164,7 @@ fields — before committing:
 
 ```sh
 for lang in rust python javascript typescript; do
-  f="crates/code-ranker-plugin-$lang/sample/code-ranker-report.json"
+  f="crates/code-ranker-plugins/src/$lang/tests/sample/code-ranker-report.json"
   python3 - "$f" "$PWD" "$HOME" <<'PY'
 import sys, json
 path, repo, home = sys.argv[1:4]
@@ -193,7 +193,7 @@ export CARGO_NET_OFFLINE=true
 bin=target/debug/code-ranker
 
 for lang in rust python javascript typescript; do
-  dir="crates/code-ranker-plugin-$lang/sample"
+  dir="crates/code-ranker-plugins/src/$lang/tests/sample"
   "$bin" check "$dir" --config "$dir/code-ranker.toml" \
     --output-format sarif > "$dir/code-ranker-check.sarif" || true
 done
@@ -208,7 +208,7 @@ Same shape, fully deterministic (no volatile fields), so compared verbatim:
 
 ```sh
 for lang in rust python javascript typescript; do
-  dir="crates/code-ranker-plugin-$lang/sample"
+  dir="crates/code-ranker-plugins/src/$lang/tests/sample"
   "$bin" check "$dir" --config "$dir/code-ranker.toml" \
     --output-format codequality > "$dir/code-ranker-check.codequality.json" || true
 done
@@ -219,7 +219,7 @@ done
 Every project contains a file-to-file dependency cycle (`a ⇄ b`), an external
 dependency, and a test file.
 
-### Rust (`crates/code-ranker-plugin-rust/sample/`)
+### Rust (`crates/code-ranker-plugins/src/rust/tests/sample/`)
 
 **Metric coverage** (`src/complex.rs`): a dependency-free file built solely to
 surface the per-function metrics with real values — nested branches
@@ -293,7 +293,7 @@ is reached only via `mod macros;` (a `Contains`, excluded from fan_in), so it
 has no information-flow inbound edge. Integration tests under `tests/` are a
 separate target kind that is not analyzed at all.
 
-### Python (`crates/code-ranker-plugin-python/sample/`)
+### Python (`crates/code-ranker-plugins/src/python/tests/sample/`)
 
 Detected: `import`, dotted (`import os.path`), `as`, `from … import`, relative
 (`from .`, `from .c`), grouped, star `*`, and — importantly — an **import inside a
@@ -302,7 +302,7 @@ function** (`base64`).
 Not detected: dynamic/string-based imports — `importlib.import_module("…")`,
 `__import__("…")`, `eval("…")` (the `xml`/`csv`/`hashlib` modules are absent).
 
-### JavaScript (`crates/code-ranker-plugin-javascript/sample/`)
+### JavaScript (`crates/code-ranker-plugins/src/javascript/tests/sample/`)
 
 Detected: `import` (named/namespace/default/side-effect), `export … from`
 (re-export), `require()` both local and external, extension and `index.*`
@@ -311,7 +311,7 @@ resolution.
 Not detected: dynamic `import("./dynamic.js")` (`dynamic.js` is an orphan);
 `require(variable)` with a computed argument.
 
-### TypeScript (`crates/code-ranker-plugin-typescript/sample/`)
+### TypeScript (`crates/code-ranker-plugins/src/typescript/tests/sample/`)
 
 Detected: import without extension, `import type` (deduped with the value import
 into a single edge), the `@/` alias → source root, `export * from`, external

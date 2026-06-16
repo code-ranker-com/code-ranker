@@ -4,7 +4,7 @@
 //! (fan-in 1), so its necessarily-high fan-out stays cheap under Henry-Kafura.
 
 use crate::cli::AnalyzeArgs;
-use crate::{config, git, logger, plugin, presets};
+use crate::{config, git, logger, plugin};
 use anyhow::{Context, Result};
 use code_ranker_graph::level_graph::{LevelGraph, LevelUi};
 use code_ranker_graph::snapshot::Snapshot;
@@ -289,8 +289,7 @@ pub(crate) fn analyze_directory(
         versions.insert(k, v);
     }
 
-    let lang = presets::principle_lang(&plugin_name);
-    let presets = plugin::presets(&plugin_name, presets::default_presets(&lang), &input);
+    let presets = plugin::presets(&plugin_name, &input);
 
     let snapshot = Snapshot::new(
         command,
@@ -499,26 +498,41 @@ fn assemble_level(
     }
 }
 
-/// Build the `ui` block: keep the canonical order (read from the data-driven
-/// metric registry), drop anything not present on an internal node
+/// Build the `ui` block from the data-driven view sections (`[tableview]` /
+/// `[cardview]`), dropping anything not present on an internal node
 /// (`present_internal_keys`) — external-only keys stay in the dictionary but
-/// never reach a render list. `kind` is always a column; `cycle` is a
-/// column/sort metric only when it survived pruning.
+/// never reach a render list. `kind` is always a column.
 fn build_ui(
     node_attributes: &BTreeMap<String, code_ranker_plugin_api::level::AttributeSpec>,
     present_internal_keys: &std::collections::BTreeSet<&str>,
     grouping: Option<code_ranker_plugin_api::level::Grouping>,
 ) -> LevelUi {
-    let order = code_ranker_graph::ui_order();
+    let v = code_ranker_graph::views();
     let has = |k: &str| k == "kind" || present_internal_keys.contains(k);
     let pick =
         |list: &[String]| -> Vec<String> { list.iter().filter(|k| has(k)).cloned().collect() };
-    let sort_metrics = pick(&order.sort);
-    let default_sort = if sort_metrics.iter().any(|m| m == "hk") {
-        Some("hk".to_string())
-    } else {
-        sort_metrics.first().cloned()
-    };
+
+    let columns = pick(&v.columns);
+    let card_metrics = pick(&v.featured);
+    // Default sort: a signed-rank list (order = priority, leading `-` =
+    // descending). Strip the sign and pick the first key present. Every column
+    // stays sortable in the UI — this only sets the opening order.
+    let default_sort = v
+        .default_sort
+        .iter()
+        .map(|s| s.strip_prefix('-').unwrap_or(s))
+        .find(|k| has(k))
+        .map(|k| k.to_string());
+    // Sortable = every column except the `kind` label.
+    let sort_metrics: Vec<String> = columns.iter().filter(|k| *k != "kind").cloned().collect();
+    // Summary rows = the numeric metric columns (exclude the `kind` label and the
+    // categorical `cycle`).
+    let summary_metrics: Vec<String> = columns
+        .iter()
+        .filter(|k| *k != "kind" && *k != "cycle")
+        .cloned()
+        .collect();
+
     // Keep the grouping only if it is usable: a `key` must reference an attribute
     // that survived pruning; a `function` is passed through. Otherwise drop it so
     // the viewer falls back to its default `dir` grouper.
@@ -529,10 +543,10 @@ fn build_ui(
     LevelUi {
         default_sort,
         sort_metrics,
-        size_metrics: pick(&order.size),
-        card_metrics: pick(&order.card),
-        columns: pick(&order.columns),
-        summary_metrics: pick(&order.summary),
+        size_metrics: Vec::new(),
+        card_metrics,
+        columns,
+        summary_metrics,
         grouping,
     }
 }

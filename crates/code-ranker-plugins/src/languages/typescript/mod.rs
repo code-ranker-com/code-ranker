@@ -5,13 +5,15 @@
 //! builds on that shared engine as a peer — never on the JavaScript plugin.
 
 use crate::languages::ecmascript::{
-    analyze_ecmascript, annotate_ecmascript_metrics, ecmascript_function_units,
-    ecmascript_functions_level, ecmascript_is_test_path, ecmascript_level,
+    analyze_ecmascript, ecmascript_function_units, ecmascript_functions_level,
+    ecmascript_is_test_path, ecmascript_level, ecmascript_metrics,
 };
 use anyhow::Result;
 use code_ranker_plugin_api::{
     graph::Graph,
     level::Level,
+    metrics::MetricInputs,
+    node::Node,
     plugin::{LanguagePlugin, PluginInput, Preset, detect_with_marker},
 };
 use std::path::Path;
@@ -68,10 +70,10 @@ impl LanguagePlugin for TypescriptPlugin {
         )
     }
 
-    fn metrics(&self, graph: &mut Graph) -> usize {
+    fn metrics(&self, graph: &Graph) -> Vec<(String, MetricInputs)> {
         // `else_if_via_else_clause` is true for TypeScript proper, false for TSX
         // (the only per-dialect difference in the cognitive `else-if` rule).
-        annotate_ecmascript_metrics(graph, |ext| match ext {
+        ecmascript_metrics(graph, |ext| match ext {
             "ts" | "mts" | "cts" => {
                 Some((tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(), true))
             }
@@ -80,7 +82,7 @@ impl LanguagePlugin for TypescriptPlugin {
         })
     }
 
-    fn function_units(&self, graph: &Graph) -> Vec<code_ranker_plugin_api::node::Node> {
+    fn function_units(&self, graph: &Graph) -> Vec<(Node, MetricInputs)> {
         ecmascript_function_units(graph, |ext| match ext {
             "ts" | "mts" | "cts" => {
                 Some((tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(), true))

@@ -7,13 +7,15 @@
 //! vice-versa).
 
 use crate::languages::ecmascript::{
-    analyze_ecmascript, annotate_ecmascript_metrics, ecmascript_function_units,
-    ecmascript_functions_level, ecmascript_is_test_path, ecmascript_level,
+    analyze_ecmascript, ecmascript_function_units, ecmascript_functions_level,
+    ecmascript_is_test_path, ecmascript_level, ecmascript_metrics,
 };
 use anyhow::Result;
 use code_ranker_plugin_api::{
     graph::Graph,
     level::Level,
+    metrics::MetricInputs,
+    node::Node,
     plugin::{LanguagePlugin, PluginInput, Preset, detect_with_marker},
 };
 use std::path::Path;
@@ -68,14 +70,14 @@ impl LanguagePlugin for JavascriptPlugin {
         )
     }
 
-    fn metrics(&self, graph: &mut Graph) -> usize {
-        annotate_ecmascript_metrics(graph, |ext| match ext {
+    fn metrics(&self, graph: &Graph) -> Vec<(String, MetricInputs)> {
+        ecmascript_metrics(graph, |ext| match ext {
             "js" | "jsx" | "mjs" | "cjs" => Some((tree_sitter_javascript::LANGUAGE.into(), false)),
             _ => None,
         })
     }
 
-    fn function_units(&self, graph: &Graph) -> Vec<code_ranker_plugin_api::node::Node> {
+    fn function_units(&self, graph: &Graph) -> Vec<(Node, MetricInputs)> {
         ecmascript_function_units(graph, |ext| match ext {
             "js" | "jsx" | "mjs" | "cjs" => Some((tree_sitter_javascript::LANGUAGE.into(), false)),
             _ => None,

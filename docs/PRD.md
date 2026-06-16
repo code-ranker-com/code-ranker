@@ -422,10 +422,10 @@ workspaces. The plugin MUST:
 - Emit **structure only** (file + external nodes, `uses`/`contains`/`reexports`/`super`
   edges). The downstream pipeline then enriches every file node: per-file
   complexity metrics (cyclomatic, cognitive, Halstead, maintainability index, LOC
-  variants) are produced by each plugin's `metrics()` step — its in-tree engine
-  measures tier-1 counts (`MetricInputs`) and the `code-ranker-graph` registry
-  evaluates the declarative tier-2 formulas (`metrics/builtin.toml`) via
-  `write_metrics`;
+  variants) are measured by each plugin's `metrics()` step — its in-tree engine
+  measures tier-1 counts (`MetricInputs`) and hands them back; the orchestrator
+  then writes them and the `code-ranker-graph` registry's declarative tier-2
+  formulas (`metrics/builtin.toml`) via `write_metrics`;
   dependency cycles (Kosaraju SCC over flow edges) annotated as a `cycle` node
   attribute (`mutual` | `chain`) with `CycleGroup` entries, with
   any SCC that spans more than one crate dropped (Rust forbids circular crate
@@ -522,10 +522,10 @@ at the package file), and imports that do not resolve to a project file
 become `External` library nodes (`ext:<top-level-package>`, e.g.
 `numpy`) reached by a `uses` edge flagged `external: true`. Per-file
 complexity metrics (cyclomatic, cognitive, Halstead, MI, LOC, functions,
-nexits, nargs) are annotated on each `File` node by the plugin's `metrics()`
-step, which runs the shared generic engine via the Python `Dialect`
-(`engine::compute` → a `MetricInputs`) and writes the derived metrics via
-`code_ranker_graph::write_metrics`.
+nexits, nargs) are measured by the plugin's `metrics()` step, which runs the
+shared generic engine via the Python `Dialect` (`engine::compute` → a
+`MetricInputs`); the orchestrator writes the derived metrics onto each `File`
+node via `code_ranker_graph::write_metrics`.
 
 **JavaScript / TypeScript plugin** (`--plugin javascript`) is shipped as a
 built-in in `code-ranker-cli`; one plugin handles `.js`, `.jsx`, `.ts`, and
@@ -682,11 +682,11 @@ default**), the plugin skips its own test files during the walk — what counts 
 a test is language-specific (Rust `#[cfg(test)]` modules, Python
 `test_*.py`/`tests/`, JS/TS `*.test.*`/`__tests__`), so the detection
 (`is_test_path`) lives in the plugin, not the CLI. Per-language complexity
-metrics are written by the plugin's `metrics()` step (running the matching
-in-tree language engine and writing via `code_ranker_graph::write_metrics` — no
-central by-extension dispatcher), while the
+metrics are measured by the plugin's `metrics()` step (running the matching
+in-tree language engine — no central by-extension dispatcher) and written
+centrally by the orchestrator via `code_ranker_graph::write_metrics`, like the
 language-agnostic derived data (cycles / Henry-Kafura / stats in
-`code-ranker-graph` over the level's flow edges) is computed centrally; all are
+`code-ranker-graph` over the level's flow edges); all are
 written into node attributes by id, and the orchestrator assembles the snapshot.
 Adding a language means adding a built-in plugin crate (implementing `analyze` +
 `metrics`) and one line in `plugin::registry()`.

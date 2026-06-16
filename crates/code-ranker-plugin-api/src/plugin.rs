@@ -1,17 +1,21 @@
 //! The [`LanguagePlugin`] trait + [`Options`] + [`Preset`].
 //!
 //! A plugin turns a workspace into nodes + edges at a requested level
-//! ([`analyze`](LanguagePlugin::analyze)) and writes the per-file **complexity
-//! metrics** for its own language onto those nodes ([`metrics`](LanguagePlugin::metrics)).
-//! Metrics are a per-language concern — each plugin parses its own files with its
-//! own grammar and calls the matching `code-ranker-complexity` engine — so there
-//! is no central, by-extension metric dispatcher. The language-agnostic derived
-//! data (cycles, Henry-Kafura, stats) is still filled centrally by the
-//! orchestrator. The CLI holds the registry of plugins; it talks to them ONLY
-//! through this trait and never names a concrete language.
+//! ([`analyze`](LanguagePlugin::analyze)) and **measures** the per-file **complexity
+//! metrics** for its own language ([`metrics`](LanguagePlugin::metrics)), returning
+//! the raw [`MetricInputs`](crate::metrics::MetricInputs) for the orchestrator to
+//! write. Measuring is a per-language concern — each plugin parses its own files
+//! with its own grammar and engine — so there is no central, by-extension metric
+//! dispatcher; but the *writing* (tier-2 derivation + node enrichment) and the
+//! language-agnostic derived data (cycles, Henry-Kafura, stats) are filled
+//! centrally by the orchestrator, so a plugin needs no dependency on the
+//! graph/enrichment crate. The CLI holds the registry of plugins; it talks to them
+//! ONLY through this trait and never names a concrete language.
 
 use crate::graph::Graph;
 use crate::level::{AttributeSpec, Level, Thresholds};
+use crate::metrics::MetricInputs;
+use crate::node::Node;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -87,24 +91,26 @@ pub trait LanguagePlugin {
     /// [`is_test_path`](Self::is_test_path)).
     fn analyze(&self, workspace: &Path, level: &str, input: &PluginInput) -> Result<Graph>;
 
-    /// Write this language's per-file complexity metrics (cyclomatic, cognitive,
-    /// Halstead, MI, LOC, …) onto the graph's `file` nodes, in place. The plugin
-    /// parses each of its own files (by `node.id`, an absolute path) with its own
-    /// grammar and calls the matching `code-ranker-complexity` engine. Returns the
-    /// number of file nodes annotated. Default: none (a plugin that ships no
-    /// metric engine).
-    fn metrics(&self, _graph: &mut Graph) -> usize {
-        0
+    /// **Measure** this language's per-file complexity tier-1 counts and return
+    /// them keyed by `file` node id (an absolute path). The plugin parses each of
+    /// its own files (by `node.id`) with its own grammar and engine, returning a
+    /// [`MetricInputs`] per file; it does **not** write them. The orchestrator
+    /// runs the tier-2 registry and writes every metric onto the node — so the
+    /// plugin needs no dependency on the graph/enrichment crate. Default: none (a
+    /// plugin that ships no metric engine).
+    fn metrics(&self, _graph: &Graph) -> Vec<(String, MetricInputs)> {
+        Vec::new()
     }
 
-    /// Function-level metric nodes — one per sub-file unit (function / method /
-    /// closure) — for the optional `functions` graph level. Each returned node
-    /// carries its metrics in `attrs`, a per-language `kind`, and `parent` set to
-    /// its **file node's id** (so the orchestrator can relativize and group it).
-    /// `graph` is the just-parsed file graph with **absolute** file-path ids, so a
-    /// plugin reads each file by `node.id`. Only called when the level is enabled;
+    /// Function-level metric units — one per sub-file unit (function / method /
+    /// closure) — for the optional `functions` graph level. Each returned pair is
+    /// the unit's [`Node`] (its per-language `kind`, `name`, and `parent` = its
+    /// **file node's id**, but **no metrics yet**) plus the unit's measured
+    /// [`MetricInputs`]; the orchestrator writes the metrics onto the node. `graph`
+    /// is the just-parsed file graph with **absolute** file-path ids, so a plugin
+    /// reads each file by `node.id`. Only called when the level is enabled;
     /// default: none (a plugin that ships no function-level support).
-    fn function_units(&self, _graph: &Graph) -> Vec<crate::node::Node> {
+    fn function_units(&self, _graph: &Graph) -> Vec<(Node, MetricInputs)> {
         Vec::new()
     }
 
@@ -211,6 +217,7 @@ mod tests {
             p.function_units(&empty_graph).is_empty(),
             "default: no function units"
         );
+        assert!(p.metrics(&empty_graph).is_empty(), "default: no metrics");
         assert!(p.versions(ws, &input).is_empty(), "default: no versions");
         assert!(p.roots(ws).is_empty(), "default: no roots");
         assert!(p.thresholds().is_empty(), "default: no thresholds");
@@ -219,13 +226,6 @@ mod tests {
         assert!(p.presets(&input).is_empty());
         let specs: BTreeMap<String, AttributeSpec> = BTreeMap::new();
         assert!(p.metric_specs(specs).is_empty());
-
-        // metrics default: annotates nothing.
-        let mut g = Graph {
-            nodes: Vec::new(),
-            edges: Vec::new(),
-        };
-        assert_eq!(p.metrics(&mut g), 0);
     }
 
     #[test]

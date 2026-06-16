@@ -4,9 +4,12 @@
 //! [`registry`].
 
 use anyhow::{Result, bail};
+use code_ranker_graph::write_metrics;
 use code_ranker_plugin_api::{
     graph::Graph,
     level::{AttributeSpec, Level, Thresholds},
+    metrics::MetricInputs,
+    node::Node,
     plugin::{LanguagePlugin, PluginInput, Preset},
 };
 use std::collections::BTreeMap;
@@ -43,28 +46,44 @@ pub fn analyze(name: &str, workspace: &Path, input: &PluginInput) -> Result<(Gra
     }
 }
 
-/// Let the matching plugin write its per-language complexity metrics onto the
-/// graph's file nodes, in place. Returns the number of nodes annotated. Metrics
-/// are a per-language concern owned by the plugin (no central by-extension
-/// dispatcher); the orchestrator only routes to the active plugin.
+/// Have the matching plugin **measure** its per-language complexity inputs, then
+/// write every metric (tier-1 + the tier-2 registry derivations) onto the graph's
+/// file nodes here, in the orchestrator. Returns the number of nodes annotated.
+/// Measuring is a per-language concern owned by the plugin (no central
+/// by-extension dispatcher); enrichment (`write_metrics`, which needs the metric
+/// catalog) is central — so a plugin never depends on `code-ranker-graph`.
 pub fn annotate_metrics(name: &str, graph: &mut Graph) -> usize {
-    registry()
-        .iter()
-        .find(|p| p.name() == name)
-        .map(|p| p.metrics(graph))
-        .unwrap_or(0)
+    let reg = registry();
+    let Some(p) = reg.iter().find(|p| p.name() == name) else {
+        return 0;
+    };
+    let by_id: BTreeMap<String, MetricInputs> = p.metrics(graph).into_iter().collect();
+    let mut annotated = 0;
+    for node in &mut graph.nodes {
+        if let Some(inputs) = by_id.get(&node.id) {
+            write_metrics(node, inputs);
+            annotated += 1;
+        }
+    }
+    annotated
 }
 
-/// Ask the matching plugin for function-level metric nodes (one per sub-file
-/// unit), for the optional `functions` level. Called on the absolute-id graph;
-/// returns nodes whose `parent` is the file id. Empty when the plugin ships no
-/// function-level support.
-pub fn function_units(name: &str, graph: &Graph) -> Vec<code_ranker_plugin_api::node::Node> {
-    registry()
-        .iter()
-        .find(|p| p.name() == name)
-        .map(|p| p.function_units(graph))
-        .unwrap_or_default()
+/// Ask the matching plugin for function-level metric units (one per sub-file
+/// unit), for the optional `functions` level, then write their metrics onto the
+/// returned nodes here. Called on the absolute-id graph; returns nodes whose
+/// `parent` is the file id. Empty when the plugin ships no function-level support.
+pub fn function_units(name: &str, graph: &Graph) -> Vec<Node> {
+    let reg = registry();
+    let Some(p) = reg.iter().find(|p| p.name() == name) else {
+        return Vec::new();
+    };
+    p.function_units(graph)
+        .into_iter()
+        .map(|(mut node, inputs)| {
+            write_metrics(&mut node, &inputs);
+            node
+        })
+        .collect()
 }
 
 /// Tool/toolchain versions the matching plugin wants recorded in the snapshot.

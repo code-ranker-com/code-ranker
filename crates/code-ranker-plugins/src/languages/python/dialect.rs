@@ -9,7 +9,7 @@
 use crate::engine::{
     self, CogCtx, CogState, Dialect, HalClass, LocState, RoleCfg, Roles, UnitKind,
 };
-use code_ranker_graph::{FunctionUnit, MetricInputs};
+use code_ranker_plugin_api::metrics::{FunctionUnit, MetricInputs};
 use std::sync::LazyLock;
 use tree_sitter::{Language, Node};
 

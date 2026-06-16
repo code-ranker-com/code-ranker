@@ -1,6 +1,6 @@
 use super::*;
+use crate::test_support::{edge_count_from, write_file};
 use code_ranker_plugin_api::plugin::LanguagePlugin;
-use code_ranker_test_support::{edge_count_from, write_file};
 use std::fs;
 use tempfile::TempDir;
 
@@ -51,7 +51,11 @@ fn function_units_extracts_per_function_nodes() {
         nodes: vec![node(&ts, "a.ts"), node(&tsx, "w.tsx")],
         edges: vec![],
     };
-    let units = TypescriptPlugin.function_units(&graph);
+    let units: Vec<_> = TypescriptPlugin
+        .function_units(&graph)
+        .into_iter()
+        .map(|(n, _)| n)
+        .collect();
     assert!(
         units
             .iter()

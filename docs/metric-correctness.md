@@ -89,7 +89,7 @@ A `MetricDef` carries:
   / `value_type` / `omit_at`) — what makes it a first-class, sortable,
   delta-coloured column. The viewer hardcodes no metric by name.
 
-The measured inputs a formula may read come from `code_ranker_graph::MetricInputs`
+The measured inputs a formula may read come from `code_ranker_plugin_api::MetricInputs`
 (what the engines measure): `eta1` / `eta2` / `n1` / `n2`, `spaces` / `branches`,
 `cognitive` / `exits` / `args` / `closures`, `sloc` / `lloc` / `cloc` / `blank` /
 `tloc`, `span_sloc`.
@@ -200,7 +200,7 @@ formula_js    = "…"     # display only — the JS the viewer re-runs client-si
   formula that consumes it.
 
 **A1b. A new measured count** (when a formula needs a number the engine doesn't
-measure): add the field to `code_ranker_graph::MetricInputs`, declare it under
+measure): add the field to `code_ranker_plugin_api::MetricInputs`, declare it under
 `[ast.<key>]` in `builtin.toml`, and count it during the tree walk in the shared
 generic engine (`code-ranker-plugins/src/engine/`, adjusting the relevant
 `Dialect`/`config.toml` role tables as needed). The engine feeds both the file

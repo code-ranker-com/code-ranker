@@ -15,7 +15,6 @@ pub mod cycles;
 pub mod finalize;
 pub mod hk;
 pub mod level_graph;
-pub mod metrics;
 pub mod registry;
 pub mod relativize;
 pub mod serialize;
@@ -27,12 +26,11 @@ pub use cycles::annotate_cycles;
 pub use finalize::finalize_graph;
 pub use hk::annotate_hk;
 pub use level_graph::{CycleGroup, LevelGraph, LevelUi};
-// The active metric catalog reads the redesigned `builtin.toml` schema (module
-// [`builtin`]); the legacy [`metrics`] module is kept alongside (reachable as
-// `metrics::*`) for its older accessors. `MetricInputs` / `FunctionUnit` live in
-// `metrics` and are reused by `builtin`.
+// The metric catalog reads the `builtin.toml` schema (module [`builtin`]). The
+// tier-1 input types (`MetricInputs` / `FunctionUnit`) are the plugin↔orchestrator
+// contract and live in `code-ranker-plugin-api` (its `metrics` module); a plugin
+// hands them back and `builtin::write_metrics` enriches the node from them.
 pub use builtin::{Views, metric_specs, stat_keys, views, write_metrics};
-pub use metrics::{FunctionUnit, MetricInputs};
 pub use registry::{Engine, MetricDef, Populations, RegistryError, Scope, apply_to_node};
 pub use relativize::{relativize_graph, relativize_level};
 pub use serialize::{to_canonical_string, to_canonical_string_pretty};

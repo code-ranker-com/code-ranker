@@ -1,5 +1,5 @@
 use super::*;
-use code_ranker_test_support::{edge_count_from, has_node, write_file};
+use crate::test_support::{edge_count_from, has_node, write_file};
 use std::fs;
 use tempfile::TempDir;
 
@@ -46,7 +46,11 @@ fn function_units_extracts_per_function_nodes() {
         }],
         edges: vec![],
     };
-    let units = JavascriptPlugin.function_units(&graph);
+    let units: Vec<_> = JavascriptPlugin
+        .function_units(&graph)
+        .into_iter()
+        .map(|(n, _)| n)
+        .collect();
     assert!(
         units
             .iter()
@@ -97,18 +101,22 @@ fn metrics_annotates_file_nodes() {
         "src/a.js",
         "export function f(x) { if (x > 0) { return 1; } return 2; }\n",
     );
-    let mut graph = JavascriptPlugin
+    let graph = JavascriptPlugin
         .analyze(root, "files", &PluginInput::default())
         .expect("analyze should succeed");
-    let annotated = JavascriptPlugin.metrics(&mut graph);
-    assert_eq!(annotated, 1, "the single .js file node is annotated");
+    // The plugin measures inputs; the orchestrator (here, the test) writes them.
+    let inputs = JavascriptPlugin.metrics(&graph);
+    assert_eq!(inputs.len(), 1, "the single .js file node is measured");
 
     let a_id = root.join("src/a.js").to_string_lossy().into_owned();
-    let node = graph.nodes.iter().find(|n| n.id == a_id).unwrap();
+    let (id, m) = &inputs[0];
+    assert_eq!(id, &a_id, "measured the a.js file node");
+    let mut node = graph.nodes.iter().find(|n| n.id == a_id).unwrap().clone();
+    code_ranker_graph::write_metrics(&mut node, m);
     // a function with an `if` and two `return`s has real complexity.
     assert!(
         node.attrs.contains_key("cyclomatic"),
-        "cyclomatic written onto the file node"
+        "cyclomatic derived from the measured inputs"
     );
 }
 

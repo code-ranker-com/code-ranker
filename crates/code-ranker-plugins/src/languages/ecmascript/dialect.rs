@@ -10,7 +10,7 @@
 //! `(name, is_named)` pair (rca's duplicate `Identifier2`/`String2`/… variants).
 
 use crate::engine::{self, CogCtx, CogState, Dialect, RoleCfg, Roles, UnitKind};
-use code_ranker_graph::{FunctionUnit, MetricInputs};
+use code_ranker_plugin_api::metrics::{FunctionUnit, MetricInputs};
 use std::collections::HashSet;
 use std::sync::LazyLock;
 use tree_sitter::{Language, Node};

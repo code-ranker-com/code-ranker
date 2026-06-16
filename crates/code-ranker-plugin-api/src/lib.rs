@@ -37,6 +37,7 @@ pub mod edge;
 pub mod graph;
 pub mod level;
 pub mod log;
+pub mod metrics;
 pub mod node;
 pub mod plugin;
 
@@ -47,6 +48,7 @@ pub use level::{
     AttributeGroup, AttributeSpec, CycleKindSpec, Direction, EdgeKindSpec, Level, NodeKindSpec,
     SpecRow, Thresholds, attr_dict, group,
 };
+pub use metrics::{FunctionUnit, MetricInputs};
 pub use node::{Node, NodeId};
 pub use plugin::{LanguagePlugin, Options, PluginInput, Preset};
 

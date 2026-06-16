@@ -44,9 +44,9 @@ pub struct PluginInput {
 }
 
 /// A Prompt-Generator preset (a refactoring principle): a ready-to-paste AI
-/// instruction plus how the UI seeds the node selection for it. The orchestrator
-/// builds a generic default set and hands it to [`LanguagePlugin::presets`],
-/// which may pass it through, edit, drop or extend per language.
+/// instruction plus how the UI seeds the node selection for it. Each plugin
+/// builds its own set from config via [`LanguagePlugin::presets`] (the common
+/// catalog plus any language-specific presets).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Preset {
     /// Stable id / short code shown on the button (e.g. `"ADP"`).
@@ -134,11 +134,12 @@ pub trait LanguagePlugin {
         Vec::new()
     }
 
-    /// Transform the orchestrator's generic default presets for this language.
-    /// Default: pass them through unchanged. A plugin may reword a `prompt`,
-    /// change a `sort_metric`, drop a preset, or add language-specific ones.
-    fn presets(&self, defaults: Vec<Preset>, _input: &PluginInput) -> Vec<Preset> {
-        defaults
+    /// The Prompt-Generator presets for this language. A plugin builds them from
+    /// its own config (the common catalog in `defaults.toml` merged with the
+    /// language's `<lang>.toml`, with each `doc_url` resolved). Default: none (a
+    /// plugin that ships no presets).
+    fn presets(&self, _input: &PluginInput) -> Vec<Preset> {
+        Vec::new()
     }
 
     /// Transform the orchestrator's **language-neutral** default complexity metric
@@ -214,8 +215,8 @@ mod tests {
         assert!(p.roots(ws).is_empty(), "default: no roots");
         assert!(p.thresholds().is_empty(), "default: no thresholds");
 
-        // presets / metric_specs default to pass-through (return input unchanged).
-        assert!(p.presets(Vec::new(), &input).is_empty());
+        // presets defaults to none; metric_specs defaults to pass-through.
+        assert!(p.presets(&input).is_empty());
         let specs: BTreeMap<String, AttributeSpec> = BTreeMap::new();
         assert!(p.metric_specs(specs).is_empty());
 

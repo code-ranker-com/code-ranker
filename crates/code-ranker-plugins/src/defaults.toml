@@ -1,0 +1,387 @@
+# Common base config inherited by every language's `<lang>.toml`.
+#
+# `code-ranker-plugins/src/config.rs` parses this file and a language's
+# `<lang>.toml`, then DEEP-MERGES them: per section, per key the language value
+# overrides the base; the `[[presets]]` array is merged by `id` (a language
+# preset replaces a same-`id` base preset, a new one appends). See that module's
+# docs for the exact rules.
+#
+# This base holds the language-neutral defaults. A language inherits everything
+# here and spells out only what differs. The sections a language config carries:
+#
+#   doc_base / doc_lang  the principle-doc URL pieces. `doc_base` (the host/repo
+#                        prefix) is COMMON and lives here; each `<lang>.toml`
+#                        supplies `doc_lang` (its principle-corpus language, e.g.
+#                        `rust`, `python`, `typescript`). A preset's `doc_url` is
+#                        resolved as `{doc_base}/{doc_lang}/{slug}.md`.
+#   [[presets]]          metric-lens recommendation presets (id, title,
+#                        sort_metric, connections, slug, prompt). The COMMON,
+#                        language-neutral catalog lives here ONCE; every language
+#                        inherits it. A language may append its own presets (or
+#                        override one by `id`) in its `<lang>.toml`. Merged by id.
+#   [thresholds.<key>]   language-calibrated info/warning limits per metric.
+#   [specs.<key>]        per-language tweaks to a metric's display (e.g.
+#                        description), applied over the central builtin specs.
+#   [kinds] / [halstead] / [loc]
+#                        tree-sitter node-kind tables the metric engine keys on
+#                        (these are inherently grammar-specific, so the base
+#                        leaves them to each language).
+
+# The principle-doc URL prefix shared by every language. Each `<lang>.toml` adds
+# its own `doc_lang`; a preset's `doc_url` resolves to
+# `{doc_base}/{doc_lang}/{slug}.md`.
+doc_base = "https://github.com/ffedoroff/code-ranker/blob/main/principles"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Edge-kind vocabulary (the `files` level). The map KEY is the identifier the
+# structure builder tags an edge's `kind` with; the value is its
+# label/description/flow (the `EdgeKindSpec` the level descriptor publishes).
+#
+# `uses` — a code/import dependency — is the one edge kind every language has, so
+# it lives here once. The import-dependency wording fits Python / JS / TS as-is;
+# Rust overrides this entry with its own (Cargo-flavoured) description in
+# `rust/config.toml`. Rust's structural-only kinds (`contains` / `reexports` /
+# `super`) are Rust-specific and stay in `rust/config.toml`.
+# ──────────────────────────────────────────────────────────────────────────────
+
+[edge_kinds.uses]
+flow = true
+label = "uses"
+description = "Import dependency — this file imports from the other."
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Function-level node-kind vocabulary (the optional `functions` level). The map
+# KEY is the `kind` a function unit is tagged with; the value is its
+# label/plural/fill/stroke (the `NodeKindSpec`). `function` and `method` recur in
+# every language, so they live here once; a language adds only its own kinds
+# (ECMAScript appends `arrow` / `generator` in `ecmascript/config.toml`).
+#
+# (The file-level `file` / `external` kinds and the `mutual` / `chain` cycle
+# kinds are already centralized in `code_ranker_plugin_api` —
+# `default_node_kinds()` / `default_cycle_kinds()` — so they are NOT duplicated
+# here; the plugins seed those from the API.)
+# ──────────────────────────────────────────────────────────────────────────────
+
+[node_kinds.function]
+label = "Function"
+plural = "Functions"
+fill = "#dbe9f4"
+stroke = "#4d6f9c"
+
+[node_kinds.method]
+label = "Method"
+plural = "Methods"
+fill = "#e2eccf"
+stroke = "#5d8a3a"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Structural node-attribute display specs that every language emits (the plugin
+# writes these onto file nodes). Shared here; a language adds its own in its
+# `<lang>.toml` `[node_attributes]` (e.g. Rust's `crate`/`items`/`unsafe`).
+# ──────────────────────────────────────────────────────────────────────────────
+
+[node_attributes.path]
+value_type = "str"
+label = "Path"
+
+[node_attributes.loc]
+value_type = "int"
+label = "Lines"
+
+[node_attributes.visibility]
+value_type = "str"
+label = "Visibility"
+
+[node_attributes.external]
+value_type = "bool"
+label = "External"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# The COMMON, language-neutral metric-lens preset catalog (the recommendation
+# lenses). Defined ONCE here; every language inherits it. A `<lang>.toml` may
+# append language-specific presets or override an entry by `id`. The long prompt
+# bodies are TOML multiline strings (the trailing `\` keeps them newline-free at
+# the end, matching the rendered output exactly).
+# ──────────────────────────────────────────────────────────────────────────────
+
+[[presets]]
+id = "CPX"
+title = "CPX — Reduce Complexity"
+sort_metric = "cognitive"
+connections = []
+slug = "reduce-complexity"
+prompt = """
+These modules are too complex and I want to reduce their complexity.
+Reduce it by splitting large units into smaller single-responsibility ones,
+extracting repeated patterns into shared helpers, flattening deeply nested
+control flow, and breaking large functions into focused helpers.\
+"""
+
+[[presets]]
+id = "ADP"
+title = "ADP — Acyclic Dependencies Principle"
+sort_metric = "cycle"
+connections = ["common"]
+slug = "acyclic-dependencies-principle"
+prompt = """
+The dependency graph between modules must form a DAG. When module A depends
+on module B, no chain of dependencies should bring B back to A.
+
+Identify any cycles in the modules below. For each cycle, propose a concrete
+refactoring (extract a shared abstraction, invert a dependency, split a module)
+that makes the graph acyclic without breaking existing functionality.
+
+When splitting a module to break a cycle, the new structure should:
+- Preserve existing API contracts
+- Minimise coupling in the new structure
+- Follow the Single Responsibility Principle
+- Not introduce new dependency cycles\
+"""
+
+[[presets]]
+id = "SRP"
+title = "SRP — Single Responsibility Principle"
+sort_metric = "sloc"
+connections = ["in", "out"]
+slug = "solid-single-responsibility"
+prompt = """
+A module should have one reason to change — it should serve one actor
+and encapsulate one coherent set of decisions.
+
+For each module below, identify whether it has more than one responsibility.
+Propose how to split responsibilities so each module changes for only one reason,
+and specify the new module boundaries.\
+"""
+
+[[presets]]
+id = "OCP"
+title = "OCP — Open/Closed Principle"
+sort_metric = "cyclomatic"
+connections = []
+slug = "solid-open-closed"
+prompt = """
+A module should be open for extension but closed for modification: new behaviour
+should be addable without editing existing, working code.
+
+For each module below, identify extension points that currently require editing
+existing code (e.g. growing match/switch/if-else chains). Propose an extension
+mechanism (polymorphism, strategy, plug-in registration) so new cases can be added
+without modifying these modules.\
+"""
+
+[[presets]]
+id = "LSP"
+title = "LSP — Liskov Substitution Principle"
+sort_metric = "hk"
+connections = []
+slug = "solid-liskov-substitution"
+prompt = """
+Every implementation of an interface must honour its full contract — return-value
+invariants, error/exception behaviour, side effects, and resource ownership — not
+just the method signatures. A subtype must be substitutable for its base without
+surprising callers.
+
+Identify the interface implementations in the modules below. For each, check it can
+replace any other implementation of the same interface without breaking callers.
+Flag violations and propose fixes.\
+"""
+
+[[presets]]
+id = "ISP"
+title = "ISP — Interface Segregation Principle"
+sort_metric = "items"
+connections = ["in"]
+slug = "solid-interface-segregation"
+prompt = """
+Clients should not be forced to depend on methods they do not use. Prefer several
+small, focused interfaces over one wide interface.
+
+Identify interfaces in the modules below that are wider than their consumers need.
+Propose how to split them into narrower interfaces so each consumer depends only on
+what it actually uses.\
+"""
+
+[[presets]]
+id = "DIP"
+title = "DIP — Dependency Inversion Principle"
+sort_metric = "fan_out"
+connections = ["common", "out"]
+slug = "solid-dependency-inversion"
+prompt = """
+High-level modules should not depend on low-level modules; both should depend on
+abstractions, and abstractions should not depend on details.
+
+Find places in the modules below where a high-level module depends directly on a
+concrete low-level type. Propose an abstraction (interface) to invert each such
+dependency, and specify where the concrete implementation should be wired in.\
+"""
+
+[[presets]]
+id = "DRY"
+title = "DRY — Don't Repeat Yourself"
+sort_metric = "sloc"
+connections = []
+slug = "dry"
+prompt = """
+Every piece of knowledge must have a single authoritative representation.
+DRY is about knowledge duplication, not just code duplication.
+
+Identify concepts, rules, or policies that are duplicated across the modules
+below. For each duplication, propose a canonical location and the refactoring
+needed to consolidate it.\
+"""
+
+[[presets]]
+id = "KISS"
+title = "KISS — Keep It Simple"
+sort_metric = "cognitive"
+connections = []
+slug = "kiss"
+prompt = """
+When two designs solve the same problem, prefer the simpler one — fewer
+abstractions, fewer indirection layers, fewer moving parts.
+
+Identify over-engineered or needlessly complex constructs in the modules below.
+For each, describe the simpler alternative and estimate the risk of simplifying.\
+"""
+
+[[presets]]
+id = "LoD"
+title = "Law of Demeter — Principle of Least Knowledge"
+sort_metric = "fan_out"
+connections = ["common", "out"]
+slug = "law-of-demeter"
+prompt = """
+A method should only call methods on: itself, its direct fields,
+its parameters, and objects it constructs locally.
+Avoid `x.foo().bar().baz()` chains that traverse object graphs.
+
+Identify method chains or deep field traversals in the modules below that
+violate LoD. For each, propose a narrow accessor or a facade that exposes only
+what the caller needs, reducing coupling.\
+"""
+
+[[presets]]
+id = "MISU"
+title = "MISU — Make Invalid States Unrepresentable"
+sort_metric = "cyclomatic"
+connections = []
+slug = "make-invalid-states-unrepresentable"
+prompt = """
+Move correctness from runtime checks into the type system, so invalid states
+cannot be constructed and fail at compile time rather than at runtime.
+
+Identify data structures or function signatures in the modules below where invalid
+states are representable at runtime. For each, propose a type-level encoding
+(sum type / enum, newtype, typestate) that makes the invalid state unrepresentable
+by construction.\
+"""
+
+[[presets]]
+id = "CoI"
+title = "CoI — Composition Over Inheritance"
+sort_metric = "items"
+connections = ["common"]
+slug = "composition-over-inheritance"
+prompt = """
+Build behaviour by composing small, focused pieces rather than through deep
+inheritance hierarchies.
+
+Identify large types that accumulate behaviour in the modules below. Propose how to
+decompose them into smaller composable parts, and show how consumers would assemble
+the behaviour they need.\
+"""
+
+[[presets]]
+id = "YAGNI"
+title = "YAGNI — You Aren't Gonna Need It"
+sort_metric = "sloc"
+connections = ["out"]
+slug = "yagni"
+prompt = """
+Build for the problem you have now, not one you imagine you might have later.
+Don't add an abstraction, a generic parameter, or a public API for a hypothetical
+future use.
+
+Identify abstractions, generics, or public APIs in the modules below that were
+added speculatively. For each, assess whether multiple real callers use it today,
+and propose simplification if not.\
+"""
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Metric-lens presets — shared by every language (defined once here, not per
+# language). They rank modules by a single universal coupling/size metric
+# (`hk`/`sloc`/`fan_in`/`fan_out`, computed for all languages) rather than a
+# design principle. `slug` resolves per language to `{doc_base}/{doc_lang}/<slug>.md`
+# (the `principles/<lang>/<slug>.md` doc may not exist yet for every language).
+# ──────────────────────────────────────────────────────────────────────────────
+
+[[presets]]
+id = "HK"
+title = "HK — Henry-Kafura Coupling"
+sort_metric = "hk"
+connections = ["in", "out"]
+slug = "henry-kafura-coupling"
+prompt = """
+These modules carry heavy Henry-Kafura coupling — HK = sloc × (fan_in × fan_out)²,
+where sloc is the module's source lines of code (real code lines, excluding blanks
+and comment-only lines), fan_in is how many modules depend on it, and fan_out is how
+many it depends on.
+A high score is a large module sitting on a busy crossroads of incoming and outgoing
+dependencies, so any change here ripples widely.
+
+For each module below, lower the factor that dominates its HK: shrink the module by
+extracting cohesive pieces, or cut fan-in/fan-out by narrowing its public surface and
+depending on fewer collaborators (introduce an abstraction, move a responsibility).
+Keep existing API contracts intact.\
+"""
+
+[[presets]]
+id = "SLOC"
+title = "SLOC — Module Size"
+sort_metric = "sloc"
+connections = []
+slug = "module-size"
+prompt = """
+These are the largest modules by source lines of code. Size alone is not a defect, but
+oversized files usually bundle several responsibilities and are hard to read, test and
+review.
+
+For each module below, identify the distinct responsibilities it holds and propose how
+to split it into smaller, cohesive modules — each with a single clear purpose — without
+changing external behaviour.\
+"""
+
+[[presets]]
+id = "FANIN"
+title = "Fan-in — Afferent Coupling"
+sort_metric = "fan_in"
+connections = ["in"]
+slug = "fan-in-afferent-coupling"
+prompt = """
+These modules have high fan-in: many other modules depend on them. They are
+load-bearing — a change here forces changes (or re-review) across every dependant, and
+a bug here is widely felt.
+
+For each module below, confirm its public surface is a stable, minimal contract. Narrow
+the API to what callers actually need, split it if different callers use disjoint parts
+(see Interface Segregation), and stabilise the abstractions the rest of the codebase
+leans on.\
+"""
+
+[[presets]]
+id = "FANOUT"
+title = "Fan-out — Efferent Coupling"
+sort_metric = "fan_out"
+connections = ["out"]
+slug = "fan-out-efferent-coupling"
+prompt = """
+These modules have high fan-out: they depend on many other modules. High efferent
+coupling makes a module fragile (it breaks when any dependency changes) and hard to
+test or reuse in isolation.
+
+For each module below, reduce its direct dependencies: depend on abstractions rather
+than concretes (see Dependency Inversion), collapse several fine-grained collaborators
+behind one focused interface, and move logic that pulls in unrelated dependencies into
+a more appropriate module.\
+"""

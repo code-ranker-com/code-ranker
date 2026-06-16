@@ -58,7 +58,7 @@ use std::collections::BTreeMap;
 pub fn default_node_kinds() -> BTreeMap<String, NodeKindSpec> {
     BTreeMap::from([
         (
-            "file".to_string(),
+            node::FILE.to_string(),
             NodeKindSpec {
                 label: Some("File".into()),
                 plural: Some("Files".into()),
@@ -68,7 +68,7 @@ pub fn default_node_kinds() -> BTreeMap<String, NodeKindSpec> {
             },
         ),
         (
-            "external".to_string(),
+            node::EXTERNAL.to_string(),
             NodeKindSpec {
                 label: Some("Library".into()),
                 plural: Some("Libraries".into()),

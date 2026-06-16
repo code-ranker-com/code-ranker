@@ -8,7 +8,7 @@ the attribute key on a node and in the JSON — there is no prefix or namespace.
 
 | group | produced by | where |
 |---|---|---|
-| **Measured from the AST** | the per-language engine counts it during the tree walk | `rust_ts` / `python_ts` / `ecmascript_ts` → a `MetricInputs` |
+| **Measured from the AST** | the shared generic engine counts it during the tree walk | `code-ranker-plugins/src/engine/` (per-language `Dialect`) → a `MetricInputs` |
 | **Measured from the graph** | a graph pass over the dependency edges | `code-ranker-graph` (`hk.rs`, `cycles.rs`) |
 | **Derived** | a CEL `formula` over measured values | `code-ranker-graph/metrics/builtin.toml`, run by the registry engine (`registry.rs`) |
 | **Aggregated** | a mean / percentile / … over all nodes | `stats.rs` (built-in means) + registry graph-scope `agg()` |
@@ -29,6 +29,10 @@ on) function nodes alike. How the registry orders and evaluates formulas (e.g. w
 ---
 
 ## Measured from the AST
+
+> "AST" here is tree-sitter's *concrete* syntax tree (CST) — every token is a
+> node, not a classic AST. We say "AST" loosely; the point is *counted from
+> syntax nodes, not text*.
 
 The engine produces these as a `MetricInputs` for each unit. The Halstead base
 counts and the structural counters are **inputs** to the derived formulas, not

@@ -30,7 +30,7 @@ look-alike (comment / string / identifier / …) and assert no metric moves. The
 set may be a superset of the analyzer's exact increment triggers — guarding a
 non-trigger keyword is harmless, missing a real one is not:
 `if`, `else`, `match`, `while`, `for`, `loop`, `return`, `unsafe`, `&&`, `||`,
-`?`. (The FP matrix in `code-ranker-plugin-rust`'s tests iterates this exact list, and a
+`?`. (The FP matrix in the `rust` module of `code-ranker-plugins`'s tests iterates this exact list, and a
 test asserts the list it uses is documented here — so the two cannot drift.)
 
 Per-function metrics (`cyclomatic`, `cognitive`, `exits`, `args`, `closures`) are
@@ -123,7 +123,7 @@ Two consequences worth remembering:
 other metric is *derived* over the production remainder (lines 1–5 in our
 example) and belongs to the whole unit, not to a single line. They come from
 two sources: the **in-tree `rust_ts` engine** (complexity, Halstead, MI —
-ported from `rust-code-analysis`'s rules, in `code-ranker-plugin-rust`) and the **dependency graph** (`fan_in` /
+ported from `rust-code-analysis`'s rules, in the `rust` module of `code-ranker-plugins`) and the **dependency graph** (`fan_in` /
 `fan_out` / `hk`).
 
 ### `lloc` — logical lines of code

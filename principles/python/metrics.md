@@ -3,7 +3,7 @@
 Python support is **beta**. The complexity metrics use the same in-tree
 `tree-sitter` engine approach as Rust (and the shared `code-ranker-graph` metric
 scaffolding) — here the in-tree `tree-sitter-python`
-engine (`python_ts`, in `code-ranker-plugin-python`, a port of `rust-code-analysis`'s rules), not `syn`, invoked
+engine (`python_ts`, in the `python` module of `code-ranker-plugins`, a port of `rust-code-analysis`'s rules), not `syn`, invoked
 by the Python plugin's `metrics()` step; this file is the Python-specific
 normative spec. For the shared conceptual definitions of each
 metric (what `cyclomatic` / `cognitive` / Halstead / `mi` mean) see

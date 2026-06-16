@@ -16,9 +16,9 @@
 # Spec fields on a measured `[ast.<key>]` / derived `[fields.<key>]` entry:
 #   - `cel`          (derived only) the executable CEL formula, computed at
 #                    snapshot time by the registry engine over the AST inputs.
-#   - `formula_human`/`calc`  display only — `formula_human` is the pretty formula
-#                    shown in the viewer (NOT CEL); `calc` is the JS the viewer can
-#                    re-run client-side.
+#   - `formula_human`/`formula_js`  display only — `formula_human` is the pretty
+#                    formula shown in the viewer (NOT CEL); `formula_js` is the JS
+#                    the viewer can re-run client-side.
 #   - `label` is the base display name; `name` (the full name) and `short` (the
 #                    column abbreviation) each default to `label` when omitted, so
 #                    an entry only spells out the names that actually differ.
@@ -142,6 +142,7 @@ category = "loc"
 value_type = "int"
 label = "Test"
 name = "Test lines"
+short = "TLOC"
 description = "Test lines of code — the lines inside `#[cfg(test)]` / `#[test]` / `#[bench]` items (Rust), removed before the production metrics are measured. The complement of `sloc`: test code never inflates a file's size, HK, or complexity."
 category = "loc"
 
@@ -154,7 +155,7 @@ short = "H.bugs"
 description = "Estimated delivered bugs — a rough predictor of defect density."
 cel = "eta2 > 0.0 ? pow(effort, 2.0 / 3.0) / 3000.0 : 0.0"
 formula_human = "effort^⅔ ÷ 3000"
-calc = "effort ** (2/3) / 3000"
+formula_js = "effort ** (2/3) / 3000"
 direction = "lower_better"
 category = "halstead"
 
@@ -224,7 +225,7 @@ short = "H.time(s)"
 description = "Estimated implementation time, in seconds."
 cel = "effort / 18.0"
 formula_human = "effort ÷ 18"
-calc = "effort / 18"
+formula_js = "effort / 18"
 direction = "lower_better"
 category = "halstead"
 
@@ -247,7 +248,7 @@ short = "H.vol"
 description = "Algorithm size in bits, from distinct operators and operands."
 cel = "vocabulary > 0.0 ? length * log2(vocabulary) : 0.0"
 formula_human = "length × log₂(vocabulary)"
-calc = "length * Math.log2(vocabulary)"
+formula_js = "length * Math.log2(vocabulary)"
 direction = "lower_better"
 category = "halstead"
 

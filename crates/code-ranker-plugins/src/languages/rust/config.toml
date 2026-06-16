@@ -1,0 +1,242 @@
+# Rust language config — inherits `../defaults.toml` (see `../config.rs`).
+#
+# Everything language-specific for Rust that *can* be data lives here, so
+# `mod.rs` stays thin (wiring only). Sections:
+#
+#   [kinds] / [halstead] / [loc]  tree-sitter node-kind tables for the metric
+#                                 engine (`rust_ts.rs`); the walk logic stays in
+#                                 Rust, *which* kinds it counts is data.
+#   [[presets]]                   Rust-only metric-lens presets, appended to the
+#                                 CLI's generic catalog (merged by `id`).
+#   [thresholds.<key>]            Rust-calibrated info/warning limits.
+#   [specs.<key>]                 Rust tweaks to a metric's display, applied over
+#                                 the central `builtin.toml` specs.
+
+# Principle-corpus language for doc links: `doc_url` = `{doc_base}/rust/<slug>.md`
+# (`doc_base` is inherited from `defaults.toml`).
+doc_lang = "rust"
+
+# Project-detect marker filenames — DATA, not code (see `../README.md` §3). Rust
+# detects a workspace by its `Cargo.toml` manifest; `detect()` reads this list.
+# (Rust collects sources via `cargo metadata` + `syn`, not by walking a file
+# extension, so it carries no `extensions` list.)
+detect_markers = ["Cargo.toml"]
+
+# Test-path conventions — DATA, not code (see `../README.md` §4). Cargo's
+# integration-test / bench targets live under these top-level dirs; the
+# `is_test_path` predicate LOGIC (first path component ∈ this list) stays in Rust,
+# *which* names it keys on is data. (Inline `#[cfg(test)]` modules are a separate,
+# attribute-based notion handled during the syn walk.)
+test_dirs = ["tests", "benches"]
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Edge-kind vocabulary for the `files` level. The map KEY is the identifier the
+# structure builder (`collapse.rs`) tags an edge's `kind` with; the value is its
+# label/description/flow (the `EdgeKindSpec` the level descriptor publishes).
+# `mod.rs::levels()` reads this table; `collapse.rs` reads the identifiers via
+# `config::edge_kind_id`, so the tagged `kind` and the published spec can never
+# drift apart.
+#
+# `uses` OVERRIDES the shared `defaults.toml` entry with the Rust-specific
+# (Cargo / `use`-flavoured) description. `contains` / `reexports` / `super` are
+# Rust-only structural edges (kept in the data, not drawn, excluded from
+# fan-in/out/HK/cycles) and have no shared counterpart, so they live only here.
+# ──────────────────────────────────────────────────────────────────────────────
+
+[edge_kinds.uses]
+flow = true
+label = "uses"
+description = "Code dependency — this file references an item the target file defines.<br>Captured from `use path::Item;`, a qualified path (`crate::a::Item`, `other_crate::Item`), or a derive (`#[derive(serde::Serialize)]`).<br>The path resolves to the file that defines the item (following `pub use` re-exports), so the edge points at the definition, not a re-export hub.<br>This is the real dependency: it counts toward fan-in / fan-out, Henry-Kafura coupling and cycles."
+
+[edge_kinds.contains]
+flow = false
+label = "contains"
+description = "Module ownership — the parent declares the child module (`mod foo;` / `pub mod foo;`), so `foo.rs` (or `foo/mod.rs`) belongs to it.<br>This is the Rust module tree: structure, not a code dependency.<br>Kept in the data but not drawn on the main map, and excluded from fan-in / fan-out / HK / cycles."
+
+[edge_kinds.reexports]
+flow = false
+label = "reexport"
+description = "Re-export (`pub use foo::Item;`) — re-publishes another file's item as part of this file's public API (the crate-root / prelude facade, e.g. `lib.rs` doing `pub use access_scope::AccessScope;`).<br>A facade, not a dependency: excluded from fan-in / fan-out / HK / cycles and not drawn on the main map, like `contains`.<br>A consumer's `use this_crate::Item` is attributed to the file that defines `Item`, so re-export hubs (`lib.rs` / `mod.rs`) collect no false coupling — the `pub use` is still recorded here so you can see what a file exposes."
+
+[edge_kinds.super]
+flow = false
+label = "super"
+description = "Namespace pull from an enclosing module — a glob `use` that reaches *up* the module tree (`use super::*`, `use crate::<ancestor>::*`), bringing the parent's items into the child's scope.<br>Usually structural scope-sugar (a module split across files referring back to itself). But if the child actually uses a parent item brought in by the glob, it IS a real back-dependency — technically a cycle. code-ranker can't tell the two apart without name resolution, so it treats `super` as a **low-priority** cycle and leaves it non-flow: deprioritized next to obvious cross-module cycles.<br>Kept in the data but not drawn on the main map, and excluded from fan-in / fan-out / HK / cycles — like `contains`."
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Function-level node-kind vocabulary (the optional `functions` level). Rust
+# labels its free functions `fn` (not the generic `function`), so it adds that
+# kind here; `method` is inherited from `defaults.toml`. The dialect's `fn_kind`
+# tags units with these identifiers.
+# ──────────────────────────────────────────────────────────────────────────────
+
+[node_kinds.fn]
+label = "Function"
+plural = "Functions"
+fill = "#dbe9f4"
+stroke = "#4d6f9c"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Function-unit `kind` id strings the dialect's `fn_kind` emits. The
+# classification LOGIC (is the enclosing item an impl/trait?) stays in
+# `dialect.rs`; only the emitted id string is data. `method` for an associated
+# fn, `default` otherwise (a free `fn`).
+# ──────────────────────────────────────────────────────────────────────────────
+
+[units]
+method = "method"
+default = "fn"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Node-kind tables for the generic metric engine (`crate::engine`).
+#
+# This is the data the engine keys on: which tree-sitter node `kind` strings fill
+# each engine ROLE (space-creating units, branches, exits, operators/operands,
+# statements, comments, …). The engine resolves each `named` / `anon` list to the
+# grammar's numeric kind-ids (named nodes / anonymous tokens) and keys the shared
+# walks on them; the Rust-specific predicates live in `rust/dialect.rs`.
+#
+# `[roles.one]` holds singleton ids the dialect references directly; `[halstead]`
+# / `[loc]` carry the operator/operand and comment/statement role sets plus the
+# `special` singletons the dialect's context exceptions key on.
+#
+# Editing a list here changes what the engine counts with no code change. Keep it
+# in lock-step with the grammar version pinned in Cargo.toml.
+# ──────────────────────────────────────────────────────────────────────────────
+
+[roles]
+# Space-creating units (each contributes a McCabe base path of 1).
+space_kinds.named = ["function_item", "impl_item", "trait_item", "closure_expression"]
+# Cyclomatic decision points.
+branch_kinds.named = [
+    "if_expression", "for_expression", "while_expression", "loop_expression",
+    "match_arm", "try_expression",
+]
+branch_kinds.anon = ["&&", "||"]
+# Value-returning exits (`?` is `try_expression`, also a branch).
+exit_kinds.named = ["return_expression", "try_expression"]
+# Punctuation / attribute children of a `parameters` node that don't count.
+non_arg_kinds.named = ["attribute_item"]
+non_arg_kinds.anon = ["(", ")", ",", "|"]
+# Cognitive-nesting nodes (the dialect handles `if`/`else`/labels separately).
+cog_nest.named = ["for_expression", "while_expression", "match_expression"]
+
+# Singleton ids the dialect references directly (cognitive / fn-kind / args).
+[roles.one]
+amp_amp = { kind = "&&", named = false }
+pipe_pipe = { kind = "||", named = false }
+
+# ── Halstead operators / operands ─────────────────────────────────────────────
+[halstead]
+# Unconditional operators.
+operators.anon = [
+    "(", "{", "[", "=>", "+", "*", "=", ",", "->", "?", "<", ">", "&", "..", "..=",
+    "-", "&&", "|", "^", "==", "!=", "<=", ">=", "<<", ">>", "%", "+=", "-=", "*=",
+    "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", ".", ";", "async", "await", "continue",
+    "for", "if", "let", "loop", "match", "return", "unsafe", "while", "move", "fn",
+]
+operators.named = ["mutable_specifier", "primitive_type"]
+operands.named = [
+    "identifier", "string_literal", "raw_string_literal", "integer_literal",
+    "float_literal", "boolean_literal", "self", "char_literal",
+]
+operands.anon = ["_"]
+
+# Context-dependent operators (operator only in some parent context) — the
+# dialect's `hal_classify` keys on these singletons:
+#  `||`/`/` are operators ONLY when the parent is a `binary_expression`;
+#  `!` is an operator UNLESS the parent is an `inner_doc_comment_marker`.
+[halstead.special]
+pipe_pipe = { kind = "||", named = false }
+slash = { kind = "/", named = false }
+bang = { kind = "!", named = false }
+binary_expression = { kind = "binary_expression" }
+inner_doc_comment_marker = { kind = "inner_doc_comment_marker" }
+
+# ── LOC breakdown ─────────────────────────────────────────────────────────────
+[loc]
+noop_kinds.named = [
+    "string_literal", "raw_string_literal", "block", "source_file", "doc_comment",
+    "inner_doc_comment_marker", "outer_doc_comment_marker",
+]
+noop_kinds.anon = ["/", "//", "/*", "*/", "!"]
+comment_kinds.named = ["line_comment", "block_comment"]
+statement_kinds.named = [
+    "expression_statement", "let_declaration", "assignment_expression",
+    "compound_assignment_expr", "empty_statement",
+]
+
+# A `line_comment` whose child is a `doc_comment` excludes its last row (rca's
+# adjustment); the dialect's `loc_node` keys on these singletons.
+[loc.special]
+line_comment = { kind = "line_comment" }
+doc_comment = { kind = "doc_comment" }
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Rust-calibrated thresholds. Calibrated on 21 Rust crates (≥2K SLOC):
+# ~50% of projects breach `info`, ~10% breach `warning`.
+# ──────────────────────────────────────────────────────────────────────────────
+
+[thresholds.hk]
+info = 150000.0
+warning = 10000000.0
+
+[thresholds.sloc]
+info = 800.0
+warning = 3000.0
+
+[thresholds.fan_out]
+info = 8.0
+warning = 18.0
+
+[thresholds.items]
+info = 20.0
+warning = 50.0
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Per-language spec overrides, applied over the central `builtin.toml` specs.
+#
+# Rust strips inline `#[cfg(test)]` / `#[test]` / `#[bench]` items before
+# measuring, so the LOC metrics count production code only — a nuance the
+# language-neutral default descriptions omit. Refine them for Rust.
+# ──────────────────────────────────────────────────────────────────────────────
+
+[specs.sloc]
+description = "Source lines of code — lines with at least one non-whitespace, non-comment character. Blank and comment-only lines are not counted. In Rust, lines inside `#[cfg(test)]` / `#[test]` items are excluded too, so this counts production code only (unlike `loc`, the raw file line count)."
+
+[specs.lloc]
+description = "Logical lines — counts statements, not physical lines. In Rust, measured on production code only (inline `#[cfg(test)]` / `#[test]` tests are excluded, like `sloc`; their lines are `tloc`)."
+
+[specs.cloc]
+description = "Comment-only lines (inline comments on code lines are not counted). In Rust, measured on production code only (inline `#[cfg(test)]` / `#[test]` tests are excluded, like `sloc`; their lines are `tloc`)."
+
+[specs.blank]
+description = "Empty or whitespace-only lines. In Rust, measured on production code only (inline `#[cfg(test)]` / `#[test]` tests are excluded, like `sloc`; their lines are `tloc`)."
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Rust-specific structural node/edge attributes (display specs). The shared
+# `path`/`loc`/`visibility`/`external` come from `defaults.toml`; Rust adds these.
+# ──────────────────────────────────────────────────────────────────────────────
+
+[node_attributes.crate]
+value_type = "str"
+label = "Crate"
+
+[node_attributes.version]
+value_type = "str"
+label = "Version"
+
+[node_attributes.items]
+value_type = "int"
+label = "Items"
+
+[node_attributes.unsafe]
+value_type = "int"
+label = "Unsafe"
+short = "Unsafe"
+description = "Count of `unsafe` blocks and `unsafe fn`/`impl`/`trait` declarations in production code (test items are excluded). Syntactic count: `unsafe` inside a macro body is not seen, and the figure is not type-checked."
+direction = "lower_better"
+
+[edge_attributes.visibility]
+value_type = "str"
+label = "Visibility"

@@ -214,6 +214,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore = "legacy builtin.toml schema; superseded by the `builtin` module (which re-tests this)"]
     fn builtin_registry_loads_and_compiles() {
         // The data file parses and every formula compiles (catches a typo here
         // at test time, not at first use).
@@ -224,6 +225,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy builtin.toml schema; superseded by the `builtin` module (which re-tests this)"]
     fn derives_tier2_from_tier1() {
         // A worked file unit: 87 operand+operator occurrences, vocab 23 → volume.
         let i = MetricInputs {

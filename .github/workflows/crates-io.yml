@@ -37,7 +37,7 @@ jobs:
           # right before publishing; cargo auto-detects a package-root README.md
           # when no `readme` field is set. `--allow-dirty` tolerates the copy.
           for d in crates/*/; do cp README.md "$d/README.md"; done
-          for c in code-ranker-plugin-api code-ranker-graph code-ranker-ecmascript-core code-ranker-plugin-javascript code-ranker-plugin-python code-ranker-plugin-rust code-ranker-plugin-typescript code-ranker-viewer code-ranker; do
+          for c in code-ranker-plugin-api code-ranker-graph code-ranker-plugins code-ranker-viewer code-ranker; do
             echo "==> publishing $c"
             attempt=0
             until cargo publish -p "$c" --allow-dirty 2>&1 | tee /tmp/pub-$c.log | grep -qE "Published"; do

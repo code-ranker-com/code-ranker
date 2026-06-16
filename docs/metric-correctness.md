@@ -17,6 +17,11 @@ missed). This is the **Metric Accuracy** requirement
 (DESIGN §2.1): metrics are read from the parsed syntax tree, never matched as
 text.
 
+> The parsed tree is tree-sitter's *concrete* syntax tree (CST) — every token is
+> a node — not a classic AST. "AST" throughout these docs (and the
+> "AST-Accurate" principle name) means exactly *counted from syntax nodes, not
+> text*; that property holds for the CST, so the term is used loosely.
+
 The product output is an anomaly shortlist a human or AI agent acts on, so a
 silently miscounted metric is a silently wrong ranking — and it hides because the
 number still looks plausible: a green golden freezes whatever value it was given,
@@ -45,16 +50,16 @@ four homes, and a test lives in the same crate as the computation it checks:
 
 | metric family | home | language scope |
 |---|---|---|
-| **measured counting**: `cognitive` `exits` `args` `closures`; Halstead base counts (η₁/η₂/N₁/N₂); LOC (`sloc` `lloc` `cloc` `blank` `tloc`); `spaces`/`branches`/`span_sloc` | per-language engines (one in-tree `tree-sitter` engine per crate: `rust_ts` / `python_ts` / `ecmascript_ts`), called from each plugin's `metrics()`, returning a `MetricInputs` | **shared, multi-language** |
+| **measured counting**: `cognitive` `exits` `args` `closures`; Halstead base counts (η₁/η₂/N₁/N₂); LOC (`sloc` `lloc` `cloc` `blank` `tloc`); `spaces`/`branches`/`span_sloc` | one shared generic `tree-sitter` engine (`code-ranker-plugins/src/engine/`, parameterized per language by a `Dialect` + `config.toml`), called from each plugin's `metrics()`, returning a `MetricInputs` | **shared, multi-language** |
 | **derived formulas** (`cyclomatic`, Halstead `volume`/`effort`/`time`/`bugs`/`length`/`vocabulary`, `mi`/`mi_sei`) and **aggregates** | **data** — CEL formulas + specs in `code-ranker-graph/metrics/builtin.toml`, evaluated by the registry engine (`registry.rs`): derived metrics per node (written by `write_metrics`), aggregates over the whole node set (graph-scope, into the `stats` block). No derived-metric name is hardcoded in Rust. | language-agnostic |
-| dependency edges (`uses` `external` `reexports` `super` `contains`); `unsafe`; `items`; `loc` | each `code-ranker-plugin-<lang>` (its own `syn` / tree-sitter walk) | **per-language** |
+| dependency edges (`uses` `external` `reexports` `super` `contains`); `unsafe`; `items`; `loc` | each language module of `code-ranker-plugins` (its own `syn` / tree-sitter walk) | **per-language** |
 | coupling (`fan_in` `fan_out` `fan_out_external` `hk`); `cycle` | `code-ranker-graph` (operates on the abstract graph) | language-agnostic |
 
-So a **measured count** is added / fixed / tested in the per-language engines; a
+So a **measured count** is added / fixed / tested in the shared generic engine; a
 **derived formula** (or aggregate) is added by editing `metrics/builtin.toml` (or,
 for a user metric, `[metrics.<key>]` in config) — no Rust change — and tested in
 `code-ranker-graph` (`registry.rs` / `metrics.rs`); an edge / `unsafe` / `items`
-metric in the relevant plugin crate; coupling / cycle in `code-ranker-graph`.
+metric in the relevant plugin module of `code-ranker-plugins`; coupling / cycle in `code-ranker-graph`.
 There is no single "metric tests" crate — tests follow the computation. The same
 registry runs per **unit**, so file nodes and (with `[levels] functions` on)
 function nodes share one definition.
@@ -77,7 +82,7 @@ A `MetricDef` carries:
 
 - `formula` — a CEL expression over **measured inputs** and **other metric keys**,
   plus a small host standard library (`log2` / `ln` / `pow` / `sqrt` / `sin` / …)
-  the language lacks. Each host function is the exact `f64` operation the engines
+  the language lacks. Each host function is the exact `f64` operation the engine
   used before, so a transcribed formula is **bit-identical**.
 - `scope` — `node` (computed per unit) or `graph` (an aggregate; see below).
 - spec fields (`label` / `name` / `short` / `description` / `direction` / `group`
@@ -169,44 +174,45 @@ Two paths, depending on the home above.
 
 ### A1. A derived metric — edit data, not Rust
 
-A derived metric is a CEL `formula` plus its display spec. Add it in
-`code-ranker-graph/metrics/builtin.toml` (built-in) or under `[metrics.<key>]` in
-`code-ranker.toml` (user metric):
+A derived metric is a CEL `cel` formula plus its display spec — both live in one
+`[fields.<key>]` table. Add it in `code-ranker-graph/metrics/builtin.toml`
+(built-in) or under `[metrics.<key>]` in `code-ranker.toml` (user metric):
 
 ```toml
-[specs.<key>]            # display spec (label / name / short / description /
-value_type  = "float"   # direction / group / omit_at)
-label       = "…"
-direction   = "lower_better"
-group       = "halstead"
-
-[formulas]
-<key> = "…"             # CEL over measured inputs + other metrics; host math:
+[fields.<key>]          # display spec + the executable formula, together
+value_type    = "float"
+label         = "…"
+direction     = "lower_better"
+category      = "halstead"
+cel           = "…"     # CEL over measured inputs + other fields; host math:
                         # log2 / ln / pow / sqrt / sin / …
+formula_human = "…"     # display only — the pretty formula shown in the viewer
+formula_js    = "…"     # display only — the JS the viewer re-runs client-side
 ```
 
-- The formula reads measured inputs (`eta1`/`eta2`/`n1`/`n2`/`spaces`/`branches`/
-  `sloc`/`cloc`/`span_sloc`/…) and earlier metrics by key; the registry engine
+- The `cel` formula reads measured inputs (`eta1`/`eta2`/`n1`/`n2`/`spaces`/`branches`/
+  `sloc`/`cloc`/`span_sloc`/…) and earlier fields by key; the registry engine
   (`registry.rs`) topologically orders by dependency and rejects a cycle at load.
 - `omit_at` on the spec is the no-signal value (`0` for most; `1` for
   `cyclomatic`); emission and the published spec read the same value.
 - A value not expressible as a formula over one unit's inputs is **not** derived —
-  if it needs a new AST count, add that count in the engines first (A1b), then a
+  if it needs a new AST count, add that count in the engine first (A1b), then a
   formula that consumes it.
 
-**A1b. A new measured count** (when a formula needs a number the engines don't
-measure): add the field to `code_ranker_graph::MetricInputs` and count it during
-the tree walk in each per-language engine (`rust_ts` / `python_ts` /
-`ecmascript_ts`). The same engines feed both the file unit and (with the
-`functions` level on) each function unit, so a count is measured once and the
-formula applies per unit.
+**A1b. A new measured count** (when a formula needs a number the engine doesn't
+measure): add the field to `code_ranker_graph::MetricInputs`, declare it under
+`[ast.<key>]` in `builtin.toml`, and count it during the tree walk in the shared
+generic engine (`code-ranker-plugins/src/engine/`, adjusting the relevant
+`Dialect`/`config.toml` role tables as needed). The engine feeds both the file
+unit and (with the `functions` level on) each function unit, so a count is
+measured once and the formula applies per unit.
 
 ### A2. A plugin-computed metric (worked example: `unsafe`)
 
 Computed by a language plugin during its source walk. The plugin already ships
 two such per-file integers — **`loc`** and **`items`** — so a new one is *not*
 new machinery; it rides the same four touchpoints. All paths below are in
-`crates/code-ranker-plugin-rust/src/`. The split to keep in mind:
+`crates/code-ranker-plugins/src/rust/`. The split to keep in mind:
 
 - the attribute **value** reaches JSON purely because it sits in `node.attrs`
   (touchpoints 1–3);
@@ -257,7 +263,7 @@ Then write it onto the owning module node where `loc` / `item_count` are set:
 (not a text scan) is exactly what keeps `super_unsafe_fn`, a `// unsafe` comment,
 or a `"unsafe"` string from counting — see the AST-Accurate principle.
 
-**3. Carry it through the module→file collapse** — `lib.rs`. `loc` / `items` are
+**3. Carry it through the module→file collapse** — `rust/mod.rs`. `loc` / `items` are
 written in **two** branches (the *insert* branch that first creates the file node
 and the *update* branch that touches an existing one). Mirror the new field in
 **both**, gated at its no-signal value:
@@ -270,7 +276,7 @@ if let Some(u) = node.unsafe_count {
 }
 ```
 
-**4. Declare the attribute spec** — `lib.rs`, `fn levels()`, in the
+**4. Declare the attribute spec** — `rust/mod.rs`, `fn levels()`, in the
 `node_attributes` block next to `loc` / `items`:
 
 ```rust
@@ -355,8 +361,8 @@ real cost is the e2e binary spawns (~2.3 s); every unit-test binary is ~0 s.**
 
 Consequences for the layers:
 
-- **1 / 2 / 3 are essentially free.** The analysis crates (the plugins,
-  `code-ranker-ecmascript-core`, `code-ranker-graph`) are library-callable in-process — no binary,
+- **1 / 2 / 3 are essentially free.** The analysis crates (`code-ranker-plugins`
+  with its language modules, `code-ranker-graph`) are library-callable in-process — no binary,
   no `cli` — so the FP / FN core costs ~nothing. Spend the budget here: thousands
   of metamorphic / generated cases. Cap per-PR property-case counts; let nightly
   run the same generators far deeper.
@@ -379,13 +385,13 @@ The home crate is always the one that **computes** the metric.
 
 | home | test location | layers | covers | status |
 |---|---|---|---|---|
-| `code-ranker-plugin-rust` / `-python` / `-ecmascript-core` (one per engine) | each crate's `#[cfg(test)]` (e.g. `metrics_tests` / `lib.rs` tests) | 1, 2, 3 | `cyclomatic` `cognitive` `exits` `args` `closures`, Halstead, LOC, `mi`/`mi_sei` — driven via a local `metric_of` (the crate's own engine) on per-language snippets: keyword-injection invariance (FP), +1-construct increment (FN / magnitude), hand-labelled exact-count anchors | 1 ✅ (FP matrix 9 positions × the per-language **trigger set** from the spec, branch-form FN, cross-language); 2 ✅ (deterministic generator: construct count = ground truth over a grid); 3 ✅ (`complexity_absolute_anchors_hand_derived`: exact integer counts hand-derived from the spec; `complexity_frozen_scale_anchors`: cognitive/Halstead/MI frozen scale anchors). **By design:** the whole-file `cyclomatic` and `exits` exceed a naive textbook reading — we match `rust-code-analysis` (the **algorithm of record** our engines port), and the spec states this explicitly. (a) `cyclomatic` = `spaces + branches` — the file unit's base path (1) plus each function space and its decision points. Textbook McCabe over functions (`V(G)=E−N+2P`) carries no container term, but the analyzer counts the file unit, and `mi`'s formula consumes the same `cyclomatic` value, so the two stay coherent. (b) `exits` has **no canonical theory**, so the analyzer's rule (each `return`/`?` + a value-returning `-> T` exit) is the source of truth. Both documented in §cyclomatic / §exits with citations; code emits the analyzer's values unchanged, goldens unchanged. |
-| `code-ranker-plugin-rust` | `src/module_graph/walk.rs` + `resolve.rs` `#[cfg(test)]` | 1, 3 | `unsafe` `items` `loc` + edge detection: a keyword in an identifier / comment / string / macro body → no count / edge; a real construct or `use` → exact | 1 ✅ (`unsafe` + bare-path FP); 2 ✅ (collector scaling: N real paths + noise → N); broader positions ⏳ |
-| `code-ranker-plugin-python` / `-javascript` / `-typescript` | each plugin's `#[cfg(test)]` | 1, 2, 3 | per-language edge detection + FP invariance (a path inside a string / comment → no edge); edge scaling (n imports → n edges) | 1 ✅ (import-path FP); 2 ✅ (edge scaling) |
+| `code-ranker-plugins` `rust` / `python` / `ecmascript` modules (one per engine) | each module's `#[cfg(test)]` (e.g. `metrics_tests` / `mod.rs` tests) | 1, 2, 3 | `cyclomatic` `cognitive` `exits` `args` `closures`, Halstead, LOC, `mi`/`mi_sei` — driven via a local `metric_of` (the crate's own engine) on per-language snippets: keyword-injection invariance (FP), +1-construct increment (FN / magnitude), hand-labelled exact-count anchors | 1 ✅ (FP matrix 9 positions × the per-language **trigger set** from the spec, branch-form FN, cross-language); 2 ✅ (deterministic generator: construct count = ground truth over a grid); 3 ✅ (`complexity_absolute_anchors_hand_derived`: exact integer counts hand-derived from the spec; `complexity_frozen_scale_anchors`: cognitive/Halstead/MI frozen scale anchors). **By design:** the whole-file `cyclomatic` and `exits` exceed a naive textbook reading — we match `rust-code-analysis` (the **algorithm of record** our engines port), and the spec states this explicitly. (a) `cyclomatic` = `spaces + branches` — the file unit's base path (1) plus each function space and its decision points. Textbook McCabe over functions (`V(G)=E−N+2P`) carries no container term, but the analyzer counts the file unit, and `mi`'s formula consumes the same `cyclomatic` value, so the two stay coherent. (b) `exits` has **no canonical theory**, so the analyzer's rule (each `return`/`?` + a value-returning `-> T` exit) is the source of truth. Both documented in §cyclomatic / §exits with citations; code emits the analyzer's values unchanged, goldens unchanged. |
+| `code-ranker-plugins` `rust` module | `src/rust/module_graph/walk.rs` + `resolve.rs` `#[cfg(test)]` | 1, 3 | `unsafe` `items` `loc` + edge detection: a keyword in an identifier / comment / string / macro body → no count / edge; a real construct or `use` → exact | 1 ✅ (`unsafe` + bare-path FP); 2 ✅ (collector scaling: N real paths + noise → N); broader positions ⏳ |
+| `code-ranker-plugins` `python` / `javascript` / `typescript` modules | each plugin module's `#[cfg(test)]` | 1, 2, 3 | per-language edge detection + FP invariance (a path inside a string / comment → no edge); edge scaling (n imports → n edges) | 1 ✅ (import-path FP); 2 ✅ (edge scaling) |
 | `code-ranker-graph` | `src/hk.rs` / `src/cycles.rs` `#[cfg(test)]` | algorithmic | `fan_in` / `fan_out` / `hk` aggregation, `cycle` classification (mutual / chain) — graph maths, not a text-FP class | ✅ |
 | `code-ranker-cli` | `tests/e2e.rs` | 3 (realistic), golden, coverage | full-pipeline JSON pinned per language; the `every_central_metric_is_exercised_per_language` coverage invariant; one binary smoke test | ✅ |
 | `code-ranker-cli` or a new `xtask` | `tests/differential.rs`, feature-gated / `#[ignore]` | 4 | vs `cargo-geiger` (`unsafe`), `tokei` / `scc` (LOC), `rustc` / `rust-analyzer` (edges) over a small corpus | **not planned** (escalation only) |
-| repo tooling | `cargo-mutants` config + CI job | 5 | mutate the per-language metric engines / plugin detectors, assert a test fails | **not planned** (escalation only) |
+| repo tooling | `cargo-mutants` config + CI job | 5 | mutate the shared generic metric engine / plugin detectors, assert a test fails | **not planned** (escalation only) |
 
 How to read it: the **top five rows are the implemented per-PR suite** (in-process
 unit + lean e2e, ≤ 20 s); the **bottom two are not planned** — escalation options

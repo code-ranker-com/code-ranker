@@ -275,10 +275,7 @@ dependencies = [
  "clap",
  "code-ranker-graph",
  "code-ranker-plugin-api",
- "code-ranker-plugin-javascript",
- "code-ranker-plugin-python",
- "code-ranker-plugin-rust",
- "code-ranker-plugin-typescript",
+ "code-ranker-plugins",
  "code-ranker-viewer",
  "globset",
  "serde",
@@ -287,21 +284,6 @@ dependencies = [
  "toml",
  "walkdir",
  "which",
-]
-
-[[package]]
-name = "code-ranker-ecmascript-core"
-version = "3.0.0-alpha.1"
-dependencies = [
- "anyhow",
- "code-ranker-graph",
- "code-ranker-plugin-api",
- "code-ranker-test-support",
- "tempfile",
- "tree-sitter",
- "tree-sitter-javascript",
- "tree-sitter-typescript",
- "walkdir",
 ]
 
 [[package]]
@@ -327,57 +309,26 @@ dependencies = [
 ]
 
 [[package]]
-name = "code-ranker-plugin-javascript"
-version = "3.0.0-alpha.1"
-dependencies = [
- "anyhow",
- "code-ranker-ecmascript-core",
- "code-ranker-plugin-api",
- "code-ranker-test-support",
- "tempfile",
- "tree-sitter-javascript",
-]
-
-[[package]]
-name = "code-ranker-plugin-python"
-version = "3.0.0-alpha.1"
-dependencies = [
- "anyhow",
- "code-ranker-graph",
- "code-ranker-plugin-api",
- "code-ranker-test-support",
- "tempfile",
- "tree-sitter",
- "tree-sitter-python",
- "walkdir",
-]
-
-[[package]]
-name = "code-ranker-plugin-rust"
+name = "code-ranker-plugins"
 version = "3.0.0-alpha.1"
 dependencies = [
  "anyhow",
  "cargo_metadata",
  "code-ranker-graph",
  "code-ranker-plugin-api",
+ "code-ranker-test-support",
  "proc-macro2",
+ "serde",
  "syn",
  "tempfile",
+ "toml",
  "tree-sitter",
+ "tree-sitter-javascript",
+ "tree-sitter-python",
  "tree-sitter-rust",
- "which",
-]
-
-[[package]]
-name = "code-ranker-plugin-typescript"
-version = "3.0.0-alpha.1"
-dependencies = [
- "anyhow",
- "code-ranker-ecmascript-core",
- "code-ranker-plugin-api",
- "code-ranker-test-support",
- "tempfile",
  "tree-sitter-typescript",
+ "walkdir",
+ "which",
 ]
 
 [[package]]

@@ -450,9 +450,9 @@ workspaces. The plugin MUST:
   design principle, documented under `principles/rust/`
 
 **Rationale**: Rust is the primary use-case for the initial release.
-The `code-ranker-plugin-rust` crate (cargo metadata + `syn`, including the
-module→file collapse pass) implements this plugin. Removing rust-analyzer
-makes the Rust path fast and the binary light.
+The `rust` module of the `code-ranker-plugins` crate (cargo metadata + `syn`,
+including the module→file collapse pass) implements this plugin. Removing
+rust-analyzer makes the Rust path fast and the binary light.
 
 **Actors**: `cpt-code-ranker-actor-developer`
 
@@ -523,8 +523,9 @@ become `External` library nodes (`ext:<top-level-package>`, e.g.
 `numpy`) reached by a `uses` edge flagged `external: true`. Per-file
 complexity metrics (cyclomatic, cognitive, Halstead, MI, LOC, functions,
 nexits, nargs) are annotated on each `File` node by the plugin's `metrics()`
-step, which runs its in-tree `tree-sitter-python` engine (`python_ts`) and writes
-the result via `code_ranker_graph::write_metrics`.
+step, which runs the shared generic engine via the Python `Dialect`
+(`engine::compute` → a `MetricInputs`) and writes the derived metrics via
+`code_ranker_graph::write_metrics`.
 
 **JavaScript / TypeScript plugin** (`--plugin javascript`) is shipped as a
 built-in in `code-ranker-cli`; one plugin handles `.js`, `.jsx`, `.ts`, and
@@ -934,7 +935,7 @@ as a self-contained HTML report.
 |------------|-------------|----------|
 | `cargo_metadata` crate | Cargo workspace enumeration (local vs. external crates) | p1 |
 | `syn` crate | Rust source parsing for the module tree and `use` statements | p1 |
-| `tree-sitter` (+ `-rust` / `-python` / `-javascript` / `-typescript`) | Source parsing for the in-tree per-language tier-1 metric engines (`rust_ts` / `python_ts` / `ecmascript_ts` — faithful ports of `rust-code-analysis`'s node-kind rules) and for the Python / JavaScript / TypeScript plugins | p1 |
+| `tree-sitter` (+ `-rust` / `-python` / `-javascript` / `-typescript`) | Source parsing for the shared generic tier-1 metric engine (`code-ranker-plugins/src/engine/`, parameterized per language by a `Dialect` — a single faithful port of `rust-code-analysis`'s node-kind rules) and for the Python / JavaScript / TypeScript plugins | p1 |
 | `cel` crate | Evaluates the declarative tier-2 metric formulas (`metrics/builtin.toml`) and user `[metrics.<key>]` formulas; the metric registry engine | p1 |
 | Python 3.9+ | Runtime for the built-in Python language plugin | p3 |
 

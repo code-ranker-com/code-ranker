@@ -36,7 +36,9 @@ impl<'ast> syn::visit::Visit<'ast> for CratePathCollector {
         // qualified derive (e.g. `#[derive(serde::Serialize)]` with no `use
         // serde`) would otherwise produce no edge. Parse the derive list as a
         // comma-separated path list and record each qualified path.
-        if attr.path().is_ident("derive")
+        if attr
+            .path()
+            .is_ident(crate::languages::rust::cfg::SYN_DERIVE.as_str())
             && let Ok(paths) = attr.parse_args_with(
                 syn::punctuated::Punctuated::<syn::Path, syn::Token![,]>::parse_terminated,
             )
@@ -118,11 +120,17 @@ fn convert_visibility(v: &SynVis) -> Visibility {
                 .map(|s| s.ident.to_string())
                 .collect::<Vec<_>>()
                 .join("::");
-            match s.as_str() {
-                "crate" => Visibility::Crate,
-                "super" => Visibility::Super,
-                "self" | "" => Visibility::Private,
-                _ => Visibility::Restricted { path: s },
+            // Path keywords are DATA (`[path_keywords]`); the empty path (a bare
+            // `pub(in)` / inherited) is a syntax case, kept as `is_empty()`.
+            let ss = s.as_str();
+            if ss == crate::languages::rust::cfg::PK_CRATE.as_str() {
+                Visibility::Crate
+            } else if ss == crate::languages::rust::cfg::PK_SUPER.as_str() {
+                Visibility::Super
+            } else if ss == crate::languages::rust::cfg::PK_SELF.as_str() || ss.is_empty() {
+                Visibility::Private
+            } else {
+                Visibility::Restricted { path: s }
             }
         }
         SynVis::Inherited => Visibility::Private,
@@ -370,7 +378,9 @@ fn mod_file_path(m: &ItemMod, enclosing_file: &Path, sub_name: &str) -> Option<P
 /// Read the string value of a `#[path = "..."]` attribute on a module, if present.
 fn mod_path_attr(m: &ItemMod) -> Option<String> {
     for attr in &m.attrs {
-        if attr.path().is_ident("path")
+        if attr
+            .path()
+            .is_ident(crate::languages::rust::cfg::SYN_PATH.as_str())
             && let syn::Meta::NameValue(nv) = &attr.meta
             && let syn::Expr::Lit(syn::ExprLit {
                 lit: syn::Lit::Str(s),
@@ -387,17 +397,28 @@ fn resolve_submodule_path(parent_file: &Path, mod_name: &str) -> Option<PathBuf>
     let parent_dir = parent_file.parent()?;
     let parent_stem = parent_file.file_stem()?.to_str()?;
 
-    let search_dir = if matches!(parent_stem, "lib" | "main" | "mod") {
+    // Module-root stems and the source-file / dir-module conventions are DATA
+    // (`module_roots` / `source_ext` / `dir_module_file` in `rust/config.toml`);
+    // the lookup LOGIC stays here.
+    let search_dir = if crate::languages::rust::cfg::MODULE_ROOTS
+        .iter()
+        .any(|s| s == parent_stem)
+    {
         parent_dir.to_path_buf()
     } else {
         parent_dir.join(parent_stem)
     };
 
-    let candidate_a = search_dir.join(format!("{mod_name}.rs"));
+    let candidate_a = search_dir.join(format!(
+        "{mod_name}.{}",
+        crate::languages::rust::cfg::SOURCE_EXT.as_str()
+    ));
     if candidate_a.exists() {
         return Some(candidate_a);
     }
-    let candidate_b = search_dir.join(mod_name).join("mod.rs");
+    let candidate_b = search_dir
+        .join(mod_name)
+        .join(crate::languages::rust::cfg::DIR_MODULE_FILE.as_str());
     if candidate_b.exists() {
         return Some(candidate_b);
     }
@@ -431,10 +452,19 @@ pub(super) fn is_test_item(item: &Item) -> bool {
 /// (`#[cfg(test)]`, `#[cfg(all(test, …))]`). `cfg(feature = "test")` does not
 /// match — only the `test` *identifier* does.
 fn is_test_attr(attr: &syn::Attribute) -> bool {
-    if attr.path().is_ident("test") || attr.path().is_ident("bench") {
+    // The `test` / `bench` / `cfg` attribute idents are DATA (`[syn]`).
+    if attr
+        .path()
+        .is_ident(crate::languages::rust::cfg::SYN_TEST.as_str())
+        || attr
+            .path()
+            .is_ident(crate::languages::rust::cfg::SYN_BENCH.as_str())
+    {
         return true;
     }
-    if attr.path().is_ident("cfg")
+    if attr
+        .path()
+        .is_ident(crate::languages::rust::cfg::SYN_CFG.as_str())
         && let Ok(list) = attr.meta.require_list()
     {
         return tokens_have_test_ident(list.tokens.clone());
@@ -446,7 +476,7 @@ fn is_test_attr(attr: &syn::Attribute) -> bool {
 /// `all(...)` / `any(...)` / `not(...)` groups).
 fn tokens_have_test_ident(ts: proc_macro2::TokenStream) -> bool {
     ts.into_iter().any(|tt| match tt {
-        proc_macro2::TokenTree::Ident(i) => i == "test",
+        proc_macro2::TokenTree::Ident(i) => i == crate::languages::rust::cfg::SYN_TEST.as_str(),
         proc_macro2::TokenTree::Group(g) => tokens_have_test_ident(g.stream()),
         _ => false,
     })

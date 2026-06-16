@@ -51,31 +51,31 @@ pub(super) fn collect_use_paths(
 /// path (`crate::a::b` → `[a,b]`, `super::*` → parent, `self::x` → child). Returns
 /// `None` for a path that doesn't denote an in-crate module.
 fn glob_target_module(use_path: &[String], current_path: &[String]) -> Option<Vec<String>> {
-    match use_path.first().map(String::as_str) {
-        Some("crate") => Some(use_path[1..].to_vec()),
-        Some("self") => {
-            let mut p = current_path.to_vec();
-            p.extend_from_slice(&use_path[1..]);
-            Some(p)
+    // Path keywords (`crate`/`self`/`super`) are DATA (`[path_keywords]`); each
+    // drives distinct logic, so this is an if-chain, not a list match.
+    use crate::languages::rust::cfg::{PK_CRATE, PK_SELF, PK_SUPER};
+    let first = use_path.first().map(String::as_str)?;
+    if first == PK_CRATE.as_str() {
+        Some(use_path[1..].to_vec())
+    } else if first == PK_SELF.as_str() {
+        let mut p = current_path.to_vec();
+        p.extend_from_slice(&use_path[1..]);
+        Some(p)
+    } else if first == PK_SUPER.as_str() {
+        let mut p = current_path.to_vec();
+        let mut tail = use_path;
+        while tail.first().map(String::as_str) == Some(PK_SUPER.as_str()) {
+            p.pop()?;
+            tail = &tail[1..];
         }
-        Some("super") => {
-            let mut p = current_path.to_vec();
-            let mut tail = use_path;
-            while tail.first().map(String::as_str) == Some("super") {
-                p.pop()?;
-                tail = &tail[1..];
-            }
-            p.extend_from_slice(tail);
-            Some(p)
-        }
-        Some(_) => {
-            // Bare first segment in a `use`: crate-relative child module (2018) —
-            // a descendant, never an ancestor.
-            let mut p = current_path.to_vec();
-            p.extend_from_slice(use_path);
-            Some(p)
-        }
-        None => None,
+        p.extend_from_slice(tail);
+        Some(p)
+    } else {
+        // Bare first segment in a `use`: crate-relative child module (2018) —
+        // a descendant, never an ancestor.
+        let mut p = current_path.to_vec();
+        p.extend_from_slice(use_path);
+        Some(p)
     }
 }
 
@@ -161,8 +161,13 @@ pub(super) fn resolve_use_path(
     let first = use_path[0].as_str();
     let rest = &use_path[1..];
 
-    match first {
-        "crate" => resolve_in_index(
+    // Path keywords (`crate`/`self`/`super`) and standard-distribution crate
+    // roots (`std_crates`) are DATA (`[path_keywords]` / `std_crates`). Each path
+    // keyword drives distinct resolution logic, so this is an if-chain, not a list
+    // match; `std_crates` IS a uniform list (a `use` rooted there → no edge).
+    use crate::languages::rust::cfg::{PK_CRATE, PK_SELF, PK_SUPER, STD_CRATES};
+    if first == PK_CRATE.as_str() {
+        resolve_in_index(
             &[],
             rest,
             module_index,
@@ -171,8 +176,9 @@ pub(super) fn resolve_use_path(
             lib_index,
             reexports,
             depth,
-        ),
-        "self" => resolve_in_index(
+        )
+    } else if first == PK_SELF.as_str() {
+        resolve_in_index(
             current_path,
             rest,
             module_index,
@@ -181,57 +187,57 @@ pub(super) fn resolve_use_path(
             lib_index,
             reexports,
             depth,
-        ),
-        "super" => {
-            let mut path = current_path.to_vec();
-            let mut tail = rest;
-            while tail.first().map(|s| s.as_str()) == Some("super") {
-                path.pop()?;
-                tail = &tail[1..];
-            }
+        )
+    } else if first == PK_SUPER.as_str() {
+        let mut path = current_path.to_vec();
+        let mut tail = rest;
+        while tail.first().map(|s| s.as_str()) == Some(PK_SUPER.as_str()) {
             path.pop()?;
-            resolve_in_index(
-                &path,
-                tail,
+            tail = &tail[1..];
+        }
+        path.pop()?;
+        resolve_in_index(
+            &path,
+            tail,
+            module_index,
+            extern_crates,
+            dep_pkg_by_name,
+            lib_index,
+            reexports,
+            depth,
+        )
+    } else if STD_CRATES.iter().any(|s| s == first) {
+        None
+    } else {
+        let other = first;
+        let mut probe = current_path.to_vec();
+        probe.push(first.to_string());
+        if module_index.contains_key(&probe) {
+            return resolve_in_index(
+                current_path,
+                use_path,
                 module_index,
                 extern_crates,
                 dep_pkg_by_name,
                 lib_index,
                 reexports,
                 depth,
-            )
+            );
         }
-        "std" | "core" | "alloc" | "proc_macro" | "test" => None,
-        other => {
-            let mut probe = current_path.to_vec();
-            probe.push(first.to_string());
-            if module_index.contains_key(&probe) {
-                return resolve_in_index(
-                    current_path,
-                    use_path,
-                    module_index,
-                    extern_crates,
-                    dep_pkg_by_name,
-                    lib_index,
-                    reexports,
-                    depth,
-                );
-            }
-            // Cross-crate into another local workspace crate: walk the rest of
-            // the path through that crate's library, following its `pub use`
-            // re-exports so the edge lands on the file that owns the item
-            // (a re-exported `other_crate::Symbol` → its defining file, not the
-            // crate root; a path stopping at a non-module, non-re-exported item
-            // still falls back to the crate root).
-            if let Some(dep_repr) = dep_pkg_by_name.get(other)
-                && let Some(foreign) = lib_index.get(dep_repr)
-            {
-                return walk_foreign(&[], rest, &foreign.index, &foreign.reexports, 0);
-            }
-            // Registry dependency (or a local crate with no library target):
-            // collapse onto the crate root node.
-            extern_crates.get(other).cloned()
+        // Cross-crate into another local workspace crate: walk the rest of
+        // the path through that crate's library, following its `pub use`
+        // re-exports so the edge lands on the file that owns the item
+        // (a re-exported `other_crate::Symbol` → its defining file, not the
+        // crate root; a path stopping at a non-module, non-re-exported item
+        // still falls back to the crate root).
+        if let Some(dep_repr) = dep_pkg_by_name.get(other)
+            && let Some(foreign) = lib_index.get(dep_repr)
+        {
+            return walk_foreign(&[], rest, &foreign.index, &foreign.reexports, 0);
         }
+        // Registry dependency (or a local crate with no library target):
+        // collapse onto the crate root node.
+        extern_crates.get(other).cloned()
     }
 }
 
@@ -310,28 +316,30 @@ fn resolve_foreign_source(
     }
     let first = use_path[0].as_str();
     let rest = &use_path[1..];
-    match first {
-        "crate" => walk_foreign(&[], rest, index, reexports, depth),
-        "self" => walk_foreign(current_path, rest, index, reexports, depth),
-        "super" => {
-            let mut path = current_path.to_vec();
-            let mut tail = rest;
-            while tail.first().map(|s| s.as_str()) == Some("super") {
-                path.pop()?;
-                tail = &tail[1..];
-            }
+    // Path keywords / `std_crates` are DATA; see the note in `resolve_use_path`.
+    use crate::languages::rust::cfg::{PK_CRATE, PK_SELF, PK_SUPER, STD_CRATES};
+    if first == PK_CRATE.as_str() {
+        walk_foreign(&[], rest, index, reexports, depth)
+    } else if first == PK_SELF.as_str() {
+        walk_foreign(current_path, rest, index, reexports, depth)
+    } else if first == PK_SUPER.as_str() {
+        let mut path = current_path.to_vec();
+        let mut tail = rest;
+        while tail.first().map(|s| s.as_str()) == Some(PK_SUPER.as_str()) {
             path.pop()?;
-            walk_foreign(&path, tail, index, reexports, depth)
+            tail = &tail[1..];
         }
-        "std" | "core" | "alloc" | "proc_macro" | "test" => None,
-        _ => {
-            let mut probe = current_path.to_vec();
-            probe.push(first.to_string());
-            if index.contains_key(&probe) {
-                walk_foreign(current_path, use_path, index, reexports, depth)
-            } else {
-                None
-            }
+        path.pop()?;
+        walk_foreign(&path, tail, index, reexports, depth)
+    } else if STD_CRATES.iter().any(|s| s == first) {
+        None
+    } else {
+        let mut probe = current_path.to_vec();
+        probe.push(first.to_string());
+        if index.contains_key(&probe) {
+            walk_foreign(current_path, use_path, index, reexports, depth)
+        } else {
+            None
         }
     }
 }

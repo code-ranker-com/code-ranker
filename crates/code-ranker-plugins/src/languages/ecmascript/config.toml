@@ -105,6 +105,12 @@ call_expression = "call_expression"
 string = "string"
 require = "require"
 
+# tree-sitter field-name API navigation (`child_by_field_name`) for the CommonJS
+# `require(...)` call: its `function` child (the callee) and `arguments` child.
+[fields]
+function = "function"
+arguments = "arguments"
+
 [roles]
 # Metric-scoping func-spaces (each contributes a McCabe base path of 1).
 space_kinds.named = [

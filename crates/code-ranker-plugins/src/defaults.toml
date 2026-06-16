@@ -33,6 +33,29 @@
 doc_base = "https://github.com/ffedoroff/code-ranker/blob/main/principles"
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Node-id namespace prefixes — DATA, not code. A structure builder mints node ids
+# in a few namespaces; the prefix string the id is built from is data (the
+# minting LOGIC stays in Rust). `external` (`ext:<pkg>`) is the one prefix every
+# language emits for a third-party / external node, so it lives here once; Rust
+# adds its own `crate:` / `mod:` prefixes in `rust/config.toml`. Keys are the
+# namespace slot (not the value), so this is not an identity table.
+# ──────────────────────────────────────────────────────────────────────────────
+
+[ids]
+external = "ext:"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Visibility output vocabulary — the strings a structure builder writes into a
+# node's `visibility` attr. `public` is the one value every language emits, so it
+# lives here once; languages add their own (Rust's `crate`/`super`/`private`,
+# Python's `restricted`/`private`) in their `<lang>.toml`. Keyed by the builder's
+# internal classification slot; the slot→string LOGIC stays in Rust.
+# ──────────────────────────────────────────────────────────────────────────────
+
+[visibility]
+public = "public"
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Edge-kind vocabulary (the `files` level). The map KEY is the identifier the
 # structure builder tags an edge's `kind` with; the value is its
 # label/description/flow (the `EdgeKindSpec` the level descriptor publishes).

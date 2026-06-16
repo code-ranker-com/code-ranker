@@ -30,6 +30,90 @@ detect_markers = ["Cargo.toml"]
 test_dirs = ["tests", "benches"]
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Cargo / Rust vocabulary the resolver and module walk key on — DATA, not code
+# (see `../README.md` §3: a list the code keys on is data). The predicate / match
+# LOGIC stays in Rust; *which* names it keys on is data. (Top-level keys: they
+# must precede the first `[table]` header below to stay top-level in TOML.)
+#
+#   importable_targets  cargo target kinds addressable by name from another crate
+#                       via `use <crate>::…` (a `bin` is not). `is_lib_target`.
+#   supported_targets   cargo target kinds whose module tree is walked at all
+#                       (`importable_targets` + `bin`). `is_supported_target` /
+#                       `target_kind_label`.
+#   std_crates          crate-root names that denote the standard distribution,
+#                       not a workspace file — a `use` rooted here resolves to no
+#                       edge. (The `crate` / `self` / `super` path keywords stay
+#                       in Rust: each drives distinct resolution logic, so a
+#                       config entry would be the `self = "self"` identity copy.)
+#   module_roots        file stems whose declared submodules live in the SAME
+#                       directory (`lib.rs` / `main.rs` / `mod.rs`), rather than a
+#                       `<stem>/` subdir. `resolve_submodule_path`.
+#   source_ext          the Rust source-file extension a `mod <name>;` resolves to
+#                       (`<dir>/<name>.rs`).
+#   dir_module_file     the directory-module file (`<dir>/<name>/mod.rs`).
+# ──────────────────────────────────────────────────────────────────────────────
+
+importable_targets = ["lib", "rlib", "dylib", "cdylib", "proc-macro"]
+supported_targets = ["lib", "rlib", "dylib", "cdylib", "proc-macro", "bin"]
+std_crates = ["std", "core", "alloc", "proc_macro", "test"]
+module_roots = ["lib", "main", "mod"]
+source_ext = "rs"
+dir_module_file = "mod.rs"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Node-id namespace prefixes — DATA, not code. The id-minting LOGIC (`ids.rs`,
+# `module_graph/shared.rs`, `collapse.rs`) stays in Rust; the prefix strings the
+# ids are built from are data. `external` (`ext:`) is inherited from
+# `defaults.toml`; Rust adds `crate:` (a crate node) and `mod:` (a module node).
+# Keys are the namespace slot, not the value (no identity copy).
+# ──────────────────────────────────────────────────────────────────────────────
+
+[ids]
+crate = "crate:"
+module = "mod:"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Visibility output vocabulary — strings written into a module/re-export node's
+# `visibility` attr. `public` is inherited from `defaults.toml`; Rust adds the
+# rest. Keyed by the `Visibility` enum's classification slot; the enum→slot LOGIC
+# stays in `internal.rs`. (`Restricted { path }` emits the path verbatim, so it
+# has no fixed string here.)
+# ──────────────────────────────────────────────────────────────────────────────
+
+[visibility]
+crate = "crate"
+super = "super"
+private = "private"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# tree-sitter / syn / path vocabulary the walk keys on — DATA, not code. The walk
+# LOGIC stays in Rust; the names it keys on are data. (These are identity-keyed:
+# the slot name equals the grammar/keyword string, mirroring the `[structure]`
+# tables — see `../README.md` §3.)
+#
+#   [fields]         tree-sitter field-name API navigation (`child_by_field_name`).
+#   [syn]            `syn` attribute idents the test/derive/path walk matches.
+#   [path_keywords]  Rust path roots the `use` resolver dispatches on. Each drives
+#                    DISTINCT resolution logic (not a uniform list), so they are
+#                    named slots, not a `std_crates`-style list.
+# ──────────────────────────────────────────────────────────────────────────────
+
+[fields]
+return_type = "return_type"
+
+[syn]
+test = "test"
+bench = "bench"
+cfg = "cfg"
+derive = "derive"
+path = "path"
+
+[path_keywords]
+crate = "crate"
+self = "self"
+super = "super"
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Edge-kind vocabulary for the `files` level. The map KEY is the identifier the
 # structure builder (`collapse.rs`) tags an edge's `kind` with; the value is its
 # label/description/flow (the `EdgeKindSpec` the level descriptor publishes).

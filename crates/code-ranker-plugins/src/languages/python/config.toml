@@ -29,6 +29,13 @@ extensions = ["py"]
 detect_markers = ["pyproject.toml", "setup.py", "setup.cfg"]
 skip_dirs = ["venv", "__pycache__", "node_modules"]
 
+# The implicit package-init file stem (`pkg/__init__.py` → module `pkg`), collapsed
+# into its parent package by `file_to_module_path` — DATA, not code (the collapse
+# LOGIC stays in Rust). The `.py` suffix it strips is derived from `extensions`
+# above (not re-spelled here). The dotted module separator (`.`) stays in Rust as
+# Python import syntax, like the leading-`.` skip rule.
+package_init_file = "__init__.py"
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Test-path conventions — DATA, not code (see `../README.md` §4). The
 # `py_is_test_path` predicate LOGIC (split on '/', exact match, prefix `&&`
@@ -68,6 +75,20 @@ import_statement = "import_statement"
 import_from_statement = "import_from_statement"
 dotted_name = "dotted_name"
 aliased_import = "aliased_import"
+
+# tree-sitter field-name API navigation (`child_by_field_name`): the `name` of an
+# `aliased_import` and the `module_name` of an `import_from_statement`.
+[fields]
+name = "name"
+module_name = "module_name"
+
+# Visibility output vocabulary written into a file node's `visibility` attr.
+# `public` is inherited from `defaults.toml`; Python adds `restricted` (single
+# leading underscore) and `private` (dunder). The `_`/`__` naming-convention LOGIC
+# stays in `structure.rs` as a syntax rule.
+[visibility]
+restricted = "restricted"
+private = "private"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Node-kind tables for the generic metric engine (`crate::engine`).

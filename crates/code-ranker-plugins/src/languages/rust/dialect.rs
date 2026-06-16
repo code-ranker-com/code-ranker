@@ -122,8 +122,12 @@ impl Dialect for RustDialect {
     }
 
     fn extra_exits(&self, node: Node) -> u32 {
-        // A value-returning exit when the fn declares a return type (`-> T`).
-        if node.kind_id() == self.function_item && node.child_by_field_name("return_type").is_some()
+        // A value-returning exit when the fn declares a return type (`-> T`). The
+        // tree-sitter field name is DATA (`[fields].return_type`).
+        if node.kind_id() == self.function_item
+            && node
+                .child_by_field_name(super::cfg::FIELD_RETURN_TYPE.as_str())
+                .is_some()
         {
             1
         } else {

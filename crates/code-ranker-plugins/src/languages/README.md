@@ -147,10 +147,25 @@ the **module-path strip extensions** (`module_strip_exts`), and the implicit
 **index file** stem (`index_file`) all live in `config.toml`. Only the predicate
 LOGIC (split on `/`, `contains`, `starts_with`, `ends_with`, first-component
 checks) stays in Rust. Only these stay in Rust, because they bind a string to
-something Rust-only or are syntax, not a list: tree-sitter field-name API
-navigation (`child_by_field_name("parameters")`); the `ext → grammar` mapping
-(`match ext { "tsx" => tree_sitter_typescript::LANGUAGE_TSX, … }`, which selects a
-grammar *type*); `syn` attribute idents; and error/log/format strings.
+something Rust-only, name a config entry, or are pure syntax: the `ext → grammar`
+mapping (`match ext { "tsx" => tree_sitter_typescript::LANGUAGE_TSX, … }`, which
+selects a grammar *type*); `config::*` **lookup keys** (the `get("key")` argument
+that names a config section/entry — e.g. `string_table(cfg, "structure")`,
+`edge_kind_id(cfg, "uses")`, `attr_key(cfg, "loc")` — validated against the
+published table, never invented); id-structure punctuation in `format!` (`::` /
+`#` / `@`); single-char / empty **syntax rules** (the leading-`.` skip rule,
+Python's `_`/`__` dunder convention, the module separators `.` / `/`, an empty
+path); and error/log/format strings.
+
+**Everything else is data — including the former exceptions.** tree-sitter
+field-name API navigation now lives in `[fields]`
+(`child_by_field_name(&FIELDS.name)`); `syn` attribute idents (`test`/`cfg`/…) in
+`[syn]`; Rust path keywords (`crate`/`self`/`super`) in `[path_keywords]`;
+node-id namespace prefixes (`ext:`/`crate:`/`mod:`) in `[ids]`; visibility output
+strings in `[visibility]`. These are plain `get(key)` **lookup tables** (no
+auto-resolver), so unlike `[roles.one]` they DO carry identity entries
+(`import_statement = "import_statement"`) by design — the vocabulary lives in
+TOML, the Rust side only looks it up.
 
 ### 4. Tests: one file per source, in `tests/`, named after the source
 

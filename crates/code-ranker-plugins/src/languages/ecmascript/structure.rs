@@ -82,6 +82,15 @@ fn uses_edge_kind() -> &'static str {
     key
 }
 
+/// A node-attribute key, validated against `[node_attributes]` (inherited from
+/// `defaults.toml`) so an inserted attr can never use an undeclared key. Mirrors
+/// `uses_edge_kind` / `rust/collapse.rs::attr_key`.
+fn attr_key(key: &'static str) -> &'static str {
+    crate::config::attr_key(&super::cfg::CONFIG, key)
+        .unwrap_or_else(|| panic!("ecmascript [node_attributes] is missing `{key}`"));
+    key
+}
+
 /// Walk `workspace`, parse every file whose extension is in `exts`, and build
 /// an [`api::Graph`] of file + external nodes connected by `"uses"` edges.
 ///
@@ -141,10 +150,10 @@ pub fn analyze_ecmascript(
             file_ids_seen.insert(file_id.clone(), ());
             let mut attrs = BTreeMap::new();
             attrs.insert(
-                "visibility".to_string(),
-                AttrValue::Str("public".to_string()),
+                attr_key("visibility").to_string(),
+                AttrValue::Str(super::cfg::VISIBILITY_PUBLIC.clone()),
             );
-            attrs.insert("loc".to_string(), AttrValue::Int(loc));
+            attrs.insert(attr_key("loc").to_string(), AttrValue::Int(loc));
             nodes.push(Node {
                 id: file_id.clone(),
                 kind: code_ranker_plugin_api::node::FILE.to_string(),
@@ -180,11 +189,11 @@ pub fn analyze_ecmascript(
                     });
                 }
             } else if let Some(pkg) = external_package(spec) {
-                let ext_id = format!("ext:{pkg}");
+                let ext_id = format!("{}{pkg}", super::cfg::EXTERNAL_ID_PREFIX.as_str());
                 if !ext_seen.contains_key(&ext_id) {
                     ext_seen.insert(ext_id.clone(), ());
                     let mut attrs = BTreeMap::new();
-                    attrs.insert("external".to_string(), AttrValue::Bool(true));
+                    attrs.insert(attr_key("external").to_string(), AttrValue::Bool(true));
                     nodes.push(Node {
                         id: ext_id.clone(),
                         kind: code_ranker_plugin_api::node::EXTERNAL.to_string(),
@@ -364,18 +373,25 @@ struct StructureKinds {
     call_expression: String,
     string: String,
     require: String,
+    /// tree-sitter field names for the `require(...)` call (`[fields]`).
+    field_function: String,
+    field_arguments: String,
 }
 
 impl StructureKinds {
     fn load() -> Self {
         let s = crate::config::string_table(&super::cfg::CONFIG, "structure");
         let get = |k: &str| s.get(k).cloned().expect("[structure] key");
+        let f = crate::config::string_table(&super::cfg::CONFIG, "fields");
+        let field = |k: &str| f.get(k).cloned().expect("[fields] key");
         StructureKinds {
             import_statement: get("import_statement"),
             export_statement: get("export_statement"),
             call_expression: get("call_expression"),
             string: get("string"),
             require: get("require"),
+            field_function: field("function"),
+            field_arguments: field("arguments"),
         }
     }
 }
@@ -448,12 +464,12 @@ fn require_source(
     source: &[u8],
     kinds: &StructureKinds,
 ) -> Option<String> {
-    let fn_node = node.child_by_field_name("function")?;
+    let fn_node = node.child_by_field_name(&kinds.field_function)?;
     let fn_text = fn_node.utf8_text(source).ok()?;
     if fn_text != kinds.require {
         return None;
     }
-    let args = node.child_by_field_name("arguments")?;
+    let args = node.child_by_field_name(&kinds.field_arguments)?;
     let mut cursor = args.walk();
     for child in args.children(&mut cursor) {
         if child.kind() == kinds.string
@@ -493,8 +509,10 @@ fn resolve_import(
     for ext in candidate_exts_order {
         candidates.push(normalized.with_extension(ext));
     }
+    // The implicit module stem (`index`) is DATA (`index_file` in the config),
+    // already resolved in `MODULE`; reuse it rather than re-hardcoding "index".
     for ext in candidate_exts_order {
-        candidates.push(normalized.join(format!("index.{ext}")));
+        candidates.push(normalized.join(format!("{}.{ext}", MODULE.index_file)));
     }
 
     for candidate in &candidates {

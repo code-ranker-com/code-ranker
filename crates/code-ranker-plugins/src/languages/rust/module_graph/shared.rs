@@ -28,11 +28,11 @@ pub(super) fn crate_label(pkg: &Package, target: &Target) -> String {
 /// A target addressable by name from another crate (lib / proc-macro), as
 /// opposed to a `bin` (which cannot be `use`d by name).
 pub(super) fn is_lib_target(target: &Target) -> bool {
+    // Importable target kinds are DATA (`importable_targets` in `rust/config.toml`).
     target.kind.iter().any(|k| {
-        matches!(
-            k.as_str(),
-            "lib" | "rlib" | "dylib" | "cdylib" | "proc-macro"
-        )
+        crate::languages::rust::cfg::IMPORTABLE_TARGETS
+            .iter()
+            .any(|t| t == k.as_str())
     })
 }
 
@@ -91,15 +91,16 @@ pub(super) fn build_reexports(pending: &[PendingUse]) -> ReexportMap {
 }
 
 pub(super) fn target_kind_label(target: &Target) -> &str {
+    // Supported target kinds are DATA (`supported_targets` in `rust/config.toml`);
+    // `?` is a display fallback, not vocabulary, so it stays here.
     target
         .kind
         .iter()
         .map(String::as_str)
         .find(|k| {
-            matches!(
-                *k,
-                "lib" | "rlib" | "dylib" | "cdylib" | "proc-macro" | "bin"
-            )
+            crate::languages::rust::cfg::SUPPORTED_TARGETS
+                .iter()
+                .any(|t| t == *k)
         })
         .unwrap_or("?")
 }
@@ -110,7 +111,12 @@ pub(super) fn target_kind_label(target: &Target) -> &str {
 /// the bin's `main.rs` (a library cannot depend on a binary). Disambiguate by the
 /// target kind so each target gets its own module tree.
 fn target_ns(pkg_id_repr: &str, target_kind: &str, target_name: &str) -> String {
-    format!("mod:{pkg_id_repr}::{target_kind}:{target_name}")
+    // The `mod:` namespace prefix is DATA (`[ids].module` in `rust/config.toml`);
+    // the `::` / `:` id separators are id structure, not vocabulary, so they stay.
+    format!(
+        "{}{pkg_id_repr}::{target_kind}:{target_name}",
+        crate::languages::rust::cfg::ID_MODULE.as_str()
+    )
 }
 
 pub(super) fn module_node_id(

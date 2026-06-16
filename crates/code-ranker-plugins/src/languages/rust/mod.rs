@@ -68,7 +68,13 @@ impl LanguagePlugin for RustPlugin {
                 // Cluster the diagram by the owning crate (compilation unit), not by
                 // the source folder. Falls back to `dir` if `crate` is ever absent.
                 grouping: Some(Grouping {
-                    key: Some("crate".into()),
+                    // Group by the `crate` node attribute — its key is DATA,
+                    // validated against `[node_attributes]`.
+                    key: Some(
+                        crate::config::attr_key(&CONFIG, "crate")
+                            .expect("rust/config.toml [node_attributes] is missing `crate`")
+                            .into(),
+                    ),
                     function: None,
                 }),
             },
@@ -344,10 +350,12 @@ fn rust_file_metrics(node: &mut Node, src: &[u8]) -> bool {
 /// **identifier** inside `cfg(...)` is what matches — `cfg(feature = "test")`
 /// (a string literal) does not.
 fn is_test_attr(attr: &syn::Attribute) -> bool {
-    if attr.path().is_ident("test") || attr.path().is_ident("bench") {
+    // The `test` / `bench` / `cfg` attribute idents are DATA (`[syn]`).
+    if attr.path().is_ident(cfg::SYN_TEST.as_str()) || attr.path().is_ident(cfg::SYN_BENCH.as_str())
+    {
         return true;
     }
-    if attr.path().is_ident("cfg")
+    if attr.path().is_ident(cfg::SYN_CFG.as_str())
         && let syn::Meta::List(list) = &attr.meta
     {
         return tokens_have_test_ident(list.tokens.clone());
@@ -359,7 +367,7 @@ fn is_test_attr(attr: &syn::Attribute) -> bool {
 /// `all(...)` / `any(...)` groups).
 fn tokens_have_test_ident(ts: proc_macro2::TokenStream) -> bool {
     ts.into_iter().any(|t| match t {
-        proc_macro2::TokenTree::Ident(i) => i == "test",
+        proc_macro2::TokenTree::Ident(i) => i == cfg::SYN_TEST.as_str(),
         proc_macro2::TokenTree::Group(g) => tokens_have_test_ident(g.stream()),
         _ => false,
     })

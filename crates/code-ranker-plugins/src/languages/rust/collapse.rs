@@ -27,6 +27,16 @@ fn edge_kind_id(kind: EdgeKind) -> &'static str {
     key
 }
 
+/// The node-attribute key string, validated against `[node_attributes]` in
+/// `rust/config.toml` (the same table `levels()` publishes), so an inserted attr
+/// can never use a key the level descriptor does not declare. Mirrors
+/// [`edge_kind_id`]: the key IS the table key (identity), validated, not invented.
+fn attr_key(key: &'static str) -> &'static str {
+    crate::config::attr_key(&super::cfg::CONFIG, key)
+        .unwrap_or_else(|| panic!("rust/config.toml [node_attributes] is missing `{key}`"));
+    key
+}
+
 /// Collapse the internal module graph into a file-level `api::Graph`.
 ///
 /// - Every `Module` node maps to a `file` node keyed by its ABSOLUTE source
@@ -93,25 +103,31 @@ pub(crate) fn collapse_to_files(full: InternalGraph) -> Graph {
                         let mut attrs = BTreeMap::new();
                         if let Some(vis) = &node.visibility {
                             attrs.insert(
-                                "visibility".to_string(),
+                                attr_key("visibility").to_string(),
                                 AttrValue::Str(vis.as_str().to_string()),
                             );
                         }
                         if let Some(loc) = node.loc {
-                            attrs.insert("loc".to_string(), AttrValue::Int(loc as i64));
+                            attrs.insert(attr_key("loc").to_string(), AttrValue::Int(loc as i64));
                         }
                         if let Some(items) = node.item_count {
-                            attrs.insert("items".to_string(), AttrValue::Int(items as i64));
+                            attrs.insert(
+                                attr_key("items").to_string(),
+                                AttrValue::Int(items as i64),
+                            );
                         }
                         // Omit when zero, like other metrics — files with no
                         // `unsafe` simply carry no key.
                         if let Some(u) = node.unsafe_count
                             && u > 0
                         {
-                            attrs.insert("unsafe".to_string(), AttrValue::Int(u as i64));
+                            attrs.insert(attr_key("unsafe").to_string(), AttrValue::Int(u as i64));
                         }
                         if let Some(krate) = &node.crate_label {
-                            attrs.insert("crate".to_string(), AttrValue::Str(krate.clone()));
+                            attrs.insert(
+                                attr_key("crate").to_string(),
+                                AttrValue::Str(krate.clone()),
+                            );
                         }
                         v.insert(Node {
                             id: fid,
@@ -128,34 +144,42 @@ pub(crate) fn collapse_to_files(full: InternalGraph) -> Graph {
                             let n = o.get_mut();
                             if let Some(vis) = &node.visibility {
                                 n.attrs.insert(
-                                    "visibility".to_string(),
+                                    attr_key("visibility").to_string(),
                                     AttrValue::Str(vis.as_str().to_string()),
                                 );
                             }
                             if let Some(loc) = node.loc {
-                                n.attrs
-                                    .insert("loc".to_string(), AttrValue::Int(loc as i64));
+                                n.attrs.insert(
+                                    attr_key("loc").to_string(),
+                                    AttrValue::Int(loc as i64),
+                                );
                             }
                             if let Some(items) = node.item_count {
-                                n.attrs
-                                    .insert("items".to_string(), AttrValue::Int(items as i64));
+                                n.attrs.insert(
+                                    attr_key("items").to_string(),
+                                    AttrValue::Int(items as i64),
+                                );
                             }
                             if let Some(u) = node.unsafe_count
                                 && u > 0
                             {
-                                n.attrs
-                                    .insert("unsafe".to_string(), AttrValue::Int(u as i64));
+                                n.attrs.insert(
+                                    attr_key("unsafe").to_string(),
+                                    AttrValue::Int(u as i64),
+                                );
                             }
                             if let Some(krate) = &node.crate_label {
-                                n.attrs
-                                    .insert("crate".to_string(), AttrValue::Str(krate.clone()));
+                                n.attrs.insert(
+                                    attr_key("crate").to_string(),
+                                    AttrValue::Str(krate.clone()),
+                                );
                             }
                         }
                     }
                 }
             }
             NodeKind::Crate if node.external.unwrap_or(false) => {
-                let eid = format!("ext:{}", node.name);
+                let eid = format!("{}{}", super::cfg::ID_EXTERNAL.as_str(), node.name);
                 id_map.insert(node.id.clone(), eid.clone());
                 // The on-disk directory of this dependency (parent of its
                 // Cargo.toml), e.g. `…/registry/src/…/serde-1.0.228`.
@@ -165,12 +189,12 @@ pub(crate) fn collapse_to_files(full: InternalGraph) -> Graph {
                     .unwrap_or_default();
                 ext_nodes.entry(eid.clone()).or_insert_with(|| {
                     let mut attrs = BTreeMap::new();
-                    attrs.insert("external".to_string(), AttrValue::Bool(true));
+                    attrs.insert(attr_key("external").to_string(), AttrValue::Bool(true));
                     if let Some(v) = &node.version {
-                        attrs.insert("version".to_string(), AttrValue::Str(v.clone()));
+                        attrs.insert(attr_key("version").to_string(), AttrValue::Str(v.clone()));
                     }
                     if !lib_path.is_empty() {
-                        attrs.insert("path".to_string(), AttrValue::Str(lib_path));
+                        attrs.insert(attr_key("path").to_string(), AttrValue::Str(lib_path));
                     }
                     Node {
                         id: eid,
@@ -214,7 +238,7 @@ pub(crate) fn collapse_to_files(full: InternalGraph) -> Graph {
             && let Some(vis) = &e.visibility
         {
             attrs.insert(
-                "visibility".to_string(),
+                attr_key("visibility").to_string(),
                 AttrValue::Str(vis.as_str().to_string()),
             );
         }

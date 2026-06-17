@@ -62,10 +62,10 @@ These four sum to ≈ 4.6 MB of the 16.5 MB release binary (≈ 28%).
 |---|---|---|---|---|
 | Ada | `tree-sitter-ada` | 0.1.0 | 2025-10-12 | 300 KB |
 | Assembly | `tree-sitter-asm` | 0.24.0 | 2025-02-06 | 20 KB |
-| Bash | `tree-sitter-bash` † | 0.25.1 | 2025-12-02 | 1.3 MB |
-| C | `tree-sitter-c` † | 0.24.2 | 2026-04-22 | 600 KB |
-| C# | `tree-sitter-c-sharp` † | 0.23.5 | 2026-04-14 | 5.1 MB |
-| C++ | `tree-sitter-cpp` † | 0.23.4 | 2024-11-11 | 3.3 MB |
+| Bash | `tree-sitter-bash` † | 0.25.1 | 2025-12-02 | 1.31 MB ★ |
+| C | `tree-sitter-c` † | 0.24.2 | 2026-04-22 | 630 KB ★ |
+| C# | `tree-sitter-c-sharp` † | 0.23.5 | 2026-04-14 | 5.12 MB ★ |
+| C++ | `tree-sitter-cpp` † | 0.23.4 | 2024-11-11 | 3.28 MB ★ |
 | Clojure | `tree-sitter-clojure` | 0.1.0 | 2025-07-07 | 85 KB |
 | CMake | `tree-sitter-cmake` | 0.7.1 | 2025-05-25 | 70 KB |
 | CSS | `tree-sitter-css` † | 0.25.0 | 2025-09-28 | 125 KB |
@@ -73,42 +73,50 @@ These four sum to ≈ 4.6 MB of the 16.5 MB release binary (≈ 28%).
 | Dart | `tree-sitter-dart` | 0.2.0 | 2026-04-26 | 1.2 MB |
 | Elixir | `tree-sitter-elixir` | 0.3.5 | 2026-03-02 | 1.3 MB |
 | Embedded-template (ERB/EJS) | `tree-sitter-embedded-template` † | 0.25.0 | 2025-08-29 | 5 KB |
-| Erlang | `tree-sitter-erlang` | 0.19.0 | 2026-06-04 | 410 KB |
+| Erlang | `tree-sitter-erlang` | 0.19.0 | 2026-06-04 | 436 KB ★ |
 | Fortran | `tree-sitter-fortran` | 0.6.0 | 2026-04-24 | 6.3 MB |
 | GLSL | `tree-sitter-glsl` | 0.2.0 | 2025-03-16 | 820 KB |
-| Go | `tree-sitter-go` † | 0.25.0 | 2025-08-29 | 210 KB |
+| Go | `tree-sitter-go` † | 0.25.0 | 2025-08-29 | 210 KB ★ |
 | GraphQL | `tree-sitter-graphql` | 0.1.0 | 2025-04-30 | 55 KB |
 | Groovy | `tree-sitter-groovy` | 0.1.2 | 2024-11-19 | 950 KB |
 | Haskell | `tree-sitter-haskell` | 0.23.1 | 2024-11-10 | 3.6 MB |
-| HTML | `tree-sitter-html` † | 0.23.2 | 2024-11-11 | 17 KB |
-| Java | `tree-sitter-java` † | 0.23.5 | 2024-12-21 | 400 KB |
+| HTML | `tree-sitter-html` † | 0.23.2 | 2024-11-11 | 17 KB ★ |
+| Java | `tree-sitter-java` † | 0.23.5 | 2024-12-21 | 404 KB ★ |
 | JSDoc | `tree-sitter-jsdoc` † | 0.25.0 | 2025-09-13 | 25 KB |
 | JSON | `tree-sitter-json` † | 0.24.8 | 2024-11-11 | 5 KB |
 | Julia | `tree-sitter-julia` | 0.23.1 | 2024-11-11 | 6.0 MB |
-| Kotlin | `tree-sitter-kotlin-ng` | 1.1.0 | 2025-01-09 | 3.3 MB |
+| Kotlin | `tree-sitter-kotlin-ng` | 1.1.0 | 2025-01-09 | 3.31 MB ★ |
 | LaTeX | `tree-sitter-latex` | 0.1.0 | 2025-02-08 | 3.0 MB |
 | Lua | `tree-sitter-lua` | 0.5.0 | 2026-02-26 | 50 KB |
-| Make | `tree-sitter-make` | 1.1.1 | 2024-12-21 | 140 KB |
-| Markdown | `tree-sitter-md` | 0.5.3 | 2026-02-26 | 730 KB |
+| Make | `tree-sitter-make` | 1.1.1 | 2024-12-21 | 146 KB ★ |
+| Markdown | `tree-sitter-md` | 0.5.3 | 2026-02-26 | 765 KB ★ |
 | Nix | `tree-sitter-nix` | 0.3.0 | 2025-07-18 | 75 KB |
-| Objective-C | `tree-sitter-objc` | 3.0.2 | 2024-12-16 | 5.1 MB |
+| Objective-C | `tree-sitter-objc` | 3.0.2 | 2024-12-16 | 5.12 MB ★ |
 | OCaml | `tree-sitter-ocaml` | 0.25.0 | 2026-05-09 | 6.3 MB |
 | Perl | `tree-sitter-perl` | 1.1.2 | 2025-12-27 | 2.7 MB |
-| PHP | `tree-sitter-php` † | 0.24.2 | 2025-08-18 | 2.0 MB |
+| PHP | `tree-sitter-php` † | 0.24.2 | 2025-08-18 | 1.01 MB ★ |
 | Protobuf | `tree-sitter-proto` | 0.4.0 | 2025-12-24 | 75 KB |
 | QL | `tree-sitter-ql` † | 0.23.1 | 2024-11-11 | 300 KB |
 | R | `tree-sitter-r` | 1.2.0 | 2025-06-05 | 460 KB |
 | Regex | `tree-sitter-regex` † | 0.25.0 | 2025-09-13 | 20 KB |
-| Ruby | `tree-sitter-ruby` † | 0.23.1 | 2024-11-11 | 2.0 MB |
+| Ruby | `tree-sitter-ruby` † | 0.23.1 | 2024-11-11 | 2.03 MB ★ |
 | Scala | `tree-sitter-scala` | 0.26.0 | 2026-04-18 | 4.7 MB |
 | Solidity | `tree-sitter-solidity` | 1.2.13 | 2025-08-04 | 490 KB |
 | Svelte | `tree-sitter-svelte-ng` | 1.0.2 | 2024-09-08 | 42 KB |
-| Swift | `tree-sitter-swift` | 0.7.3 | 2026-06-01 | 3.6 MB |
+| Swift | `tree-sitter-swift` | 0.7.3 | 2026-06-01 | 3.59 MB ★ |
 | TLA⁺ | `tree-sitter-tlaplus` | 1.5.0 | 2024-10-20 | 4.7 MB |
 | TOML | `tree-sitter-toml-ng` | 0.7.0 | 2024-12-03 | 24 KB |
 | Verilog | `tree-sitter-verilog` † | 1.0.3 | 2024-11-10 | 17.3 MB |
 | YAML | `tree-sitter-yaml` | 0.7.2 | 2025-10-07 | 180 KB |
 | Zig | `tree-sitter-zig` | 1.1.2 | 2024-12-22 | 660 KB |
+
+**★** = exact value, measured as the cumulative size delta of a real
+`cargo build --release` binary when force-linking the grammar (one at a time, on
+top of the previous). These supersede the `cc -O2` estimate for those rows. The
+15 ★ grammars added **+27.3 MB** in total (binary 16.6 MB → 45.3 MB). Note PHP
+measures **1.01 MB** here (only `LANGUAGE_PHP` is linked) vs the ~2.0 MB estimate
+that counted the unused `php_only` parser too — a reminder the estimate
+over-counts multi-grammar crates. Unmarked rows are still `cc -O2` estimates.
 
 Only compatible grammars are listed — every crate above depends on
 `tree-sitter-language ^0.1` (decoupled → links against our `0.26.9` runtime).

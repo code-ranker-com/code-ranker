@@ -37,6 +37,20 @@ fn attr_key(key: &'static str) -> &'static str {
     key
 }
 
+/// The crate-root source filename (`lib.rs`) preferred when a crate node owns
+/// several root module files — DATA from `config.toml` (`crate_root_file`); the
+/// tie-break LOGIC (prefer this file) stays in [`collapse_to_files`].
+fn crate_root_filename() -> &'static str {
+    static NAME: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+        super::cfg::CONFIG
+            .get("crate_root_file")
+            .and_then(|v| v.as_str())
+            .expect("rust/config.toml `crate_root_file`")
+            .to_string()
+    });
+    NAME.as_str()
+}
+
 /// Collapse the internal module graph into a file-level `api::Graph`.
 ///
 /// - Every `Module` node maps to a `file` node keyed by its ABSOLUTE source
@@ -81,7 +95,7 @@ pub(crate) fn collapse_to_files(full: InternalGraph) -> Graph {
                 Entry::Vacant(v) => {
                     v.insert(file);
                 }
-                Entry::Occupied(mut o) if to.path.ends_with("lib.rs") => {
+                Entry::Occupied(mut o) if to.path.ends_with(crate_root_filename()) => {
                     *o.get_mut() = file;
                 }
                 Entry::Occupied(_) => {}

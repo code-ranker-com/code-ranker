@@ -102,7 +102,7 @@ pub(super) fn emit_uses(
     builder: &mut GraphBuilder,
 ) {
     let reexports = build_reexports(pending);
-    let mut seen: HashSet<(NodeId, NodeId, String)> = HashSet::new();
+    let mut seen: HashSet<(NodeId, NodeId, EdgeKind)> = HashSet::new();
     for pu in pending {
         let Some(target_id) = resolve_use_path(
             &pu.use_path,
@@ -126,8 +126,7 @@ pub(super) fn emit_uses(
         } else {
             EdgeKind::Uses
         };
-        let kind_str = format!("{kind:?}");
-        if !seen.insert((pu.from_mod_id.clone(), target_id.clone(), kind_str)) {
+        if !seen.insert((pu.from_mod_id.clone(), target_id.clone(), kind)) {
             continue;
         }
         builder.add_edge(Edge {

@@ -1,7 +1,7 @@
 # JavaScript language config — inherits `../defaults.toml` (see `../config.rs`).
 #
 # The JavaScript metric engine's tree-sitter node-kind tables are shared with
-# TypeScript and live in `../ecmascript/ecmascript.toml` (both dialects reuse the
+# TypeScript and live in `../ecmascript/config.toml` (both dialects reuse the
 # same engine). This file therefore carries only what is JavaScript-specific to
 # the language-neutral config layer: its principle-corpus language for doc links.
 #

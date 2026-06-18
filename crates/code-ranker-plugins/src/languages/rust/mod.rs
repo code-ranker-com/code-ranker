@@ -3,7 +3,6 @@ use code_ranker_plugin_api::{
     default_cycle_kinds, default_node_kinds,
     graph::Graph,
     level::{AttributeSpec, EdgeKindSpec, Grouping, Level, NodeKindSpec, Thresholds},
-    log,
     metrics::MetricInputs,
     node::Node,
     plugin::{LanguagePlugin, PluginInput, Preset},
@@ -11,8 +10,7 @@ use code_ranker_plugin_api::{
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use cargo_metadata::MetadataCommand;
-
+mod analyze;
 mod cfg;
 mod collapse;
 mod crate_graph;
@@ -20,10 +18,16 @@ mod dialect;
 mod ids;
 mod internal;
 mod module_graph;
+mod strip;
+mod test_attr;
+mod toolchain;
 
+use analyze::syn_analyze;
 use cfg::CONFIG;
 use collapse::collapse_to_files;
 use internal::GraphBuilder;
+use strip::{rust_file_metrics, strip_cfg_test};
+use toolchain::{rust_toolchain_roots, version_string};
 
 pub struct RustPlugin;
 
@@ -207,116 +211,6 @@ impl LanguagePlugin for RustPlugin {
     }
 }
 
-/// The Rust/Cargo toolchain path roots used to shorten external node ids in the
-/// snapshot: `cargo` (`$CARGO_HOME`), `registry` (the crates.io source dir),
-/// `rustup` (`$RUSTUP_HOME`), and `rust-src` (the stdlib source under the active
-/// sysroot). These are Rust-specific, so they live here in the Rust plugin rather
-/// than in the language-agnostic orchestrator.
-fn rust_toolchain_roots() -> Vec<(String, String)> {
-    let mut roots = Vec::new();
-    let home = std::env::var("HOME").unwrap_or_default();
-
-    let cargo = std::env::var("CARGO_HOME").unwrap_or_else(|_| format!("{home}/.cargo"));
-    let rustup = std::env::var("RUSTUP_HOME").unwrap_or_else(|_| format!("{home}/.rustup"));
-
-    if !cargo.is_empty() {
-        // Auto-detect crates.io registry hash dir (e.g. index.crates.io-<hash>).
-        let registry_src = format!("{cargo}/registry/src");
-        if let Ok(entries) = std::fs::read_dir(&registry_src) {
-            for entry in entries.flatten() {
-                let name = entry.file_name().to_string_lossy().to_string();
-                if name.starts_with("index.crates.io") {
-                    roots.push(("registry".to_string(), format!("{registry_src}/{name}")));
-                    break;
-                }
-            }
-        }
-        roots.push(("cargo".to_string(), cargo));
-    }
-    if !rustup.is_empty() {
-        // Add rust-src root: sysroot/lib/rustlib/src/rust/library — shortens stdlib
-        // paths from {rustup}/toolchains/.../library/... to {rust-src}/...
-        if which::which("rustc").is_ok()
-            && let Ok(out) = log::timed("rustc --print sysroot", || {
-                std::process::Command::new("rustc")
-                    .args(["--print", "sysroot"])
-                    .output()
-            })
-            && out.status.success()
-        {
-            let sysroot = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            let rust_lib = format!("{sysroot}/lib/rustlib/src/rust/library");
-            if std::path::Path::new(&rust_lib).exists() {
-                roots.push(("rust-src".to_string(), rust_lib));
-            }
-        }
-        roots.push(("rustup".to_string(), rustup));
-    }
-    roots
-}
-
-/// Syntactic stage: resolve the workspace via `cargo metadata` and build the
-/// internal crate + module/use graphs.
-fn syn_analyze(workspace: &Path, ignore_tests: bool, builder: &mut GraphBuilder) -> Result<()> {
-    let manifest = workspace.join("Cargo.toml");
-    // code-ranker is an offline tool: it never fetches from the network. See the
-    // comment in the original lib.rs for the research notes on --offline vs
-    // --no-deps vs full. Short version: --offline keeps external/cross-crate
-    // edges AND never goes to the network; the cache must be warm.
-    let metadata = log::timed("cargo metadata --offline", || {
-        MetadataCommand::new()
-            .manifest_path(&manifest)
-            .other_options(vec!["--offline".to_string()])
-            .exec()
-    })
-    .map_err(|err| offline_metadata_error(&manifest, err))?;
-
-    crate_graph::contribute(&metadata, builder);
-    module_graph::contribute(&metadata, ignore_tests, builder)?;
-    Ok(())
-}
-
-fn offline_metadata_error(manifest: &Path, err: cargo_metadata::Error) -> anyhow::Error {
-    anyhow::anyhow!(
-        "cargo metadata (offline) failed for {manifest}\n\n\
-         code-ranker is an offline tool — it never downloads dependencies. It reads \
-         the dependency graph from cargo's local cache, which must already be \
-         populated for this project.\n\n\
-         Warm the cache once (with network), then re-run code-ranker:\n    \
-         cargo metadata --manifest-path {manifest} >/dev/null\n\
-         (a prior `cargo build` / `cargo fetch` works too).\n\n\
-         In CI: run code-ranker on the same image/cache as your build or test jobs, \
-         where the cache is already warm.\n\n\
-         Underlying cargo error: {err}",
-        manifest = manifest.display(),
-    )
-}
-
-fn version_string() -> Option<String> {
-    which::which("rustc").ok()?;
-    let out = log::timed("rustc --version", || {
-        std::process::Command::new("rustc")
-            .arg("--version")
-            .output()
-    })
-    .ok()?;
-    if out.status.success() {
-        Some(
-            String::from_utf8_lossy(&out.stdout)
-                .split_whitespace()
-                .nth(1)
-                .unwrap_or("unknown")
-                .to_string(),
-        )
-    } else {
-        None
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Complexity: strip inline tests, run the tree-sitter-rust engine, write metrics
-// ─────────────────────────────────────────────────────────────────────────────
-
 /// Per-language unit kinds for the `functions` level (rendered via this dict —
 /// the viewer hardcodes no kind by name). Read from `[node_kinds]` in the merged
 /// config: the shared `method` from `defaults.toml` plus Rust's own `fn`
@@ -325,118 +219,6 @@ fn version_string() -> Option<String> {
 /// off-by-default level (the dialect's `fn_kind` only ever tags `fn` / `method`).
 fn function_node_kinds() -> BTreeMap<String, NodeKindSpec> {
     crate::config::node_kinds(&CONFIG)
-}
-
-/// Measure Rust complexity metrics for one file from its source bytes.
-/// `#[cfg(test)]` / `#[test]` / `#[bench]` items are stripped first (their lines
-/// become `tloc`), then the generic engine via the rust dialect runs. Returns the
-/// measured [`MetricInputs`] (`None` if the source did not parse); the orchestrator
-/// writes them onto the node.
-fn rust_file_metrics(src: &[u8]) -> Option<MetricInputs> {
-    let (prod, tloc) = strip_cfg_test(src);
-    let mut m = dialect::compute(&prod)?;
-    m.tloc = tloc as f64;
-    Some(m)
-}
-
-/// True if any attribute gates an item to tests: `#[test]`, `#[bench]`, or
-/// `#[cfg(test)]` / `#[cfg(all(test, …))]` / `#[cfg(any(test, …))]`. A `test`
-/// **identifier** inside `cfg(...)` is what matches — `cfg(feature = "test")`
-/// (a string literal) does not.
-fn is_test_attr(attr: &syn::Attribute) -> bool {
-    // The `test` / `bench` / `cfg` attribute idents are DATA (`[syn]`).
-    if attr.path().is_ident(cfg::SYN_TEST.as_str()) || attr.path().is_ident(cfg::SYN_BENCH.as_str())
-    {
-        return true;
-    }
-    if attr.path().is_ident(cfg::SYN_CFG.as_str())
-        && let syn::Meta::List(list) = &attr.meta
-    {
-        return tokens_have_test_ident(list.tokens.clone());
-    }
-    false
-}
-
-/// Recursively scan a token stream for a bare `test` identifier (descends into
-/// `all(...)` / `any(...)` groups).
-fn tokens_have_test_ident(ts: proc_macro2::TokenStream) -> bool {
-    ts.into_iter().any(|t| match t {
-        proc_macro2::TokenTree::Ident(i) => i == cfg::SYN_TEST.as_str(),
-        proc_macro2::TokenTree::Group(g) => tokens_have_test_ident(g.stream()),
-        _ => false,
-    })
-}
-
-/// Visitor collecting the 1-based, inclusive line ranges of test-only items
-/// (`#[cfg(test)]` modules, `#[test]`/`#[cfg(test)]` fns), attribute line
-/// included. It recurses into ordinary modules to catch nested test modules but
-/// not into a test item it already captured.
-#[derive(Default)]
-struct TestSpans {
-    ranges: Vec<(usize, usize)>,
-}
-
-impl TestSpans {
-    fn record(&mut self, attrs: &[syn::Attribute], span: proc_macro2::Span) {
-        use syn::spanned::Spanned;
-        let start = attrs
-            .iter()
-            .map(|a| a.span().start().line)
-            .chain(std::iter::once(span.start().line))
-            .min()
-            .unwrap_or(0);
-        self.ranges.push((start, span.end().line));
-    }
-}
-
-impl<'ast> syn::visit::Visit<'ast> for TestSpans {
-    fn visit_item_mod(&mut self, m: &'ast syn::ItemMod) {
-        use syn::spanned::Spanned;
-        if m.attrs.iter().any(is_test_attr) {
-            self.record(&m.attrs, m.span());
-        } else {
-            syn::visit::visit_item_mod(self, m);
-        }
-    }
-    fn visit_item_fn(&mut self, f: &'ast syn::ItemFn) {
-        use syn::spanned::Spanned;
-        if f.attrs.iter().any(is_test_attr) {
-            self.record(&f.attrs, f.span());
-        }
-    }
-}
-
-/// Step 1 of the Rust line accounting: remove `#[cfg(test)]` / `#[test]` /
-/// `#[bench]` items so the production metrics (`sloc` / `cloc` / `blank` / `hk` /
-/// complexity) are then measured on production code only. Returns the production
-/// source **and** `tloc` — the number of test lines removed (the whole test
-/// region: attribute, body, braces). Parse failures or no test items return the
-/// source unchanged with `tloc = 0`.
-fn strip_cfg_test(src: &[u8]) -> (Vec<u8>, usize) {
-    use syn::visit::Visit;
-    let Ok(text) = std::str::from_utf8(src) else {
-        return (src.to_vec(), 0);
-    };
-    let Ok(file) = syn::parse_file(text) else {
-        return (src.to_vec(), 0);
-    };
-    let mut spans = TestSpans::default();
-    spans.visit_file(&file);
-    if spans.ranges.is_empty() {
-        return (src.to_vec(), 0);
-    }
-    let drop: std::collections::HashSet<usize> =
-        spans.ranges.iter().flat_map(|&(s, e)| s..=e).collect();
-    let tloc = drop.len();
-    let mut out: String = text
-        .lines()
-        .enumerate()
-        .filter(|(i, _)| !drop.contains(&(i + 1)))
-        .map(|(_, l)| l)
-        .collect::<Vec<_>>()
-        .join("\n");
-    out.push('\n');
-    (out.into_bytes(), tloc)
 }
 
 #[cfg(test)]

@@ -57,6 +57,7 @@ struct ModuleLists {
     source_dirs: Vec<String>,
     strip_exts: Vec<String>,
     index_file: String,
+    alias_prefix: String,
 }
 
 static MODULE: LazyLock<ModuleLists> = LazyLock::new(|| ModuleLists {
@@ -66,6 +67,11 @@ static MODULE: LazyLock<ModuleLists> = LazyLock::new(|| ModuleLists {
         .get("index_file")
         .and_then(|v| v.as_str())
         .expect("ecmascript/config.toml `index_file`")
+        .to_string(),
+    alias_prefix: super::cfg::CONFIG
+        .get("alias_prefix")
+        .and_then(|v| v.as_str())
+        .expect("ecmascript/config.toml `alias_prefix`")
         .to_string(),
 });
 
@@ -343,7 +349,7 @@ fn build_file_index(workspace: &Path, files: &[PathBuf]) -> HashMap<String, Path
 pub fn external_package(spec: &str) -> Option<String> {
     if spec.starts_with("./")
         || spec.starts_with("../")
-        || spec.starts_with("@/")
+        || spec.starts_with(MODULE.alias_prefix.as_str())
         || spec.is_empty()
     {
         return None;
@@ -496,7 +502,7 @@ fn resolve_import(
 ) -> Option<PathBuf> {
     let base_path: PathBuf = if specifier.starts_with("./") || specifier.starts_with("../") {
         from_file.parent()?.join(specifier)
-    } else if let Some(rest) = specifier.strip_prefix("@/") {
+    } else if let Some(rest) = specifier.strip_prefix(MODULE.alias_prefix.as_str()) {
         alias_root.join(rest)
     } else {
         return None;

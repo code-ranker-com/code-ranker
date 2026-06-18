@@ -2,7 +2,7 @@
 //!
 //! The walk logic lives in `crate::engine`; this is the ECMAScript-specific
 //! layer: the caller's grammar (js → tree-sitter-javascript, ts/tsx →
-//! tree-sitter-typescript), the resolved [`Roles`] (from `ecmascript.toml`), and
+//! tree-sitter-typescript), the resolved [`Roles`] (from `ecmascript/config.toml`), and
 //! the genuinely-divergent predicates — chiefly the context-aware function vs
 //! closure classification by ancestor walk (`is_func`/`is_closure`), the
 //! per-grammar `else-if` rule (`else_if_via_else_clause`), and the cognitive
@@ -19,7 +19,7 @@ static ROLE_CFG: LazyLock<RoleCfg> = LazyLock::new(|| {
     super::cfg::CONFIG
         .clone()
         .try_into()
-        .expect("ecmascript.toml [roles]/[halstead]/[loc] parse")
+        .expect("ecmascript/config.toml [roles]/[halstead]/[loc] parse")
 });
 
 /// The function-unit `kind` id strings from `[units]`, resolved once. The

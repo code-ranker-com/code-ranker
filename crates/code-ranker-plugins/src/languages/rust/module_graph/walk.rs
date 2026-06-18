@@ -444,42 +444,11 @@ pub(super) fn is_test_item(item: &Item) -> bool {
         Item::Union(i) => &i.attrs,
         _ => return false,
     };
-    attrs.iter().any(is_test_attr)
-}
-
-/// True if an attribute gates an item to tests: `#[test]`, `#[bench]`, or a
-/// `cfg(...)` whose predicate contains a bare `test` identifier
-/// (`#[cfg(test)]`, `#[cfg(all(test, …))]`). `cfg(feature = "test")` does not
-/// match — only the `test` *identifier* does.
-fn is_test_attr(attr: &syn::Attribute) -> bool {
-    // The `test` / `bench` / `cfg` attribute idents are DATA (`[syn]`).
-    if attr
-        .path()
-        .is_ident(crate::languages::rust::cfg::SYN_TEST.as_str())
-        || attr
-            .path()
-            .is_ident(crate::languages::rust::cfg::SYN_BENCH.as_str())
-    {
-        return true;
-    }
-    if attr
-        .path()
-        .is_ident(crate::languages::rust::cfg::SYN_CFG.as_str())
-        && let Ok(list) = attr.meta.require_list()
-    {
-        return tokens_have_test_ident(list.tokens.clone());
-    }
-    false
-}
-
-/// Recursively scan a token stream for a bare `test` identifier (descends into
-/// `all(...)` / `any(...)` / `not(...)` groups).
-fn tokens_have_test_ident(ts: proc_macro2::TokenStream) -> bool {
-    ts.into_iter().any(|tt| match tt {
-        proc_macro2::TokenTree::Ident(i) => i == crate::languages::rust::cfg::SYN_TEST.as_str(),
-        proc_macro2::TokenTree::Group(g) => tokens_have_test_ident(g.stream()),
-        _ => false,
-    })
+    // Shared with the metric test-stripper (`rust/test_attr.rs`) so the graph and
+    // the metrics never disagree on what is test.
+    attrs
+        .iter()
+        .any(crate::languages::rust::test_attr::is_test_attr)
 }
 
 fn count_items(items: &[Item]) -> usize {

@@ -59,6 +59,9 @@ std_crates = ["std", "core", "alloc", "proc_macro", "test"]
 module_roots = ["lib", "main", "mod"]
 source_ext = "rs"
 dir_module_file = "mod.rs"
+# The crate-root source filename preferred when a crate node owns several root
+# module files (`collapse.rs` tie-break) — DATA; the tie-break LOGIC stays in Rust.
+crate_root_file = "lib.rs"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Node-id namespace prefixes — DATA, not code. The id-minting LOGIC (`ids.rs`,

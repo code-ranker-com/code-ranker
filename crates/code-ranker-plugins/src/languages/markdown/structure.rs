@@ -23,6 +23,11 @@ struct Kinds {
     code_lines_attr: String,
     links_attr: String,
     broken_links_attr: String,
+    // Markdown syntax markers the line scanner keys on (multi-char → DATA).
+    fences: Vec<String>,
+    link_open: String,
+    url_scheme: String,
+    mailto_prefix: String,
 }
 
 static KINDS: LazyLock<Kinds> = LazyLock::new(|| {
@@ -44,8 +49,31 @@ static KINDS: LazyLock<Kinds> = LazyLock::new(|| {
         code_lines_attr: attr("code_lines"),
         links_attr: attr("links"),
         broken_links_attr: attr("broken_links"),
+        fences: cfg
+            .get("markers")
+            .and_then(|m| m.as_table())
+            .and_then(|m| m.get("fences"))
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
+            .expect("markdown [markers].fences"),
+        link_open: marker(&cfg, "link_open"),
+        url_scheme: marker(&cfg, "url_scheme"),
+        mailto_prefix: marker(&cfg, "mailto_prefix"),
     }
 });
+
+/// A single string entry from the `[markers]` table (the multi-char Markdown
+/// syntax tokens the scanner keys on).
+fn marker(cfg: &toml::Table, key: &str) -> String {
+    crate::config::string_table(cfg, "markers")
+        .get(key)
+        .cloned()
+        .unwrap_or_else(|| panic!("markdown [markers] is missing `{key}`"))
+}
 
 /// The measured per-document metrics (besides `loc`).
 #[derive(Default)]
@@ -119,7 +147,7 @@ pub(super) fn analyze(workspace: &Path) -> Result<Graph> {
         let mut in_fence = false;
         for line in text.lines() {
             let t = line.trim_start();
-            if t.starts_with("```") || t.starts_with("~~~") {
+            if KINDS.fences.iter().any(|f| t.starts_with(f.as_str())) {
                 in_fence = !in_fence;
                 continue; // the fence marker line is not counted as code
             }
@@ -193,9 +221,9 @@ fn classify_link(
     by_rel: &HashMap<String, PathBuf>,
 ) -> Link {
     if dest.is_empty()
-        || dest.contains("://")
+        || dest.contains(KINDS.url_scheme.as_str())
         || dest.starts_with('#')
-        || dest.starts_with("mailto:")
+        || dest.starts_with(KINDS.mailto_prefix.as_str())
     {
         return Link::External;
     }
@@ -236,8 +264,8 @@ fn classify_link(
 fn scan_link_dests(line: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut j = 0;
-    while let Some(rel) = line[j..].find("](") {
-        let start = j + rel + 2;
+    while let Some(rel) = line[j..].find(KINDS.link_open.as_str()) {
+        let start = j + rel + KINDS.link_open.len();
         if let Some(end_rel) = line[start..].find(')') {
             let raw = line[start..start + end_rel].trim();
             let dest = raw.split_whitespace().next().unwrap_or(raw);

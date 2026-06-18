@@ -6,12 +6,19 @@
 doc_lang = "cpp"
 
 # C++ sources/headers. `.h` is left to the C plugin to avoid a clash.
+# C/C++ have no universal manifest, so detection is by source-file presence
+# (see `cfamily::detect`) — no `detect_markers`.
 extensions = ["cpp", "cc", "cxx", "hpp", "hh", "hxx", "ipp"]
-detect_markers = []
 skip_dirs = ["build", "cmake-build-debug", "node_modules"]
 
 test_dirs = ["test", "tests"]
 test_suffixes = ["_test.cpp", "_test.cc", "_test.cxx"]
+
+# The `#include` dependency-graph vocabulary the shared `cfamily` scan keys on.
+# The `#` and quote/bracket delimiters stay inline as single-char preprocessor
+# syntax; the multi-char include keyword is DATA.
+[structure]
+include_directive = "include"
 
 [units]
 method = "method"

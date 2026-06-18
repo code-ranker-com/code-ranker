@@ -12,6 +12,7 @@ fn cfg() -> Cfg {
         uses_kind: "uses".into(),
         loc_attr: "loc".into(),
         external_attr: "external".into(),
+        include_directive: "include".into(),
     }
 }
 
@@ -29,7 +30,7 @@ fn scan_includes_splits_local_and_system() {
     // (ignored), plain code, and another system include.
     let src =
         "#include <stdio.h>\n  #  include \"util.h\"\n#define FOO 1\nint x;\n#include <math.h>\n";
-    let incs = scan_includes(src);
+    let incs = scan_includes(src, "include");
     assert_eq!(incs.len(), 3, "the #define line is not an include");
     assert_eq!(incs[0], ("stdio.h".to_string(), true, 1));
     assert_eq!(incs[1], ("util.h".to_string(), false, 2));
@@ -165,7 +166,7 @@ fn resolves_adjacent_file_outside_the_collected_set() {
 fn scan_includes_ignores_macro_and_unterminated_forms() {
     // `#include FOO` (a macro, neither `"` nor `<`) hits the `_ => continue` arm;
     // `#include "x` (no closing quote) finds no terminator and adds nothing.
-    let incs = scan_includes("#include FOO\n#include \"x\n#include <ok.h>\n");
+    let incs = scan_includes("#include FOO\n#include \"x\n#include <ok.h>\n", "include");
     assert_eq!(incs.len(), 1, "only the well-formed system include counts");
     assert_eq!(incs[0].0, "ok.h");
     assert!(incs[0].1, "system include");

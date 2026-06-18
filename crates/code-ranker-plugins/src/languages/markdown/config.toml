@@ -9,8 +9,17 @@
 doc_lang = "markdown"
 
 extensions = ["md", "markdown"]
-detect_markers = []
 skip_dirs = ["node_modules", "target", "vendor"]
+
+# Multi-char Markdown syntax markers the line scanner keys on — DATA (the scan
+# LOGIC stays in `structure.rs`; single-char tokens like `#`/`)` stay inline as
+# pure syntax). `fences` toggle fenced code blocks; `link_open` opens an inline
+# link destination; `url_scheme`/`mailto_prefix` mark a link as external.
+[markers]
+fences = ["```", "~~~"]
+link_open = "]("
+url_scheme = "://"
+mailto_prefix = "mailto:"
 
 # ── Markdown-specific node attributes (measured by `structure.rs`, no engine) ──
 # Each is a plain integer counter set per document. They render like any metric

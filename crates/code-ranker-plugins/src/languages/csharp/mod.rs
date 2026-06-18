@@ -64,44 +64,11 @@ impl LanguagePlugin for CsharpPlugin {
     }
 
     fn metrics(&self, graph: &Graph) -> Vec<(String, MetricInputs)> {
-        let mut out = Vec::new();
-        for node in &graph.nodes {
-            if node.kind != code_ranker_plugin_api::node::FILE {
-                continue;
-            }
-            let Ok(src) = std::fs::read(&node.id) else {
-                continue;
-            };
-            if let Some(m) = dialect::compute(&src) {
-                out.push((node.id.clone(), m));
-            }
-        }
-        out
+        file_metrics(graph)
     }
 
     fn function_units(&self, graph: &Graph) -> Vec<(Node, MetricInputs)> {
-        let mut out = Vec::new();
-        for node in &graph.nodes {
-            if node.kind != code_ranker_plugin_api::node::FILE {
-                continue;
-            }
-            let Ok(src) = std::fs::read(&node.id) else {
-                continue;
-            };
-            for u in dialect::compute_functions(&src) {
-                out.push((
-                    Node {
-                        id: format!("{}#{}@{}", node.id, u.name, u.start_line),
-                        kind: u.kind.clone(),
-                        name: u.name.clone(),
-                        parent: Some(node.id.clone()),
-                        attrs: Default::default(),
-                    },
-                    u.inputs,
-                ));
-            }
-        }
-        out
+        function_nodes(graph)
     }
 
     fn is_test_path(&self, rel_path: &str) -> bool {
@@ -122,6 +89,50 @@ impl LanguagePlugin for CsharpPlugin {
     ) -> BTreeMap<String, AttributeSpec> {
         crate::config::apply_spec_overrides(defaults, &CONFIG)
     }
+}
+
+/// Measure C# complexity metrics for every `file` node (parsing each by its
+/// absolute-path `id`); files that cannot be read/parsed are skipped.
+fn file_metrics(graph: &Graph) -> Vec<(String, MetricInputs)> {
+    let mut out = Vec::new();
+    for node in &graph.nodes {
+        if node.kind != code_ranker_plugin_api::node::FILE {
+            continue;
+        }
+        let Ok(src) = std::fs::read(&node.id) else {
+            continue;
+        };
+        if let Some(m) = dialect::compute(&src) {
+            out.push((node.id.clone(), m));
+        }
+    }
+    out
+}
+
+/// Build function-level units for every `file` node.
+fn function_nodes(graph: &Graph) -> Vec<(Node, MetricInputs)> {
+    let mut out = Vec::new();
+    for node in &graph.nodes {
+        if node.kind != code_ranker_plugin_api::node::FILE {
+            continue;
+        }
+        let Ok(src) = std::fs::read(&node.id) else {
+            continue;
+        };
+        for u in dialect::compute_functions(&src) {
+            out.push((
+                Node {
+                    id: format!("{}#{}@{}", node.id, u.name, u.start_line),
+                    kind: u.kind.clone(),
+                    name: u.name.clone(),
+                    parent: Some(node.id.clone()),
+                    attrs: Default::default(),
+                },
+                u.inputs,
+            ));
+        }
+    }
+    out
 }
 
 #[cfg(test)]

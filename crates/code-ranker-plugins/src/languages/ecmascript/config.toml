@@ -50,12 +50,15 @@ test_stem_suffixes = ["_test", "_spec"]
 # workspace subfolders `find_source_root` prefers as the import root;
 # `module_strip_exts` are the extensions `file_to_mod_path` strips from a module
 # path (order matters — first match wins); `index_file` is the implicit module
-# stem collapsed into its parent directory.
+# stem collapsed into its parent directory; `alias_prefix` is the webpack/tsconfig
+# source-root import alias that resolves against `source_dirs` (the `./`/`../`
+# relative prefixes stay inline in Rust as pure path syntax).
 # ──────────────────────────────────────────────────────────────────────────────
 
 source_dirs = ["src"]
 module_strip_exts = [".tsx", ".ts", ".jsx", ".js", ".mjs", ".cjs", ".mts", ".cts"]
 index_file = "index"
+alias_prefix = "@/"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Function-unit `kind` id strings the dialect's `fn_kind` emits, keyed by the

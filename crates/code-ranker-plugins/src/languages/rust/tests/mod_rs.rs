@@ -798,7 +798,7 @@ fn offline_metadata_error_explains_warm_cache() {
     let err = cargo_metadata::Error::CargoMetadata {
         stderr: "no such manifest".into(),
     };
-    let e = offline_metadata_error(std::path::Path::new("/proj/Cargo.toml"), err);
+    let e = analyze::offline_metadata_error(std::path::Path::new("/proj/Cargo.toml"), err);
     let msg = format!("{e}");
     assert!(msg.contains("/proj/Cargo.toml"), "names the manifest");
     assert!(

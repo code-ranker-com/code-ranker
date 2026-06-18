@@ -24,6 +24,8 @@ pub struct Cfg {
     pub uses_kind: String,
     pub loc_attr: String,
     pub external_attr: String,
+    /// The preprocessor include keyword the scan keys on (`#include`) — DATA.
+    pub include_directive: String,
 }
 
 impl Cfg {
@@ -47,6 +49,10 @@ impl Cfg {
                 .get("external")
                 .cloned()
                 .expect("c-family [ids].external (inherited from defaults.toml)"),
+            include_directive: crate::config::string_table(cfg, "structure")
+                .get("include_directive")
+                .cloned()
+                .expect("c-family [structure].include_directive"),
             uses_kind,
             loc_attr,
             external_attr,
@@ -147,7 +153,7 @@ pub fn analyze(workspace: &Path, ignore_tests: bool, cfg: &Cfg) -> Result<Graph>
             attrs,
         });
 
-        for (inc, system, line) in scan_includes(&source) {
+        for (inc, system, line) in scan_includes(&source, &cfg.include_directive) {
             if system {
                 add_external(
                     &inc,
@@ -258,8 +264,10 @@ fn resolve_local(
 }
 
 /// Scan source text for `#include` directives. Returns `(target, is_system, line)`
-/// for each — `is_system` is the `<...>` form, else the `"..."` form.
-fn scan_includes(source: &str) -> Vec<(String, bool, u32)> {
+/// for each — `is_system` is the `<...>` form, else the `"..."` form. The include
+/// keyword is DATA (`include_directive`); the `#` and quote/bracket delimiters
+/// stay inline as single-char preprocessor syntax.
+fn scan_includes(source: &str, include_directive: &str) -> Vec<(String, bool, u32)> {
     let mut out = Vec::new();
     for (i, raw) in source.lines().enumerate() {
         let line = raw.trim_start();
@@ -267,7 +275,7 @@ fn scan_includes(source: &str) -> Vec<(String, bool, u32)> {
             continue;
         };
         let rest = rest.trim_start();
-        let Some(rest) = rest.strip_prefix("include") else {
+        let Some(rest) = rest.strip_prefix(include_directive) else {
             continue;
         };
         let rest = rest.trim_start();

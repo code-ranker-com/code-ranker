@@ -26,11 +26,14 @@ method = "method"
 default = "function"
 
 # Import / dependency-graph tree-sitter NODE-KIND strings the structure builder
-# keys on. The walk LOGIC stays in Rust; which kinds it matches is data.
+# keys on, plus the go.mod module-manifest vocabulary. The walk LOGIC stays in
+# Rust; which kinds/markers it matches is data. `module_directive` keeps its
+# trailing space on purpose — it is the exact `module <path>` line prefix.
 [structure]
 import_declaration = "import_declaration"
-import_spec = "import_spec"
 interpreted_string_literal = "interpreted_string_literal"
+module_file = "go.mod"
+module_directive = "module "
 
 # tree-sitter field-name API navigation (`child_by_field_name`).
 [fields]

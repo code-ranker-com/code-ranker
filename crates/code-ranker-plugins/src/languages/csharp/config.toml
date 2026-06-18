@@ -6,8 +6,9 @@
 
 doc_lang = "csharp"
 
+# Detection is by `.cs` source-file presence (see `structure::detect`) — C# has
+# no single universal manifest, so there are no `detect_markers`.
 extensions = ["cs"]
-detect_markers = []
 skip_dirs = ["bin", "obj", "node_modules"]
 
 test_dirs = ["test", "tests"]

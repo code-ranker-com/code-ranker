@@ -23,6 +23,8 @@ struct StructureKinds {
     ext_prefix: String,
     import_declaration: String,
     interpreted_string_literal: String,
+    module_file: String,
+    module_directive: String,
 }
 
 static KINDS: LazyLock<StructureKinds> = LazyLock::new(|| {
@@ -40,6 +42,8 @@ static KINDS: LazyLock<StructureKinds> = LazyLock::new(|| {
             .expect("go [ids].external (inherited from defaults.toml)"),
         import_declaration: get("import_declaration"),
         interpreted_string_literal: get("interpreted_string_literal"),
+        module_file: get("module_file"),
+        module_directive: get("module_directive"),
     }
 });
 
@@ -108,12 +112,12 @@ pub(super) fn analyze(workspace: &Path, ignore_tests: bool) -> Result<Graph> {
 /// The module path declared by `go.mod` (`module example.com/foo`), or empty when
 /// there is no `go.mod` (then every import resolves as external).
 fn read_module_path(workspace: &Path) -> String {
-    let Ok(text) = std::fs::read_to_string(workspace.join("go.mod")) else {
+    let Ok(text) = std::fs::read_to_string(workspace.join(&KINDS.module_file)) else {
         return String::new();
     };
     for line in text.lines() {
         let line = line.trim();
-        if let Some(rest) = line.strip_prefix("module ") {
+        if let Some(rest) = line.strip_prefix(KINDS.module_directive.as_str()) {
             return rest.trim().to_string();
         }
     }

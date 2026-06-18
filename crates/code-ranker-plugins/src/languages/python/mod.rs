@@ -1,11 +1,11 @@
 use anyhow::Result;
 use code_ranker_plugin_api::{
-    default_cycle_kinds, default_node_kinds,
+    Preset, default_cycle_kinds, default_node_kinds,
     graph::Graph,
     level::{AttributeSpec, Level, NodeKindSpec},
     metrics::MetricInputs,
     node::Node,
-    plugin::{LanguagePlugin, PluginInput, Preset},
+    plugin::{LanguagePlugin, PluginInput},
 };
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -22,7 +22,7 @@ static CONFIG: LazyLock<toml::Table> =
 // Self-register this plugin (collected by `code_ranker_plugin_api::registry`); no
 // central list anywhere names a language.
 inventory::submit! {
-    code_ranker_plugin_api::plugin::PluginRegistration(&PythonPlugin)
+    code_ranker_plugin_api::PluginRegistration(&PythonPlugin)
 }
 
 /// The Python language plugin (registered by the CLI).

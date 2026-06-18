@@ -9,7 +9,7 @@
 
 use crate::level_graph::LevelGraph;
 use chrono::{DateTime, Utc};
-use code_ranker_plugin_api::plugin::Preset;
+use code_ranker_plugin_api::Preset;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 

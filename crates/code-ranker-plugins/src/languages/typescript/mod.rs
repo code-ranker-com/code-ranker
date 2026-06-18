@@ -10,11 +10,12 @@ use crate::languages::ecmascript::{
 };
 use anyhow::Result;
 use code_ranker_plugin_api::{
+    Preset, detect_with_marker,
     graph::Graph,
     level::{AttributeSpec, Level},
     metrics::MetricInputs,
     node::Node,
-    plugin::{LanguagePlugin, PluginInput, Preset, detect_with_marker},
+    plugin::{LanguagePlugin, PluginInput},
 };
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -35,7 +36,7 @@ static CONFIG: LazyLock<toml::Table> = LazyLock::new(|| {
 // Self-register this plugin (collected by `code_ranker_plugin_api::registry`); no
 // central list anywhere names a language.
 inventory::submit! {
-    code_ranker_plugin_api::plugin::PluginRegistration(&TypescriptPlugin)
+    code_ranker_plugin_api::PluginRegistration(&TypescriptPlugin)
 }
 
 /// The TypeScript language plugin (handles .ts / .tsx / .mts / .cts).

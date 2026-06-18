@@ -28,7 +28,10 @@ Focus on these; treat everything else as secondary.
 
 - **ADP** — dependency cycles. A module graph should be acyclic.
 - **HK** — Henry-Kafura coupling, `HK = sloc × (fan_in × fan_out)²`: a large
-  module on a busy crossroads of incoming/outgoing dependencies.
+  module on a busy crossroads of incoming/outgoing dependencies. Full
+  diagnose-and-split workflow (measure one file, list its fan_in/fan_out, find
+  the mixed scenarios, split, verify with a before/after diff report):
+  [HK principle](https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/henry-kafura-coupling.md).
 
 **Strategy:** fix them one at a time, worst-first, in `--severity warning`,
 until no warnings remain — ADP first (cycles are structural), then HK.

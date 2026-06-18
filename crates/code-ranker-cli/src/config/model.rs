@@ -75,7 +75,7 @@ impl Default for Config {
 }
 
 /// A project-config preset (`[presets.<ID>]`) — the table key is the id. Mirrors
-/// the plugin [`Preset`](code_ranker_plugin_api::plugin::Preset) but with sane
+/// the plugin [`Preset`](code_ranker_plugin_api::Preset) but with sane
 /// defaults so a project entry needs only `sort_metric` (+ usually `title`).
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(default, deny_unknown_fields)]
@@ -96,10 +96,10 @@ pub struct PresetDef {
 }
 
 impl PresetDef {
-    /// Build the runtime [`Preset`](code_ranker_plugin_api::plugin::Preset) for
+    /// Build the runtime [`Preset`](code_ranker_plugin_api::Preset) for
     /// this entry, defaulting `label` / `title` to the id.
-    pub fn to_preset(&self, id: &str) -> code_ranker_plugin_api::plugin::Preset {
-        code_ranker_plugin_api::plugin::Preset {
+    pub fn to_preset(&self, id: &str) -> code_ranker_plugin_api::Preset {
+        code_ranker_plugin_api::Preset {
             id: id.to_string(),
             label: self.label.clone().unwrap_or_else(|| id.to_string()),
             title: self.title.clone().unwrap_or_else(|| id.to_string()),

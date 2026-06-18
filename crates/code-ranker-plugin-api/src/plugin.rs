@@ -1,4 +1,4 @@
-//! The [`LanguagePlugin`] trait + [`Options`] + [`Preset`].
+//! The [`LanguagePlugin`] trait + its [`PluginInput`].
 //!
 //! A plugin turns a workspace into nodes + edges at a requested level
 //! ([`analyze`](LanguagePlugin::analyze)) and **measures** the per-file **complexity
@@ -10,26 +10,18 @@
 //! language-agnostic derived data (cycles, Henry-Kafura, stats) are filled
 //! centrally by the orchestrator, so a plugin needs no dependency on the
 //! graph/enrichment crate. Plugins SELF-REGISTER via [`inventory::submit!`] into
-//! [`registry`]; the CLI works only with that array through this trait and never
-//! names a concrete language.
+//! the [`registry`]; the CLI works only with that array through this trait and
+//! never names a concrete language.
 
 use crate::graph::Graph;
 use crate::level::{AttributeSpec, Level, Thresholds};
 use crate::metrics::MetricInputs;
 use crate::node::Node;
+use crate::preset::Preset;
 use crate::report::ReportOverride;
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::Path;
-
-/// Return `true` when `workspace` contains the given marker file. A generic,
-/// language-agnostic detection helper for marker-based plugins (e.g. JS →
-/// `"package.json"`, TS → `"tsconfig.json"`). Lives here, not in any one language
-/// plugin, so every plugin can reuse it without depending on a sibling plugin.
-pub fn detect_with_marker(workspace: &Path, marker: &str) -> bool {
-    workspace.join(marker).exists()
-}
 
 /// Everything the orchestrator feeds a plugin from config + CLI input.
 #[derive(Debug, Clone, Default)]
@@ -52,31 +44,6 @@ pub struct PluginInput {
     /// When `true`, a directory-walking plugin skips hidden files / directories
     /// (dotfiles) while collecting source files (mirrors `[ignore] hidden`).
     pub hidden: bool,
-}
-
-/// A Prompt-Generator preset (a refactoring principle): a ready-to-paste AI
-/// instruction plus how the UI seeds the node selection for it. Each plugin
-/// builds its own set from config via [`LanguagePlugin::presets`] (the common
-/// catalog plus any language-specific presets).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Preset {
-    /// Stable id / short code shown on the button (e.g. `"ADP"`).
-    pub id: String,
-    /// Button label (usually the id).
-    pub label: String,
-    /// Full principle title (first heading of the generated prompt).
-    pub title: String,
-    /// The prompt body (Markdown, language-neutral by default).
-    pub prompt: String,
-    /// Link to the full principle doc, if any.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub doc_url: Option<String>,
-    /// The metric the recommended-node list sorts by (an attribute key, or the
-    /// pseudo-metric `"cycle"`).
-    pub sort_metric: String,
-    /// Which connection sets the preset pre-selects: any of `"in"`/`"out"`/`"common"`.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub connections: Vec<String>,
 }
 
 pub trait LanguagePlugin: Sync {
@@ -269,12 +236,5 @@ mod tests {
         // report_overrides defaults to a no-op (catalog lists kept as-is).
         let ro = p.report_overrides();
         assert!(ro.columns.is_noop() && ro.card.is_noop() && ro.stats.is_noop());
-    }
-
-    #[test]
-    fn detect_with_marker_checks_file_presence() {
-        let dir = std::env::temp_dir();
-        // a marker that (almost certainly) does not exist
-        assert!(!detect_with_marker(&dir, "code-ranker-no-such-marker.xyz"));
     }
 }

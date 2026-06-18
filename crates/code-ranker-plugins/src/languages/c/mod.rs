@@ -5,12 +5,12 @@
 
 use anyhow::Result;
 use code_ranker_plugin_api::{
-    default_cycle_kinds, default_node_kinds,
+    Preset, default_cycle_kinds, default_node_kinds,
     graph::Graph,
     level::{AttributeSpec, Level},
     metrics::MetricInputs,
     node::Node,
-    plugin::{LanguagePlugin, PluginInput, Preset},
+    plugin::{LanguagePlugin, PluginInput},
 };
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -34,7 +34,7 @@ static CFG: LazyLock<cfamily::Cfg> = LazyLock::new(|| cfamily::Cfg::from_config(
 // Self-register this plugin (collected by `code_ranker_plugin_api::registry`); no
 // central list anywhere names a language.
 inventory::submit! {
-    code_ranker_plugin_api::plugin::PluginRegistration(&CPlugin)
+    code_ranker_plugin_api::PluginRegistration(&CPlugin)
 }
 
 /// The C language plugin (registered by the CLI).

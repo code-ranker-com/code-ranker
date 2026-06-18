@@ -8,7 +8,7 @@ use super::{
 };
 use anyhow::Result;
 use code_ranker_graph::level_graph::LevelGraph;
-use code_ranker_plugin_api::{node::Node, plugin::Preset};
+use code_ranker_plugin_api::{Preset, node::Node};
 
 /// One metric (or cycle) breach on a node, with its tier.
 struct Breach {

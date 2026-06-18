@@ -33,6 +33,7 @@
 //! kinds/keys without hardcoding their names.
 
 pub mod attrs;
+pub mod detection;
 pub mod edge;
 pub mod graph;
 pub mod level;
@@ -41,10 +42,12 @@ pub mod log;
 pub mod metrics;
 pub mod node;
 pub mod plugin;
+pub mod preset;
 pub mod report;
 pub mod toml_merge;
 
 pub use attrs::{AttrValue, Attributes, ValueType};
+pub use detection::detect_with_marker;
 pub use edge::Edge;
 pub use graph::Graph;
 pub use level::{
@@ -53,7 +56,8 @@ pub use level::{
 };
 pub use metrics::{FunctionUnit, MetricInputs};
 pub use node::{Node, NodeId};
-pub use plugin::{LanguagePlugin, PluginInput, Preset};
+pub use plugin::{LanguagePlugin, PluginInput, PluginRegistration, registry};
+pub use preset::Preset;
 pub use report::{ListPatch, ReportOverride};
 
 use std::collections::BTreeMap;

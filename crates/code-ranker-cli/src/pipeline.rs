@@ -366,9 +366,9 @@ fn numeric_attrs(node: &code_ranker_plugin_api::node::Node) -> BTreeMap<String, 
 /// preset replaces the plugin's (in place, keeping catalog order), a new id is
 /// appended. So a project can recommend / scorecard on its own custom metric.
 fn merge_project_presets(
-    mut catalog: Vec<code_ranker_plugin_api::plugin::Preset>,
+    mut catalog: Vec<code_ranker_plugin_api::Preset>,
     project: &BTreeMap<String, config::model::PresetDef>,
-) -> Vec<code_ranker_plugin_api::plugin::Preset> {
+) -> Vec<code_ranker_plugin_api::Preset> {
     for (id, def) in project {
         let p = def.to_preset(id);
         match catalog.iter_mut().find(|e| e.id == p.id) {
@@ -646,7 +646,7 @@ mod tests {
 
     #[test]
     fn project_presets_override_then_append() {
-        use code_ranker_plugin_api::plugin::Preset;
+        use code_ranker_plugin_api::Preset;
         let catalog = vec![Preset {
             id: "CPX".into(),
             label: "CPX".into(),

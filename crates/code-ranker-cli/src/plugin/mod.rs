@@ -11,7 +11,8 @@ use code_ranker_plugin_api::{
     level::{AttributeSpec, Level, Thresholds},
     metrics::MetricInputs,
     node::Node,
-    plugin::{LanguagePlugin, PluginInput, Preset},
+    plugin::{LanguagePlugin, PluginInput},
+    preset::Preset,
 };
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -20,7 +21,7 @@ use std::path::Path;
 /// The CLI links the `code-ranker-plugins` crate (its `deep_merge` / `list_override`
 /// are used elsewhere), so every plugin's `inventory::submit!` is collected here.
 pub fn registry() -> Vec<&'static dyn LanguagePlugin> {
-    code_ranker_plugin_api::plugin::registry()
+    code_ranker_plugin_api::registry()
 }
 
 /// Comma-separated canonical plugin names (sorted for stable help/error output;

@@ -1,15 +1,15 @@
 //! Preset catalog, metric thresholds, and the `[specs.<key>]` description
 //! overrides a plugin applies over the central `builtin.toml` attribute specs.
 
+use code_ranker_plugin_api::Preset;
 use code_ranker_plugin_api::level::AttributeSpec;
-use code_ranker_plugin_api::plugin::Preset;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use toml::Table;
 
 /// One `[[presets]]` entry as read from config. Mirrors the data shape of the
 /// CLI's generic preset catalog; the plugin turns it into a
-/// `code_ranker_plugin_api::plugin::Preset`, deriving `doc_url` from a `slug`.
+/// `code_ranker_plugin_api::Preset`, deriving `doc_url` from a `slug`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct PresetCfg {
     pub id: String,

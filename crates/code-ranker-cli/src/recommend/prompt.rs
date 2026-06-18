@@ -8,7 +8,7 @@ use super::{
 };
 use anyhow::{Result, bail};
 use code_ranker_graph::level_graph::LevelGraph;
-use code_ranker_plugin_api::{node::Node, plugin::Preset};
+use code_ranker_plugin_api::{Preset, node::Node};
 
 /// Compose the AI prompt for one principle — the same Markdown the HTML viewer's
 /// Prompt Generator produces: intent + summary + principle link + task checklist,

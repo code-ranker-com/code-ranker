@@ -10,7 +10,7 @@
 
 use anyhow::{Result, bail};
 use code_ranker_graph::level_graph::{CycleGroup, LevelGraph};
-use code_ranker_plugin_api::{attrs::AttrValue, level::Thresholds, node::Node, plugin::Preset};
+use code_ranker_plugin_api::{Preset, attrs::AttrValue, level::Thresholds, node::Node};
 use std::collections::HashMap;
 
 mod prompt;

@@ -1,10 +1,3 @@
-# Cognitive — Cognitive Complexity (in Rust)
-
-**TL;DR**: Cognitive complexity scores how hard code is to *read*, not how many
-paths it has. It penalises **nesting**: a branch three levels deep costs more than
-a branch at the top. Code Ranker reports it **per file, summed across functions**.
-A high number means deeply nested, hard-to-follow control flow — flatten it.
-
 ## What it measures
 
 Cognitive complexity (Campbell / SonarSource, 2018) refines

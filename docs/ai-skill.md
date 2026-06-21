@@ -37,8 +37,8 @@ Focus on these; treat everything else as secondary.
 - **HK** — Henry-Kafura coupling, `HK = sloc × (fan_in × fan_out)²`: a large
   module on a busy crossroads of incoming/outgoing dependencies. Full
   diagnose-and-split workflow (measure one file, list its fan_in/fan_out, find
-  the mixed scenarios, split, verify with a before/after diff report):
-  [HK principle](https://github.com/ffedoroff/code-ranker/blob/main/languages/base/HK.md).
+  the mixed scenarios, split, verify with a before/after diff report): run
+  `code-ranker report --doc HK` (prints the full principle to the terminal, offline).
 
 **Strategy:** fix one thing at a time, worst-first. Cycles (ADP) are structural —
 clear them first; then coupling (HK). Focus an axis with `--focus-rule` and inspect
@@ -87,7 +87,7 @@ Notes:
   `items` — also accepts the full rule id, e.g. `threshold.file.hk`) or a **principle** id
   (`LSP`, `SRP`, `OCP`, …). `--focus-rule` also applies to
   `--output.prompt`: `--focus-rule hk --output.prompt.path=stdout --top 1` emits a
-  **metric-framed** fix-prompt directly (titled "HK — Henry-Kafura", no Liskov wrapper),
+  **metric-framed** fix-prompt directly (titled "HK — Henry–Kafura", no Liskov wrapper),
   while `--focus-rule <PRINCIPLE>` emits a **principle-framed** one. Without `--focus-rule`, the
   prompt auto-targets the worst-violating principle.
 - To scope the ranking to a subtree, add `--focus-path <dir>` (repeatable): the whole

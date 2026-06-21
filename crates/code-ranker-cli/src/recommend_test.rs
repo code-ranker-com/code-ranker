@@ -189,8 +189,12 @@ fn compose_prompt_cycle_lists_modules_and_connections() {
     assert!(md.contains("# ADP — Acyclic"), "title heading: {md}");
     assert!(md.contains("## Summary\n\nthe DAG rule"), "summary body");
     assert!(
-        md.contains("**Full principle:** [http://x/adp.md]"),
-        "doc link"
+        md.contains("`code-ranker report --doc ADP`"),
+        "offline doc command (id substituted): {md}"
+    );
+    assert!(
+        !md.contains("Full principle:"),
+        "no network URL link anymore: {md}"
     );
     assert!(
         md.contains("## Modules in a dependency cycle"),
@@ -278,8 +282,8 @@ fn compose_prompt_metric_orders_and_respects_top() {
     )
     .unwrap();
     assert!(
-        md.contains("## Modules ordered by SLOC"),
-        "ordered heading: {md}"
+        md.contains("## Target module (SLOC)"),
+        "single (--top 1) target heading: {md}"
     );
     assert!(
         md.contains("- `a.rs` (SLOC: 300)"),
@@ -799,8 +803,8 @@ fn compose_prompt_metric_lens_omits_duplicate_description() {
         "description appears once (Summary only), not again in the modules section: {md}"
     );
     assert!(
-        md.contains("**Formula:**"),
-        "the formula line still renders in the modules section: {md}"
+        !md.contains("**Formula:**"),
+        "formula is dropped from the prompt — it lives in `--doc <id>`: {md}"
     );
 }
 

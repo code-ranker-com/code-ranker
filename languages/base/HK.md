@@ -1,4 +1,4 @@
-# HK — Henry-Kafura Coupling
+# HK — Henry–Kafura
 
 **TL;DR**: Henry-Kafura "information flow" complexity scores a module by how
 much it sits in the middle of the dependency graph and how big it is:
@@ -101,57 +101,35 @@ A repeatable loop for taking one hotspot file from "everything routes through
 it" to a clean split — measure, understand *why* it is a crossroads, split
 along the right seam, then prove the coupling actually fell.
 
-### Step 1 — Measure HK for one file
+### Step 1 — Find the worst HK files
 
-Run the gate to find which file is over budget, then analyze once to a JSON
-snapshot and read the file's `hk` and the three factors that produce it
-(`HK = sloc × (fan_in × fan_out)²`):
-
-```bash
-# Gate on HK: flag every file whose hk exceeds a budget N, worst-first (add
-# --top 1 for just the single worst). Each finding prints a self-contained
-# where/issue/why/fix block — paste one straight into an AI assistant to act on:
-code-ranker check <path/to/project> --threshold file.hk=100000 --top 1
-
-# Analyze once to a JSON snapshot, reused by every jq query below:
-code-ranker report <path/to/project> --output.json.path=.code-ranker/hk.json
-
-# The exact numbers for the file you want to dissect (matched by id suffix —
-# use enough of the path to be unique):
-F=src/foo
-jq --arg f "$F" '
-  .graphs.files.nodes[] | select(.id | endswith($f))
-  | {id, sloc, fan_in, fan_out, hk}
-' .code-ranker/hk.json
-```
-
-Knowing the breakdown tells you which lever to pull: the coupling term is
-squared, so a unit dropped from `fan_in` or `fan_out` moves HK far more than
-trimming `sloc`. Chase the product, not the line count.
-
-### Step 2 — List every fan_in and fan_out edge
-
-Fan-in/out are the real code-dependency (`uses`) edges in the graph. List both
-sides for the one file — who depends on it, and what it depends on:
+Rank the project by HK — no JSON to parse, the CLI does it for you. Either gate on
+a budget (worst-first; `--top 1` for just the single worst), each finding a
+self-contained where/issue/why/fix block you can paste into an AI assistant:
 
 ```bash
-jq -r --arg f "$F" '
-  (.graphs.files.nodes[] | select(.id | endswith($f)) | .id) as $id
-  | .graphs.files.edges[] | select(.kind == "uses")
-  | if   .target == $id then "fan_in   <- \(.source)"
-    elif .source == $id then "fan_out  -> \(.target)"
-    else empty end
-' .code-ranker/hk.json
+code-ranker report --output.scorecard --focus-rule hk
 ```
 
-The edge list says *which* modules couple; it does not say *why*. For that,
-open each fan-in dependant and look at exactly which symbols it imports from
-the hotspot — that single fact is what exposes the mixed scenarios in Step 3:
+HK is `sloc × (fan_in × fan_out)²`: the coupling term is squared, so a unit dropped
+from `fan_in` or `fan_out` moves HK far more than trimming `sloc` — chase the
+product, not the line count. (The exact `sloc` / `fan_in` / `fan_out` breakdown for
+any node is in the HTML viewer's node popup, `report --output.html`.)
+
+### Step 2 — See the crossroads (fan_in / fan_out)
+
+The HK prompt lists each hotspot worst-first **with its connections** — who depends
+on it (`Connections — in`) and what it depends on (`Connections — out`), the real
+code-dependency (`uses`) edges that drive fan_in/fan_out. No `jq`, no snapshot to
+query:
 
 ```bash
-# For one dependant, see precisely what it pulls from the hotspot's module:
-rg -n 'import .*foo' path/to/dependant
+code-ranker report --prompt HK --top 1
 ```
+
+The connection list says *which* modules couple; it does not say *why*. For that,
+open each fan-in dependant and look at exactly which symbols it imports from the
+hotspot — that single fact is what exposes the mixed scenarios in Step 3.
 
 ### Step 3 — Analyze for mixed scenarios (audiences)
 
@@ -215,23 +193,20 @@ baseline and render the HTML report:
 
 ```bash
 # BEFORE — baseline snapshot (keep .code-ranker/ snapshots; they are baselines):
-code-ranker report <path/to/project> --output.json.path=.code-ranker/before.json
+code-ranker report --output.json.path=.code-ranker/before.json
 
 #   …apply the split, then run the full test suite…
 
 # AFTER — diff against the baseline + render the HTML diff report:
-code-ranker report <path/to/project> \
+code-ranker report \
   --baseline .code-ranker/before.json \
   --output.json.path=.code-ranker/after.json \
   --output.html.path=.code-ranker/after.html
 
-# Confirm the hotspot's HK actually dropped (and no sibling rose past it):
-jq --arg f "$F" '
-  .graphs.files.nodes[] | select(.id | endswith($f)) | {sloc, fan_in, fan_out, hk}
-' .code-ranker/after.json
-
-# Or let the gate confirm it: the file no longer breaches the same budget (exit 0):
-code-ranker check <path/to/project> --threshold file.hk=100000
+# Confirm the hotspot's HK actually dropped (and no sibling rose past it) —
+# re-rank with the scorecard, or let the gate decide (exit 0 = no breach):
+code-ranker report --output.scorecard --focus-rule hk
+code-ranker check --threshold file.hk=100000
 ```
 
 Then **surface the report to the user**: print its absolute path and offer to

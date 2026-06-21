@@ -63,16 +63,18 @@ pub fn compose_prompt(
     // 1. Principle intent + summary + link + task protocol.
     // Scaffolding prose (intro / doc-note / task protocol / focus) is DATA from
     // the snapshot's `prompt` template; only the Markdown skeleton + the preset's
-    // own title/summary/url are assembled here.
+    // own title/summary are assembled here. The doc-note points at the offline
+    // `--doc <id>` command (no network URL).
     let mut head = String::new();
     head.push_str(&format!("# {}\n\n", preset.title));
     head.push_str(&tmpl.intro);
     head.push_str("\n\n## Summary\n\n");
     head.push_str(&preset.prompt);
     head.push_str("\n\n");
-    if let Some(url) = &preset.doc_url {
-        head.push_str(&format!("**Full principle:** [{url}]({url})\n\n"));
-        head.push_str(&tmpl.doc_note);
+    // A doc exists for this principle/metric (signalled by `doc_url`): point the
+    // agent at the offline `--doc <id>` command rather than a network URL.
+    if preset.doc_url.is_some() {
+        head.push_str(&tmpl.doc_note.replace("{id}", preset_id));
         head.push_str("\n\n");
     }
     head.push_str("## Task\n\n");
@@ -125,7 +127,13 @@ pub fn compose_prompt(
         } else {
             let m = &preset.sort_metric;
             let label = attr_short(level, m);
-            let mut s = format!("## Modules ordered by {label}\n\n");
+            // A single target reads as one module, not a ranking; the formula and a
+            // repeated description are dropped (they live in `--doc <id>`).
+            let mut s = if modules.len() == 1 {
+                format!("## Target module ({label})\n\n")
+            } else {
+                format!("## Modules ordered by {label}\n\n")
+            };
             if let Some(spec) = level.node_attributes.get(m) {
                 // Skip the metric description when it already appears verbatim as the
                 // Summary above — true for the metric lens, whose summary IS the
@@ -136,16 +144,13 @@ pub fn compose_prompt(
                     s.push_str(d);
                     s.push_str("\n\n");
                 }
-                if let Some(f) = &spec.formula {
-                    s.push_str(&format!("**Formula:** `{f}`\n\n"));
-                }
             }
             for n in &modules {
                 match num(n, m) {
                     Some(v) if v != 0.0 => s.push_str(&format!(
                         "- `{}` ({label}: {})\n",
                         clean_path(&n.id),
-                        fmt_val(level, m, v)
+                        fmt_val(v)
                     )),
                     _ => s.push_str(&format!("- `{}`\n", clean_path(&n.id))),
                 }
@@ -163,19 +168,51 @@ pub fn compose_prompt(
         .filter(|n| is_internal(n))
         .map(|n| n.id.as_str())
         .collect();
+    // Only FLOW edges (`uses`) drive coupling/cycles and HK — structural
+    // `contains`/`reexports` are noise in the crossroads, so the prompt lists the
+    // same edge set the metrics are computed over.
+    // Match the viewer's `edgeIsFlow` (`flow !== false`): a kind is flow unless the
+    // dictionary marks it `flow = false` (`contains`/`reexports`).
+    let is_flow = |kind: &str| level.edge_kinds.get(kind).map(|k| k.flow).unwrap_or(true);
     let local_edges: Vec<&code_ranker_plugin_api::edge::Edge> = level
         .edges
         .iter()
-        .filter(|e| internal.contains(e.source.as_str()) && internal.contains(e.target.as_str()))
+        .filter(|e| {
+            internal.contains(e.source.as_str())
+                && internal.contains(e.target.as_str())
+                && is_flow(&e.kind)
+        })
         .collect();
 
+    // The declaration line of a `uses`/`reexports` edge lives in its **source**
+    // file (where the `use`/import is written), so always anchor `:line` there.
+    // With a single focus module, drop the endpoint that *is* the focus: an `in`
+    // edge's use-site is the dependant (`dependant:line`, focus is the implied
+    // target); an `out` edge's use-site is the focus itself, so it carries the line
+    // and the target is shown (`focus:line → target`). With several focus modules,
+    // keep the full `source → target` form so each endpoint reads.
+    let single = module_ids.len() == 1;
     let edge_line = |e: &code_ranker_plugin_api::edge::Edge| {
-        format!(
-            "- `{}` → `{}` ({})",
-            clean_path(&e.source),
-            clean_path(&e.target),
-            e.kind
-        )
+        if single && module_ids.contains(e.source.as_str()) {
+            // out: focus → target. The use-site is in the focus file (named above),
+            // so report the line as "line N" rather than repeating the focus path.
+            let at = e.line.map(|l| format!(", line {l}")).unwrap_or_default();
+            format!("- `{}` ({}{})", clean_path(&e.target), e.kind, at)
+        } else if single {
+            // in: dependant → focus; use-site is in the dependant (`dependant:line`).
+            let at = e.line.map(|l| format!(":{l}")).unwrap_or_default();
+            format!("- `{}{}` ({})", clean_path(&e.source), at, e.kind)
+        } else {
+            // multi-focus: keep both endpoints; line anchored on the source use-site.
+            let at = e.line.map(|l| format!(":{l}")).unwrap_or_default();
+            format!(
+                "- `{}{}` → `{}` ({})",
+                clean_path(&e.source),
+                at,
+                clean_path(&e.target),
+                e.kind
+            )
+        }
     };
     let push_conn =
         |parts: &mut Vec<String>, title: &str, edges: Vec<&code_ranker_plugin_api::edge::Edge>| {

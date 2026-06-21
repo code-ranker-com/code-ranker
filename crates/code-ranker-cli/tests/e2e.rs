@@ -545,7 +545,7 @@ fn rust_sample_doc_flag_prints_embedded_markdown() {
     let (ok, stdout, stderr) = run_report_capture("rust", &["--doc", "HK"]);
     assert!(ok, "--doc run failed: {stderr}");
     assert!(
-        stdout.starts_with("# HK — Henry-Kafura Coupling"),
+        stdout.starts_with("# HK — Henry–Kafura"),
         "embedded HK doc printed: {stdout}"
     );
     // A principle id resolves too (SRP → its own rust/ corpus doc).

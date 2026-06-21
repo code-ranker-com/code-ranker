@@ -1,11 +1,3 @@
-# Fan-in — Afferent Coupling (in Rust)
-
-**TL;DR**: Fan-in (afferent coupling) counts how many other modules depend on
-this one. High fan-in modules are load-bearing: a change here ripples out to
-every dependant, and a bug here is felt everywhere. The goal is not to lower
-fan-in for its own sake, but to make high fan-in modules **stable** — a small,
-deliberate contract that rarely needs to change.
-
 ## What it measures
 
 `fan_in` is the number of distinct modules that depend on this one — its

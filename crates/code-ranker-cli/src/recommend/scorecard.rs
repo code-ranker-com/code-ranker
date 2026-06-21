@@ -229,7 +229,7 @@ fn principle_top_module(level: &LevelGraph, p: &Preset, reco: &super::Reco) -> S
                 "{} ({} {})",
                 clean_path(&n.id),
                 attr_short(level, &p.sort_metric),
-                fmt_val(level, &p.sort_metric, v)
+                fmt_val(v)
             ),
             _ => clean_path(&n.id),
         },
@@ -345,7 +345,7 @@ fn metric_mod_rows(
         .map(|n| {
             let head = match num(n, m) {
                 Some(v) if v != 0.0 => {
-                    format!("{} {}", attr_short(level, m), fmt_val(level, m, v))
+                    format!("{} {}", attr_short(level, m), fmt_val(v))
                 }
                 _ => attr_short(level, m).to_string(),
             };
@@ -427,11 +427,7 @@ fn breach_label(level: &LevelGraph, metric: &str, value: Option<f64>) -> String 
         return "cycle".to_string();
     }
     match value {
-        Some(v) => format!(
-            "{} {}",
-            attr_short(level, metric),
-            fmt_val(level, metric, v)
-        ),
+        Some(v) => format!("{} {}", attr_short(level, metric), fmt_val(v)),
         None => attr_short(level, metric).to_string(),
     }
 }

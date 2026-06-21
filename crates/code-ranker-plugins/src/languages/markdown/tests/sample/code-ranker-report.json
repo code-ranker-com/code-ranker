@@ -231,7 +231,7 @@
   "plugin": "markdown",
   "prompt": {
     "cycle_note": "This is **one** dependency cycle; every module in it is listed below so the whole loop is visible. Fix one cycle at a time — `--top 2`+ lists several separate cycles at once and obscures how each one connects.",
-    "doc_note": "Download and read the full principle to understand it in detail. If you cannot download it, **stop the task immediately**.",
+    "doc_note": "To understand the principle in detail, run `code-ranker report --doc {id}` — it prints the full principle to your terminal. Read it before proposing any changes.",
     "focus": "**Focus the research and report primarily on the modules below.**",
     "intro": "I want to apply this to some modules in my system.",
     "task": [

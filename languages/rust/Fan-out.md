@@ -1,10 +1,3 @@
-# Fan-out — Efferent Coupling (in Rust)
-
-**TL;DR**: Fan-out (efferent coupling) counts how many other modules this one
-depends on. High fan-out makes a module fragile — it breaks when any of its
-many dependencies change — and hard to test or reuse in isolation. Reduce it
-by depending on fewer, more abstract collaborators.
-
 ## What it measures
 
 `fan_out` is the number of distinct modules this one depends on — its outgoing

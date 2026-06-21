@@ -71,7 +71,7 @@ the catalog name is the bare node attribute key.
 ## How derived metrics are computed (the CEL registry engine)
 
 Derived metrics and aggregates are **declarative data**, not Rust: a CEL
-`formula` plus a display spec, in `code-ranker-graph/metrics/builtin.toml` (the
+`formula_cel` plus a display spec, in `code-ranker-graph/metrics/builtin.toml` (the
 built-ins) or under `[metrics.<key>]` in `code-ranker.toml` (user metrics). The
 registry engine — `code-ranker-graph/src/registry.rs` — turns them into node
 values. No derived-metric name is hardcoded in Rust.
@@ -80,7 +80,7 @@ values. No derived-metric name is hardcoded in Rust.
 
 A `MetricDef` carries:
 
-- `formula` — a CEL expression over **measured inputs** and **other metric keys**,
+- `formula_cel` — a CEL expression over **measured inputs** and **other metric keys**,
   plus a small host standard library (`log2` / `ln` / `pow` / `sqrt` / `sin` / …)
   the language lacks. Each host function is the exact `f64` operation the engine
   used before, so a transcribed formula is **bit-identical**.
@@ -174,23 +174,22 @@ Two paths, depending on the home above.
 
 ### A1. A derived metric — edit data, not Rust
 
-A derived metric is a CEL `cel` formula plus its display spec — both live in one
+A derived metric is a CEL `formula_cel` plus its display spec — both live in one
 `[fields.<key>]` table. Add it in `code-ranker-graph/metrics/builtin.toml`
 (built-in) or under `[metrics.<key>]` in `code-ranker.toml` (user metric):
 
 ```toml
 [fields.<key>]          # display spec + the executable formula, together
-value_type    = "float"
-label         = "…"
-direction     = "lower_better"
-category      = "halstead"
-cel           = "…"     # CEL over measured inputs + other fields; host math:
-                        # log2 / ln / pow / sqrt / sin / …
-formula_human = "…"     # display only — the pretty formula shown in the viewer
-formula_js    = "…"     # display only — the JS the viewer re-runs client-side
+value_type     = "float"
+label          = "…"
+direction      = "lower_better"
+category       = "halstead"
+formula_cel    = "…"     # CEL over measured inputs + other fields (host math: log2/ln/pow/sqrt/sin/…)
+formula_pretty = "…"     # display only — the pretty formula shown in the viewer
+formula_js     = "…"     # display only — the JS the viewer re-runs client-side
 ```
 
-- The `cel` formula reads measured inputs (`eta1`/`eta2`/`n1`/`n2`/`spaces`/`branches`/
+- The `formula_cel` reads measured inputs (`eta1`/`eta2`/`n1`/`n2`/`spaces`/`branches`/
   `sloc`/`cloc`/`span_sloc`/…) and earlier fields by key; the registry engine
   (`registry.rs`) topologically orders by dependency and rejects a cycle at load.
 - `omit_at` on the spec is the no-signal value (`0` for most; `1` for

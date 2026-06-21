@@ -932,7 +932,7 @@ fn user_defined_metric_is_computed_and_emitted() {
     std::fs::write(
         p.join("code-ranker.toml"),
         "[metrics.comment_ratio]\n\
-         formula = \"sloc > 0.0 ? cloc / sloc * 100.0 : 0.0\"\n\
+         formula_cel = \"sloc > 0.0 ? cloc / sloc * 100.0 : 0.0\"\n\
          label = \"Comments %\"\n\
          direction = \"higher_better\"\n\
          group = \"loc\"\n",
@@ -990,7 +990,7 @@ fn user_defined_aggregate_lands_in_stats() {
         p.join("code-ranker.toml"),
         "[metrics.cyc_mean]\n\
          scope = \"graph\"\n\
-         formula = \"agg('cyclomatic', 'avg', 'not_empty')\"\n",
+         formula_cel = \"agg('cyclomatic', 'avg', 'not_empty')\"\n",
     )
     .unwrap();
     let out = p.join("out.json");
@@ -1078,7 +1078,7 @@ fn empty_metric_warns_on_stderr() {
     std::fs::write(p.join("m.py"), "def f(x):\n    return x\n").unwrap();
     std::fs::write(
         p.join("code-ranker.toml"),
-        "[metrics.bad]\nformula = \"slocc / 100.0\"\n", // `slocc` is a typo for `sloc`
+        "[metrics.bad]\nformula_cel = \"slocc / 100.0\"\n", // `slocc` is a typo for `sloc`
     )
     .unwrap();
     let out = Command::new(env!("CARGO_BIN_EXE_code-ranker"))

@@ -766,7 +766,7 @@ prompt by name** — it renders entirely from this data (see DESIGN §3.2 HTML
 assets). Optional `AttributeSpec` fields are omitted when absent.
 
 Tier-2 metrics are **declarative data**, not hardcoded computation: each is a CEL
-`formula` plus spec in `code-ranker-graph/metrics/builtin.toml`, evaluated by the
+`formula_cel` plus spec in `code-ranker-graph/metrics/builtin.toml`, evaluated by the
 registry engine over the per-language tier-1 counts. A user adds or overrides
 metrics under `[metrics.<key>]` in config (node-scope per-unit formulas, or
 graph-scope `agg(…)` aggregates emitted into `stats`) with no code change; only

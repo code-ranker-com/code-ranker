@@ -41,7 +41,7 @@ pub struct Config {
     pub rules: RulesConfig,
     #[serde(default)]
     pub output: OutputConfig,
-    /// User-defined declarative metrics (`[metrics.<key>]`): a CEL `formula` plus
+    /// User-defined declarative metrics (`[metrics.<key>]`): a CEL `formula_cel` plus
     /// optional spec fields. Computed per node at snapshot time and emitted like
     /// any built-in metric. Empty by default — absent → no change to output.
     #[serde(default)]

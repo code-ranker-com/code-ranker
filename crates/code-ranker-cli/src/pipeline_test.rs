@@ -49,11 +49,11 @@ fn gate_thresholds_uses_gate_as_warning_and_reconciles_info() {
         &cfg_path,
         r#"
 [metrics.below]
-formula = "sloc"
+formula_cel = "sloc"
 info = 50
 
 [metrics.above]
-formula = "sloc"
+formula_cel = "sloc"
 info = 200
 
 [rules.thresholds.file]

@@ -383,7 +383,7 @@ tier-2 is data**:
   `code_ranker_plugin_api::MetricInputs` (η₁/η₂/N₁/N₂, `spaces`/`branches`, LOC,
   `cognitive`/`exits`/`args`/`closures`, `span_sloc`) — the tier-1 *measured*
   counts.
-- **Derived metrics are declarative**: a CEL `cel` formula + display spec per
+- **Derived metrics are declarative**: a CEL `formula_cel` + display spec per
   metric, defined in `code-ranker-graph/metrics/builtin.toml` (`[fields.*]`) and
   evaluated by the registry engine (`registry.rs`, built on the `cel` crate;
   `log2`/`ln`/`pow`/`sqrt`/`sin` are host functions). `write_metrics(node,

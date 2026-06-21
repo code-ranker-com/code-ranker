@@ -10,7 +10,7 @@ the attribute key on a node and in the JSON — there is no prefix or namespace.
 |---|---|---|
 | **Measured from the AST** | the shared generic engine counts it during the tree walk | `code-ranker-plugins/src/engine/` (per-language `Dialect`) → a `MetricInputs` |
 | **Measured from the graph** | a graph pass over the dependency edges | `code-ranker-graph` (`hk.rs`, `cycles.rs`) |
-| **Derived** | a CEL `formula` over measured values | `code-ranker-graph/metrics/builtin.toml`, run by the registry engine (`registry.rs`) |
+| **Derived** | a CEL `formula_cel` over measured values | `code-ranker-graph/metrics/builtin.toml`, run by the registry engine (`registry.rs`) |
 | **Aggregated** | a mean / percentile / … over all nodes | `stats.rs` (built-in means) + registry graph-scope `agg()` |
 
 Only the **measured** values and the graph passes are Rust. Everything **derived**
@@ -96,7 +96,7 @@ partners (duplicate edges collapse). External nodes carry no coupling metrics.
 
 ## Derived (CEL formulas in `builtin.toml`)
 
-Each is a CEL `formula` evaluated by the registry engine over the measured values
+Each is a CEL `formula_cel` evaluated by the registry engine over the measured values
 (`log2`/`ln`/`pow`/`sqrt`/`sin` are host functions — the exact `f64` ops). Editing
 a formula changes the metric with no Rust change. `hk` combines a graph metric
 with a code metric, so it depends on `fan_in`/`fan_out` being computed first.

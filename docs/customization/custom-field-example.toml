@@ -13,11 +13,11 @@
 # the table header, `description` the tooltip body, `formula_pretty` the readable
 # formula shown in the tooltip — and right below it the SAME formula filled with
 # this file's numbers (e.g. `81 / 105 = 0.771`), exactly like the built-in `hk`.
-# That live line is driven by `calc`; when omitted it defaults to the CEL `formula`
-# (valid JS here), so a plain-arithmetic metric needs nothing extra. Set `calc`
-# explicitly only if the formula uses CEL-only functions (log2/pow/…).
+# That live line is driven by `formula_js`; when omitted it defaults to the CEL
+# `formula_cel` (valid JS here), so a plain-arithmetic metric needs nothing extra.
+# Set `formula_js` explicitly only if the formula uses CEL-only functions (log2/pow/…).
 [metrics.tsr]
-formula        = "sloc > 0.0 ? tloc / sloc : 0.0"
+formula_cel    = "sloc > 0.0 ? tloc / sloc : 0.0"
 formula_pretty = "tloc / sloc"
 label          = "TLOC/SLOC"
 name           = "Test-to-source ratio"
@@ -34,7 +34,7 @@ info           = 0.8
 # aggregate population drops the small files automatically (the "where loc > 300"
 # filter, expressed with primitives that exist today).
 [metrics.tsr_big]
-formula        = "loc > 300.0 ? (sloc > 0.0 ? tloc / sloc : 0.0) : 0.0"
+formula_cel    = "loc > 300.0 ? (sloc > 0.0 ? tloc / sloc : 0.0) : 0.0"
 formula_pretty = "loc > 300 ? tloc / sloc : 0"
 label          = "TLOC/SLOC (loc>300)"
 name           = "Test-to-source ratio (large files)"
@@ -47,7 +47,7 @@ group          = "loc"
 # loc>300 files). `top10_max` = keep the 10 largest values, then take their max.
 [metrics.tsr_big_avg]
 scope          = "graph"
-formula        = "agg('tsr_big', 'top10_max', 'not_empty')"
+formula_cel    = "agg('tsr_big', 'top10_max', 'not_empty')"
 formula_pretty = "max( top10( tsr_big where loc > 300 ) )"
 label          = "TLOC/SLOC avg (top 10, loc>300)"
 name           = "Test-to-source — worst of the 10 largest files"

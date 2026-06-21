@@ -1,6 +1,6 @@
 //! Declarative metric registry — the data-driven home for tier-2+ formulas.
 //!
-//! A [`MetricDef`] pairs a CEL `formula` with its spec (label / direction / …).
+//! A [`MetricDef`] pairs a CEL `formula_cel` with its spec (label / direction / …).
 //! The default registry ships built-in derived metrics; a user adds their own by
 //! editing config (e.g. `comment_ratio = "sloc > 0.0 ? cloc / sloc * 100.0 :
 //! 0.0"`). The [`Engine`] compiles each formula once, topologically orders them
@@ -166,7 +166,7 @@ fn compile_scope(
     let mut programs = Vec::with_capacity(order.len());
     for key in order {
         let def = defs.get(&key).expect("key from defs");
-        let program = Program::compile(&def.formula).map_err(|e| RegistryError::Parse {
+        let program = Program::compile(&def.formula_cel).map_err(|e| RegistryError::Parse {
             key: key.clone(),
             message: e.to_string(),
         })?;

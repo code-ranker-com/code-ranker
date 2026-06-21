@@ -40,7 +40,7 @@ fn exec_f64_handles_int_result() {
     defs.insert(
         "two".to_string(),
         MetricDef {
-            formula: "1 + 1".to_string(),
+            formula_cel: "1 + 1".to_string(),
             value_type: "int".to_string(),
             ..Default::default()
         },
@@ -55,7 +55,7 @@ fn exec_f64_handles_int_result() {
 #[test]
 fn to_attribute_spec_maps_types_and_direction() {
     let mk = |vt: &str, dir: Option<&str>| MetricDef {
-        formula: "0.0".to_string(),
+        formula_cel: "0.0".to_string(),
         value_type: vt.to_string(),
         label: Some("L".into()),
         direction: dir.map(|s| s.to_string()),
@@ -91,7 +91,7 @@ fn to_attribute_spec_maps_types_and_direction() {
 #[test]
 fn two_tier_thresholds_map_to_spec() {
     let with = |warning, info| MetricDef {
-        formula: "0.0".to_string(),
+        formula_cel: "0.0".to_string(),
         warning,
         info,
         ..Default::default()
@@ -116,7 +116,7 @@ fn two_tier_thresholds_map_to_spec() {
 fn calc_defaults_to_formula_for_node_scope() {
     // Node-scope: `calc` (the live derivation line) defaults to the CEL formula.
     let node = MetricDef {
-        formula: "tloc / sloc".to_string(),
+        formula_cel: "tloc / sloc".to_string(),
         ..Default::default()
     };
     assert_eq!(
@@ -125,8 +125,8 @@ fn calc_defaults_to_formula_for_node_scope() {
     );
     // Explicit `calc` wins over the formula fallback.
     let explicit = MetricDef {
-        formula: "tloc / sloc".to_string(),
-        calc: Some("tloc / sloc * 1.0".to_string()),
+        formula_cel: "tloc / sloc".to_string(),
+        formula_js: Some("tloc / sloc * 1.0".to_string()),
         ..Default::default()
     };
     assert_eq!(
@@ -135,7 +135,7 @@ fn calc_defaults_to_formula_for_node_scope() {
     );
     // Graph-scope aggregate isn't shown per node → no calc.
     let agg = MetricDef {
-        formula: "agg('x', 'avg', 'not_empty')".to_string(),
+        formula_cel: "agg('x', 'avg', 'not_empty')".to_string(),
         scope: Scope::Graph,
         ..Default::default()
     };
@@ -147,11 +147,11 @@ fn apply_to_node_writes_and_omits() {
     let mut defs = BTreeMap::new();
     defs.insert("ratio".to_string(), {
         let mut d = MetricDef {
-            formula: "a * 2.0".to_string(),
+            formula_cel: "a * 2.0".to_string(),
             value_type: "float".to_string(),
             ..Default::default()
         };
-        d.formula = "a * 2.0".to_string();
+        d.formula_cel = "a * 2.0".to_string();
         d
     });
     let eng = Engine::compile(&defs).unwrap();
@@ -173,7 +173,7 @@ fn apply_to_node_writes_and_omits() {
     zdefs.insert(
         "ratio".to_string(),
         MetricDef {
-            formula: "0.0".to_string(),
+            formula_cel: "0.0".to_string(),
             value_type: "float".to_string(),
             ..Default::default()
         },
@@ -190,7 +190,7 @@ fn apply_to_node_exposes_path_to_formula() {
     defs.insert(
         "gated".to_string(),
         MetricDef {
-            formula: r#"path.contains("/generated/") ? 0.0 : 5.0"#.to_string(),
+            formula_cel: r#"path.contains("/generated/") ? 0.0 : 5.0"#.to_string(),
             value_type: "float".to_string(),
             ..Default::default()
         },

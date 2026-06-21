@@ -3,7 +3,7 @@
 # In dependency order:
 #   - `[categories.*]`  the metric groups (each metric references one).
 #   - `[ast.*]`         tier-1 metrics measured directly from the AST during the
-#                       tree walk — these are the variables a `cel` formula reads.
+#                       tree walk — these are the variables a `formula_cel` formula reads.
 #                       Every one carries a display spec and is emitted onto the
 #                       node; the Halstead/structural base counts (eta1, eta2, n1,
 #                       n2, spaces, branches, span_sloc) are kept out of the default
@@ -11,15 +11,15 @@
 #                       derived metric's live "formula = numbers" line. Each
 #                       language refines their descriptions (the exact operator /
 #                       operand tokens it counts) via its `[specs.<key>]`.
-#   - `[fields.*]`      the derived metrics: each is a `cel` formula over the AST
+#   - `[fields.*]`      the derived metrics: each is a `formula_cel` formula over the AST
 #                       inputs (and earlier fields), with its display spec.
 #   - `[report]` (+ `[report.stats]`)  the views that
 #                       reference the metric keys above.
 #
 # Spec fields on a measured `[ast.<key>]` / derived `[fields.<key>]` entry:
-#   - `cel`          (derived only) the executable CEL formula, computed at
+#   - `formula_cel`          (derived only) the executable CEL formula, computed at
 #                    snapshot time by the registry engine over the AST inputs.
-#   - `formula_human`/`formula_js`  display only — `formula_human` is the pretty
+#   - `formula_pretty`/`formula_js`  display only — `formula_pretty` is the pretty
 #                    formula shown in the viewer (NOT CEL); `formula_js` is the JS
 #                    the viewer can re-run client-side.
 #   - `label` is the base display name; `name` (the full name) and `short` (the
@@ -28,10 +28,10 @@
 #   - the rest are display metadata (value_type, description, direction,
 #                    category, omit_at).
 #
-# Editing a `cel` formula or spec here changes the metric with no Rust change.
+# Editing a `formula_cel` formula or spec here changes the metric with no Rust change.
 # log2/ln/pow/sqrt/sin are host functions registered by the engine (the exact f64
 # ops Rust used). Inter-metric references are auto-ordered (e.g. `mi` after
-# `volume`); the `cel` formulas below are verbatim ports of the former Rust
+# `volume`); the `formula_cel` formulas below are verbatim ports of the former Rust
 # `derive()`, same operand order and zero gating, so emitted values are unchanged.
 
 # ── field-omission defaults ───────────────────────────────────────────────────
@@ -200,15 +200,15 @@ short = "TLOC"
 description = "Test lines of code — the lines inside `#[cfg(test)]` / `#[test]` / `#[bench]` items (Rust), removed before the production metrics are measured. The complement of `sloc`: test code never inflates a file's size, HK, or complexity."
 category = "loc"
 
-# ── fields (derived: a `cel` formula over the AST inputs) ─────────────────────
+# ── fields (derived: a `formula_cel` formula over the AST inputs) ─────────────────────
 [fields.bugs]
 value_type = "float"
 label = "Bugs"
 name = "Halstead bugs"
 short = "H.bugs"
 description = "Estimated delivered bugs — a rough predictor of defect density."
-cel = "eta2 > 0.0 ? pow(effort, 2.0 / 3.0) / 3000.0 : 0.0"
-formula_human = "effort^⅔ ÷ 3000"
+formula_cel = "eta2 > 0.0 ? pow(effort, 2.0 / 3.0) / 3000.0 : 0.0"
+formula_pretty = "effort^⅔ ÷ 3000"
 formula_js = "effort ** (2/3) / 3000"
 direction = "lower_better"
 category = "halstead"
@@ -222,8 +222,8 @@ Number of independent paths through the code — roughly the minimum number of t
 A function starts at 1 and gains +1 per decision point: each `if` / `else if`, every `match` / `switch` arm, every loop, and each `&&` / `||` in a condition.
 Summed across every function in the file, so it grows with both size and branching — the file's total branching burden.
 Counts paths only, ignoring how deeply they nest. For a readability-weighted view see `cognitive`."""
-cel = "spaces + branches"
-formula_human = "spaces + branches"
+formula_cel = "spaces + branches"
+formula_pretty = "spaces + branches"
 formula_js = "spaces + branches"
 direction = "lower_better"
 category = "complexity"
@@ -236,8 +236,8 @@ label = "Effort"
 name = "Halstead effort"
 short = "H.effort"
 description = "Mental effort to implement the algorithm."
-cel = "eta2 > 0.0 ? (eta1 / 2.0) * (n2 / eta2) * volume : 0.0"
-formula_human = "(eta1 ÷ 2) × (n2 ÷ eta2) × volume"
+formula_cel = "eta2 > 0.0 ? (eta1 / 2.0) * (n2 / eta2) * volume : 0.0"
+formula_pretty = "(eta1 ÷ 2) × (n2 ÷ eta2) × volume"
 formula_js = "(eta1 / 2) * (n2 / eta2) * volume"
 direction = "lower_better"
 category = "halstead"
@@ -248,8 +248,8 @@ label = "Length"
 name = "Halstead length"
 short = "H.len"
 description = "Program length — total operator + operand occurrences."
-cel = "n1 + n2"
-formula_human = "n1 + n2"
+formula_cel = "n1 + n2"
+formula_pretty = "n1 + n2"
 formula_js = "n1 + n2"
 direction = "lower_better"
 category = "halstead"
@@ -259,8 +259,8 @@ value_type = "float"
 label = "MI"
 name = "Maintainability index"
 description = "Maintainability Index (0–100, higher is more maintainable). Derived from Halstead volume, cyclomatic complexity, and SLOC."
-cel = "171.0 - 5.2 * ln(volume) - 0.23 * cyclomatic - 16.2 * ln(span_sloc)"
-formula_human = "171 − 5.2·ln(volume) − 0.23·cyclomatic − 16.2·ln(span_sloc)"
+formula_cel = "171.0 - 5.2 * ln(volume) - 0.23 * cyclomatic - 16.2 * ln(span_sloc)"
+formula_pretty = "171 − 5.2·ln(volume) − 0.23·cyclomatic − 16.2·ln(span_sloc)"
 formula_js = "171 - 5.2*Math.log(volume) - 0.23*cyclomatic - 16.2*Math.log(span_sloc)"
 direction = "higher_better"
 category = "maintainability"
@@ -271,8 +271,8 @@ label = "MI (SEI)"
 name = "Maintainability (SEI)"
 short = "MI SEI"
 description = "SEI variant of the Maintainability Index — adds a bonus for comment density."
-cel = "171.0 - 5.2 * log2(volume) - 0.23 * cyclomatic - 16.2 * log2(span_sloc) + 50.0 * sin(sqrt(cloc / span_sloc * 2.4))"
-formula_human = "171 − 5.2·log₂(volume) − 0.23·cyclomatic − 16.2·log₂(span_sloc) + 50·sin(√(cloc ÷ span_sloc × 2.4))"
+formula_cel = "171.0 - 5.2 * log2(volume) - 0.23 * cyclomatic - 16.2 * log2(span_sloc) + 50.0 * sin(sqrt(cloc / span_sloc * 2.4))"
+formula_pretty = "171 − 5.2·log₂(volume) − 0.23·cyclomatic − 16.2·log₂(span_sloc) + 50·sin(√(cloc ÷ span_sloc × 2.4))"
 formula_js = "171 - 5.2*Math.log2(volume) - 0.23*cyclomatic - 16.2*Math.log2(span_sloc) + 50*Math.sin(Math.sqrt(cloc / span_sloc * 2.4))"
 direction = "higher_better"
 category = "maintainability"
@@ -283,8 +283,8 @@ label = "Time"
 name = "Halstead time, s"
 short = "H.time(s)"
 description = "Estimated implementation time, in seconds."
-cel = "effort / 18.0"
-formula_human = "effort ÷ 18"
+formula_cel = "effort / 18.0"
+formula_pretty = "effort ÷ 18"
 formula_js = "effort / 18"
 direction = "lower_better"
 category = "halstead"
@@ -295,8 +295,8 @@ label = "Vocabulary"
 name = "Halstead vocabulary"
 short = "H.vocab"
 description = "Vocabulary — distinct operators + operands."
-cel = "eta1 + eta2"
-formula_human = "eta1 + eta2"
+formula_cel = "eta1 + eta2"
+formula_pretty = "eta1 + eta2"
 formula_js = "eta1 + eta2"
 direction = "lower_better"
 category = "halstead"
@@ -307,15 +307,15 @@ label = "Volume"
 name = "Halstead volume"
 short = "H.vol"
 description = "Algorithm size in bits, from distinct operators and operands."
-cel = "vocabulary > 0.0 ? length * log2(vocabulary) : 0.0"
-formula_human = "length × log₂(vocabulary)"
+formula_cel = "vocabulary > 0.0 ? length * log2(vocabulary) : 0.0"
+formula_pretty = "length × log₂(vocabulary)"
 formula_js = "length * Math.log2(vocabulary)"
 direction = "lower_better"
 category = "halstead"
 
 # ── coupling (computed post-walk by annotate_hk / annotate_cycles) ────────────
 # Spec-only entries: the VALUES are derived by the graph crate's coupling/cycle
-# pass over the flow edges, so these carry NO `cel`. `fan_in` / `fan_out` are
+# pass over the flow edges, so these carry NO `formula_cel`. `fan_in` / `fan_out` are
 # neutral (a high count is dual — broad reuse vs. bottleneck); `hk` folds unit
 # size with both coupling directions. `description` is the `why` and `remediation`
 # the `fix` shown by `check` (data, not Rust).
@@ -345,7 +345,7 @@ label = "HK"
 name = "Henry–Kafura"
 short = "HK"
 description = "Henry-Kafura — sloc × (fan_in × fan_out)² — flags units that are both highly connected and large: change-amplifiers whose edits ripple widely across the system."
-formula_human = "sloc × (fan_in × fan_out)²"
+formula_pretty = "sloc × (fan_in × fan_out)²"
 formula_js = "sloc * (fan_in * fan_out) ** 2"
 direction = "lower_better"
 category = "coupling"

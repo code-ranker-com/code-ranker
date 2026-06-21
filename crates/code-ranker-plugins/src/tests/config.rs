@@ -81,7 +81,7 @@ fn presets_without_id_are_appended() {
 }
 
 /// The shared loader merges `defaults.toml` under `rust.toml` and exposes the
-/// Rust presets / thresholds / spec overrides.
+/// Rust presets / spec overrides.
 #[test]
 fn load_rust_exposes_sections() {
     let cfg = load(include_str!("../languages/rust/config.toml"));
@@ -100,11 +100,6 @@ fn load_rust_exposes_sections() {
     );
     let kiss = ps.iter().find(|p| p.id == "KISS").unwrap();
     assert_eq!(kiss.sort_metric, "cognitive");
-
-    let th = thresholds(&cfg);
-    assert_eq!(th["hk"].info, 150_000.0);
-    assert_eq!(th["hk"].warning, 10_000_000.0);
-    assert_eq!(th["items"].warning, 50.0);
 
     let specs = spec_overrides(&cfg);
     for k in ["sloc", "lloc", "cloc", "blank"] {

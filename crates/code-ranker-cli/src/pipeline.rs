@@ -248,13 +248,13 @@ pub(crate) fn analyze_directory(
 
     let edge_count = graph.edges.len();
     let node_count = graph.nodes.len();
-    let thresholds = plugin::thresholds(&plugin_name);
+    let thresholds = gate_thresholds(&cfg);
     let level = assemble_level(
         level_spec,
         graph,
         cycles,
         stats,
-        thresholds,
+        thresholds.clone(),
         &custom_specs,
         &plugin_name,
         &report_overrides,
@@ -282,7 +282,7 @@ pub(crate) fn analyze_directory(
             fn_graph,
             Vec::new(),
             BTreeMap::new(),
-            plugin::thresholds(&plugin_name),
+            thresholds,
             &custom_specs,
             &plugin_name,
             &report_overrides,
@@ -357,6 +357,41 @@ fn merge_project_presets(
     catalog
 }
 
+/// The advisory `info`/`warning` tiers overlaid onto the metric specs (scorecard,
+/// viewer badges, prompt targeting), derived from the `check` gate so the report
+/// shows exactly what fails the gate. For each `[rules.thresholds.file]` limit the
+/// gate value is the authoritative `warning`; a metric's own `info` (from a
+/// `[metrics.<key>]` spec) is kept only when it sits strictly below the gate,
+/// otherwise it is meaningless and collapses to the gate (one effective tier).
+fn gate_thresholds(
+    cfg: &config::model::Config,
+) -> BTreeMap<String, code_ranker_plugin_api::level::Thresholds> {
+    cfg.rules
+        .thresholds
+        .file
+        .limits
+        .iter()
+        .map(|(key, &warning)| {
+            let declared_info = cfg.metrics.get(key).and_then(|d| d.info);
+            let info = match declared_info {
+                Some(i) if i < warning => i,
+                Some(i) => {
+                    logger::info(&format!(
+                        "⚠ `[metrics.{key}]` info ({i}) ≥ gate threshold ({warning}); \
+                         dropping the info tier for `{key}` (the gate wins)",
+                    ));
+                    warning
+                }
+                None => warning,
+            };
+            (
+                key.clone(),
+                code_ranker_plugin_api::level::Thresholds { info, warning },
+            )
+        })
+        .collect()
+}
+
 /// The `omit_at` (no-signal floor) of every metric key, so an aggregate's `all`
 /// population counts a missing value at the right floor (`0` for most, `1` for
 /// `cyclomatic`). Built from the central + plugin-refined + coupling specs, then
@@ -381,86 +416,5 @@ fn registry_omit_at(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::fs;
-
-    #[test]
-    fn project_presets_override_then_append() {
-        use code_ranker_plugin_api::Preset;
-        let catalog = vec![Preset {
-            id: "CPX".into(),
-            label: "CPX".into(),
-            title: "Complexity".into(),
-            prompt: "old".into(),
-            doc_url: None,
-            sort_metric: "cognitive".into(),
-            connections: vec![],
-        }];
-        let mut project = BTreeMap::new();
-        // Same id → replaces the catalog entry in place.
-        project.insert(
-            "CPX".to_string(),
-            config::model::PresetDef {
-                prompt: "new".into(),
-                sort_metric: "cyclomatic".into(),
-                ..Default::default()
-            },
-        );
-        // New id → appended.
-        project.insert(
-            "TSR".to_string(),
-            config::model::PresetDef {
-                sort_metric: "tsr".into(),
-                ..Default::default()
-            },
-        );
-        let merged = merge_project_presets(catalog, &project);
-        assert_eq!(merged.len(), 2);
-        let cpx = merged.iter().find(|p| p.id == "CPX").unwrap();
-        assert_eq!(cpx.sort_metric, "cyclomatic", "same id replaced in place");
-        assert_eq!(cpx.prompt, "new");
-        let tsr = merged.iter().find(|p| p.id == "TSR").unwrap();
-        assert_eq!(tsr.sort_metric, "tsr");
-        assert_eq!(tsr.title, "TSR", "title defaults to id");
-    }
-
-    #[test]
-    fn detect_plugin_by_single_marker() {
-        let cases = vec![
-            ("Cargo.toml", "rust"),
-            ("pyproject.toml", "python"),
-            ("setup.py", "python"),
-            ("package.json", "javascript"),
-            ("tsconfig.json", "typescript"),
-        ];
-        for (marker, expected) in cases {
-            let d = tempfile::tempdir().unwrap();
-            fs::write(d.path().join(marker), "").unwrap();
-            assert_eq!(
-                plugin::detect(d.path(), &PluginInput::default()).unwrap(),
-                expected,
-                "marker {marker}"
-            );
-        }
-    }
-
-    #[test]
-    fn detect_plugin_errors_on_ambiguous_or_empty() {
-        let amb = tempfile::tempdir().unwrap();
-        fs::write(amb.path().join("Cargo.toml"), "").unwrap();
-        fs::write(amb.path().join("package.json"), "").unwrap();
-        let err = format!(
-            "{:#}",
-            plugin::detect(amb.path(), &PluginInput::default()).unwrap_err()
-        );
-        assert!(err.contains("multiple"), "ambiguous error: {err}");
-
-        let empty = tempfile::tempdir().unwrap();
-        let err = format!(
-            "{:#}",
-            plugin::detect(empty.path(), &PluginInput::default()).unwrap_err()
-        );
-        assert!(err.contains("no project marker"), "empty error: {err}");
-    }
-}
+#[path = "pipeline_test.rs"]
+mod tests;

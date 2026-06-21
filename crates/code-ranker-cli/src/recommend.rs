@@ -5,12 +5,21 @@
 //! prompt (`compose_prompt` ≈ `composePrompt` + `buildContent`), plus a console
 //! triage table (`render_scorecard`) that mirrors the viewer's per-preset badges.
 //!
-//! All of it is **advisory**, derived from the snapshot's language-calibrated
+//! All of it is **advisory**, derived from the snapshot's gate-driven
 //! `node_attributes[*].thresholds` (the `info` / `warning` tiers) — never a gate.
+//!
+//! Output can be focused on one axis by name ([`Focus`]): a **metric** (`hk`)
+//! frames it by the metric itself, a **principle** id (`LSP`) by that design
+//! principle. Resolution lives in [`resolve_focus`].
 
 use anyhow::{Result, bail};
 use code_ranker_graph::level_graph::{CycleGroup, LevelGraph};
-use code_ranker_plugin_api::{Preset, attrs::AttrValue, level::Thresholds, node::Node};
+pub use code_ranker_plugin_api::Preset;
+use code_ranker_plugin_api::{
+    attrs::{AttrValue, ValueType},
+    level::Thresholds,
+    node::Node,
+};
 use std::collections::HashMap;
 
 mod prompt;
@@ -18,6 +27,98 @@ mod scorecard;
 
 pub use prompt::compose_prompt;
 pub use scorecard::render_scorecard;
+
+/// What `--focus <NAME>` resolves to: a SOLID-style design **principle** (a preset
+/// id, e.g. `LSP`) or a **metric** (an attribute key, e.g. `hk`). The two live in
+/// separate namespaces — principle ids are upper-case codes, metric keys are
+/// lower-case — so a name maps unambiguously to one lens.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Focus {
+    Principle(String),
+    Metric(String),
+}
+
+/// Resolve a `--focus-rule` name to a [`Focus`]. Accepts, in order: a preset id
+/// (exact, e.g. `LSP`) → a principle; a metric — by its bare key or a full
+/// threshold rule id, case-insensitive (`HK`, `hk`, `threshold.file.hk` all →
+/// `hk`), matched against any attribute the level carries (by value, so it works
+/// whether or not the metric has a configured threshold) or the `cycle`
+/// pseudo-metric. Unknown names are fatal, listing both namespaces.
+pub fn resolve_focus(level: &LevelGraph, presets: &[Preset], name: &str) -> Result<Focus> {
+    if presets.iter().any(|p| p.id == name) {
+        return Ok(Focus::Principle(name.to_string()));
+    }
+    // A metric can be named bare (`hk`) or as a full rule id (`threshold.file.hk`);
+    // the metric key is the segment after the last dot. Match case-insensitively.
+    let bare = name.rsplit('.').next().unwrap_or(name);
+    for candidate in [name, bare] {
+        let key = candidate.to_lowercase();
+        if key == "cycle" || level.node_attributes.contains_key(&key) {
+            return Ok(Focus::Metric(key));
+        }
+    }
+    let mut metrics: Vec<&str> = level
+        .node_attributes
+        .iter()
+        .filter(|(_, s)| matches!(s.value_type, ValueType::Int | ValueType::Float))
+        .map(|(k, _)| k.as_str())
+        .collect();
+    metrics.push("cycle");
+    metrics.sort_unstable();
+    let principles: Vec<&str> = presets.iter().map(|p| p.id.as_str()).collect();
+    bail!(
+        "unknown --focus-rule '{name}'. Metrics: {}. Principles: {}",
+        metrics.join(", "),
+        principles.join(", ")
+    );
+}
+
+/// Build a throwaway [`Preset`] that frames a **metric** as its own principle, so
+/// the metric-lens prompt reuses [`compose_prompt`] verbatim — the title is the
+/// metric (`HK — Henry–Kafura`), the summary its `description`, the `doc_url` the
+/// fix-prompt doc linked from its `remediation`, and the ranking axis the metric
+/// itself. No SOLID principle is involved. Coupling metrics also pull the in/out
+/// connection lists (the HK fix workflow needs the crossroads); others omit them.
+pub fn synth_metric_preset(level: &LevelGraph, metric: &str) -> Preset {
+    let spec = level.node_attributes.get(metric);
+    let label = spec
+        .and_then(|s| s.short.as_deref().or(s.label.as_deref()))
+        .unwrap_or(metric);
+    let name = spec.and_then(|s| s.name.as_deref()).unwrap_or(label);
+    let title = if name == label {
+        label.to_string()
+    } else {
+        format!("{label} — {name}")
+    };
+    let doc_url = spec
+        .and_then(|s| s.remediation.as_deref())
+        .and_then(first_url);
+    let connections = if spec.and_then(|s| s.group.as_deref()) == Some("coupling") {
+        vec!["in".to_string(), "out".to_string(), "common".to_string()]
+    } else {
+        Vec::new()
+    };
+    Preset {
+        id: metric.to_string(),
+        label: label.to_string(),
+        title,
+        prompt: spec.and_then(|s| s.description.clone()).unwrap_or_default(),
+        doc_url,
+        sort_metric: metric.to_string(),
+        connections,
+    }
+}
+
+/// The first `http(s)` URL embedded in `s` (a metric's `remediation` text links
+/// its fix-prompt doc), up to the first whitespace; `None` if there is none.
+fn first_url(s: &str) -> Option<String> {
+    let start = s.find("http")?;
+    let url: String = s[start..]
+        .chars()
+        .take_while(|c| !c.is_whitespace())
+        .collect();
+    Some(url)
+}
 
 /// Which threshold tier drives an output. `Auto` resolves to `Warning` when any
 /// module breaches it, else `Info` (the viewer's headline rule).
@@ -69,18 +170,12 @@ pub(super) fn in_cycle(node: &Node) -> bool {
     matches!(node.attrs.get("cycle"), Some(AttrValue::Str(_)))
 }
 
-/// The two-tier thresholds for a metric: the metric's own, falling back to HK's,
-/// then to a never-breached `{0, 0}` — mirroring the viewer's `recoFor`.
-fn thresholds_for(level: &LevelGraph, metric: &str) -> Thresholds {
-    level
-        .node_attributes
-        .get(metric)
-        .and_then(|s| s.thresholds)
-        .or_else(|| level.node_attributes.get("hk").and_then(|s| s.thresholds))
-        .unwrap_or(Thresholds {
-            info: 0.0,
-            warning: 0.0,
-        })
+/// The two-tier thresholds for a metric, or `None` when it has no configured
+/// threshold. A metric is gated (and ranked by breach count) only by its OWN
+/// threshold — there is no cross-metric fallback, and an unconfigured metric has
+/// zero breaches rather than treating a `0` limit as "every node breaches".
+fn thresholds_for(level: &LevelGraph, metric: &str) -> Option<Thresholds> {
+    level.node_attributes.get(metric).and_then(|s| s.thresholds)
 }
 
 /// The short header label for a metric (falls back to its label, then the key).
@@ -101,6 +196,21 @@ pub fn clean_path(id: &str) -> String {
         return rest[idx + 2..].to_string();
     }
     id.to_string()
+}
+
+/// Whether `node` falls under one of the `--focus-path` entries (empty = no
+/// restriction). Mirrors `check`'s path matching: an entry matches a file exactly
+/// or, as a folder, anything beneath it; leading `./` and a trailing `/` are
+/// normalized so `./crates/a/` and `crates/a` are equivalent.
+pub(super) fn in_focus(node: &Node, focus_paths: &[String]) -> bool {
+    if focus_paths.is_empty() {
+        return true;
+    }
+    let rel = clean_path(&node.id);
+    focus_paths.iter().any(|f| {
+        let f = f.trim_start_matches("./").trim_end_matches('/');
+        !f.is_empty() && (rel == f || rel.starts_with(&format!("{f}/")))
+    })
 }
 
 /// Rank the file nodes for one metric, worst-first, and count tier breaches.
@@ -143,14 +253,21 @@ pub fn reco_for<'a>(level: &'a LevelGraph, metric: &str) -> Reco<'a> {
             .then(bs.total_cmp(&as_))
             .then(bi.total_cmp(&ai))
     });
-    let warning_count = sorted
-        .iter()
-        .filter(|n| num(n, metric).unwrap_or(0.0) > th.warning)
-        .count();
-    let info_count = sorted
-        .iter()
-        .filter(|n| num(n, metric).unwrap_or(0.0) > th.info)
-        .count();
+    // No configured threshold → no breaches (the metric still ranks for display,
+    // but never claims violations and so never wins `worst_preset`).
+    let (warning_count, info_count) = match th {
+        Some(th) => (
+            sorted
+                .iter()
+                .filter(|n| num(n, metric).unwrap_or(0.0) > th.warning)
+                .count(),
+            sorted
+                .iter()
+                .filter(|n| num(n, metric).unwrap_or(0.0) > th.info)
+                .count(),
+        ),
+        None => (0, 0),
+    };
     Reco {
         sorted,
         warning_count,

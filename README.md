@@ -84,34 +84,13 @@ No network, no analytics, no telemetry. Open in any browser, share as a file.
 
 ## Install
 
-**Package pages:** [crates.io](https://crates.io/crates/code-ranker) · [npm](https://www.npmjs.com/package/code-ranker) · [PyPI](https://pypi.org/project/code-ranker/) · [Docker Hub](https://hub.docker.com/r/fedoroff/code-ranker) · [GHCR](https://github.com/ffedoroff/code-ranker/pkgs/container/code-ranker)
+Pick any channel — all ship the same `code-ranker` binary (Linux, macOS, Windows). **Full guide with exact commands: [docs/installation.md](docs/installation.md).**
 
-Pick a channel:
-
-```sh
-# universal — shell installer that drops the prebuilt binary on PATH
-curl -fsSL https://github.com/ffedoroff/code-ranker/releases/latest/download/code-ranker-installer.sh | sh
-
-# Windows
-powershell -ExecutionPolicy ByPass -c "irm https://github.com/ffedoroff/code-ranker/releases/latest/download/code-ranker-installer.ps1 | iex"
-
-# Rust (Cargo)
-cargo install code-ranker --version 1.1.0
-
-# Node (npm)
-npm install -g code-ranker
-
-# Python (pip / uv / pipx)
-pip install code-ranker
-
-# Docker (Docker Hub)
-docker pull fedoroff/code-ranker:1.1.0
-
-# Docker (GHCR — no anonymous rate limits)
-docker pull ghcr.io/ffedoroff/code-ranker:1.1.0
-```
-
-All channels ship the same `code-ranker` binary built from the same Rust source. Linux (x86_64, aarch64), macOS (x86_64, aarch64), Windows (x86_64).
+- **Shell / PowerShell installer** — prebuilt binary on PATH (universal)
+- **Cargo** — `cargo install code-ranker` · [crates.io](https://crates.io/crates/code-ranker)
+- **npm** — `npm install -g code-ranker` · [npm](https://www.npmjs.com/package/code-ranker)
+- **pip / uv / pipx** — `pip install code-ranker` · [PyPI](https://pypi.org/project/code-ranker/)
+- **Docker** — [Docker Hub](https://hub.docker.com/r/fedoroff/code-ranker) · [GHCR](https://github.com/ffedoroff/code-ranker/pkgs/container/code-ranker)
 
 ## Quick start
 
@@ -132,6 +111,7 @@ Built-in plugins: `rust` (cargo + syn), `python`, `javascript` (also handles Typ
 
 ## Documentation
 
+- [Installation](docs/installation.md) — every install channel with exact commands
 - [CLI](docs/code-ranker-cli/CLI.md) — commands, flags, and examples
 - [Rule reference](docs/code-ranker-cli/ERRORS.md) — rule ids grouped by concern (`CYC`/`CPX`/`CPL`/`SIZ`), per-file thresholds (`file`), what each flags, and how to fix it
 - [Config](docs/code-ranker-cli/config.md) — `code-ranker.toml` schema

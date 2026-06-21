@@ -26,26 +26,25 @@ path = ".code-ranker/{project-dir}.html"
 # `_` separators and K/M/G suffixes (e.g. 1_500, 5K, 1.5M). Unset = no limit.
 # (Cycle checks — `[rules.cycles]` — inherit the built-in strict defaults.)
 #
-# `hk` accommodates two legitimate *architectural hubs* that Henry–Kafura
-# (`sloc × (fan_in × fan_out)²`) over-penalises because it is quadratic in
-# coupling — reducing them would be metric-gaming, not real decoupling, so they
-# are accepted by design:
-#   - `code-ranker-plugin-api/src/plugin.rs` (~0.31M) — the `LanguagePlugin` trait,
-#     depended on by every plugin by definition (fan_in grows with each language);
-#   - `code-ranker-cli/src/pipeline.rs` (~0.26M) — the orchestrator, which by
-#     definition wires every subsystem (high fan-out).
-# The former config reader (`config.rs`, once ~1.15M and the dominant hub) was
-# split into a `config/` facade over concern submodules (parse/views/specs/lookup);
-# the resolver follows the `pub use` re-exports to the defining file, so each
-# plugin's fan_in now lands on the concern it uses and the hottest config file is
-# ~25K — no longer a hub. The 320K ceiling sits just above plugin.rs (~3% headroom).
-# Raise it only when a NEW, unexpected hub appears — and prefer splitting a
-# genuinely-too-big module (as config.rs was) over bumping it.
+# `hk` (`sloc × (fan_in × fan_out)²`) is a *regression ratchet*, not an active
+# shortlist: the worst module is the `LanguagePlugin` trait
+# `code-ranker-plugin-api/src/plugin.rs` (~0.30M, fan_in 12 × fan_out 6) — an
+# irreducible hub whose `fan_in` grows with each new language, so HK climbs
+# quadratically (+1 language ≈ 0.35M, +2 ≈ 0.40M). Reducing it would be
+# metric-gaming, so it is accepted by design. The orchestrator
+# `code-ranker-cli/src/pipeline.rs` (~0.18M, high fan_out) is likewise accepted.
+# Because plugin.rs is BOTH the largest and accepted, no ceiling can flag a
+# smaller file without also failing it — so this gate is green by design and only
+# trips on a genuinely new/worse hub. (`builtin.rs` ~0.25M, sloc 248, is the one
+# real split candidate, but it sits below plugin.rs — chase it via the scorecard
+# ranking, not the gate.) The 350K ceiling sits just above plugin.rs with ~1
+# language of growth headroom; when a new language legitimately pushes plugin.rs
+# past it, bump deliberately (or split a genuinely-too-big module, as the former
+# ~1.15M `config.rs` hub was split into the `config/` concern facade).
 [rules.thresholds.file]
-hk = 500000
+hk = 350000
 cyclomatic = 100
 cognitive = 70
-#fan_out = 18
 sloc = 400
 
 # ── Custom checks (config-only linters) ──────────────────────────────────────

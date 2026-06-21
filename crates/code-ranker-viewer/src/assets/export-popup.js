@@ -200,16 +200,19 @@ function openExportPopup(level, restore) {
         .sort((a, b) => (nodeAttr(b, 'hk') ?? 0) - (nodeAttr(a, 'hk') ?? 0));
       return { metric: 'cycle', sorted: inCycle, warningCount: inCycle.length, infoCount: inCycle.length };
     }
-    const th = attrThresholds(level, metric) || attrThresholds(level, 'hk') || { info: 0, warning: 0 };
+    // A metric is ranked by breach only by its OWN threshold — no cross-metric
+    // fallback. With none configured, the list still sorts worst-first for
+    // display but claims no warning/info breaches.
+    const th = attrThresholds(level, metric);
     const sorted = internalNodes()
       .sort((a, b) =>
         (nodeAttr(b, metric) ?? 0) - (nodeAttr(a, metric) ?? 0) ||
         (nodeAttr(b, 'sloc')   ?? 0) - (nodeAttr(a, 'sloc')   ?? 0) ||
         (nodeAttr(b, 'items')  ?? 0) - (nodeAttr(a, 'items')  ?? 0)
       );
-    const warningCount = sorted.filter(n => (nodeAttr(n, metric) ?? 0) > th.warning).length;
-    const infoCount    = sorted.filter(n => (nodeAttr(n, metric) ?? 0) > th.info).length;
-    return { metric, info: th.info, warning: th.warning, sorted, warningCount, infoCount };
+    const warningCount = th ? sorted.filter(n => (nodeAttr(n, metric) ?? 0) > th.warning).length : 0;
+    const infoCount    = th ? sorted.filter(n => (nodeAttr(n, metric) ?? 0) > th.info).length : 0;
+    return { metric, info: th?.info, warning: th?.warning, sorted, warningCount, infoCount };
   };
 
   const recCount = overlay.querySelector('.exp-rec-count');

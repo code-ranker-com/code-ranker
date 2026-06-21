@@ -8,7 +8,7 @@ either a source `file` or a third-party `external` library.
 The model is a **generic property graph**: a node has a free-form string `kind`,
 a `name`, and a **flat attribute map** (no nested `complexity` / `coupling` /
 `loc` / `halstead` objects). Every metric's label, formula, live derivation
-(`calc`), direction, calibrated thresholds, no-signal value (`omit_at`), the
+(`calc`), direction, gate-derived thresholds, no-signal value (`omit_at`), the
 `description` (the diagnostic *why*) and `remediation` (the diagnostic *fix*) are
 described by the level's
 `node_attributes` dictionary, so a consumer can render any metric without

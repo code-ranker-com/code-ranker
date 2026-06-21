@@ -253,27 +253,6 @@ line_comment = { kind = "line_comment" }
 doc_comment = { kind = "doc_comment" }
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Rust-calibrated thresholds. Calibrated on 21 Rust crates (≥2K SLOC):
-# ~50% of projects breach `info`, ~10% breach `warning`.
-# ──────────────────────────────────────────────────────────────────────────────
-
-[thresholds.hk]
-info = 150000.0
-warning = 10000000.0
-
-[thresholds.sloc]
-info = 800.0
-warning = 3000.0
-
-[thresholds.fan_out]
-info = 8.0
-warning = 18.0
-
-[thresholds.items]
-info = 20.0
-warning = 50.0
-
-# ──────────────────────────────────────────────────────────────────────────────
 # Per-language spec overrides, applied over the central `builtin.toml` specs.
 #
 # Rust strips inline `#[cfg(test)]` / `#[test]` / `#[bench]` items before

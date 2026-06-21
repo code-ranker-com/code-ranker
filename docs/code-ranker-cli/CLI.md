@@ -284,15 +284,17 @@ code-ranker report [input] [options]
 |---|---|---|
 | `--output.<fmt>.path <path>` | `json` + `html` in `.code-ranker/` | Which artifacts to emit and where. `<fmt>` is `json`, `html`, `prompt`, or `scorecard`. Repeatable, one per format. See [Output paths](#output-paths). |
 | `--baseline <snapshot>` | — | Baseline snapshot (`.json` or `.html`). Turns the HTML into a diff (baseline vs current) with a verdict, and names it `…-diff.html`. See [`--baseline`](#--baseline-comparison). |
-| `--metric <NAME>` | all principles | Narrow the `scorecard` to one ranking axis: `hk`, `cycle`, `sloc`, `cognitive`, `cyclomatic`, `fan_in`, `fan_out`, `items`. Without it the scorecard spans every principle. `scorecard` only. See [Recommendations](#recommendations-scorecard--prompt). |
+| `--focus-rule <NAME>` | auto (all principles) | Frame the output by a **metric** (`hk`, `cycle`, `sloc`, `cognitive`, `cyclomatic`, `fan_in`, `fan_out`, `items` — case-insensitive; also accepts the full threshold rule id `threshold.file.hk`, matched **by value** so it works whether or not the metric has a configured threshold) or a **principle** id (`LSP`, `ADP`, `SRP`, `OCP`, `DIP`, `ISP`, `DRY`, `KISS`, `LoD`, `MISU`, `CoI`, `YAGNI`, `CPX`). A metric narrows the `scorecard` to that axis and emits a metric-framed `prompt`; a principle emits a principle-framed `prompt`. Without it the scorecard spans every principle and the prompt auto-targets the worst. Applies to both `scorecard` and `prompt`. Unknown names error with both namespaces listed. See [Recommendations](#recommendations-scorecard--prompt). |
+| `--focus-path <PATH>` | all modules | Restrict the ranked modules to a subtree. The whole project is still analyzed (the dependency graph needs it), but only modules under one of these repo-relative paths are ranked/listed; a folder matches everything beneath it. Repeatable; combine with `--focus-rule` to intersect. A dependency cycle is a global unit, so `--focus-path` does **not** narrow cycle members — only the node-ranked metric/breach lists. See [Recommendations](#recommendations-scorecard--prompt). |
 | `--severity <tier>` | all tiers | Threshold tier for the `scorecard`: `info`, `warning`, or `auto`. Repeatable to show several tiers. |
-| `--top <N>` | 15 (scorecard) | `scorecard`: how many rows; `--top 1` = the single worst module. With `--metric cycle`, `--top 1` prints one entire cycle (biggest `chain` first) with **all** its members. `prompt`: **must be `--top 1`** — the prompt is auto-targeted at the single worst module. |
+| `--top <N>` | 15 (scorecard) | `scorecard`: how many rows; `--top 1` = the single worst module. With `--focus-rule cycle`, `--top 1` prints one entire cycle (biggest `chain` first) with **all** its members. `prompt`: **must be `--top 1`** — the prompt is auto-targeted at the single worst module. |
 | `--export-full-config <PATH>` | — | Instead of analyzing, write the **full effective configuration** to `PATH` and exit. See [Inspecting the effective config](#inspecting-the-effective-config). |
 
-`--metric`, `--severity`, and `--top` apply only when a `prompt` or `scorecard` format is
-selected; passing them otherwise is an error. `--output.prompt` additionally **requires
-`--top 1`** (it is auto-targeted at the single worst module); `--metric` / `--severity`
-are `scorecard`-only.
+`--focus-rule`, `--focus-path`, `--severity`, and `--top` apply only when a `prompt` or
+`scorecard` format is selected; passing them otherwise is an error. `--output.prompt`
+additionally **requires `--top 1`** (it is auto-targeted at the single worst module);
+`--severity` is `scorecard`-only, while `--focus-rule` now drives **both** the `scorecard`
+and the `prompt`.
 
 ### Inspecting the effective config
 
@@ -304,7 +306,7 @@ no analysis runs — as one TOML document with two top-level sections:
   every effective `ignore` / `rules` / `output` / `levels` value, including the ones you
   did not set (inherited from the defaults).
 - `[plugin]` — the active plugin's fully-merged language config (its inheritance chain
-  `defaults.toml ⊕ [base] ⊕ <lang>.toml`): presets, calibrated thresholds, node/edge
+  `defaults.toml ⊕ [base] ⊕ <lang>.toml`): presets, node/edge
   kinds, the metric-engine role tables, etc.
 
 It honours `--plugin` and `--config`, so you can preview any combination:
@@ -313,7 +315,7 @@ It honours `--plugin` and `--config`, so you can preview any combination:
 # what `report` would use here, with my overrides folded in
 code-ranker report . --config ci/strict.toml --export-full-config /tmp/full.toml
 
-# the full Python plugin config (presets, thresholds, vocab)
+# the full Python plugin config (presets, vocab)
 code-ranker report . --plugin python --export-full-config /tmp/python.toml
 ```
 
@@ -338,7 +340,7 @@ code-ranker report . --baseline .code-ranker/main.json --output.html.path=diff.h
 code-ranker report . --output.scorecard
 
 # narrow the triage to one axis (coupling)
-code-ranker report . --output.scorecard --metric hk --top 5
+code-ranker report . --output.scorecard --focus-rule hk --top 5
 
 # AI fix-prompt for the single worst module (auto-targeted), to stdout
 code-ranker report . --output.prompt.path=stdout --top 1
@@ -434,28 +436,32 @@ The destination resolves as **`--output.<fmt>.path` flag › `[output.<fmt>] pat
 
 ## Recommendations: `scorecard` & `prompt`
 
-Two `report` output formats turn the snapshot's calibrated metric thresholds into
+Two `report` output formats turn the snapshot's gate thresholds into
 refactoring guidance:
 
 - **`scorecard`** — a console triage overview answering *"what do I fix first?"*
 - **`prompt`** — a ready-to-paste AI fix-prompt, **auto-targeted at the single worst
   module** (the same Markdown the HTML viewer's Prompt Generator produces).
 
-Both rank modules with the same engine. The `scorecard` is steered by `--metric` (narrow
-to one axis), `--severity` (which tier), and `--top` (how many rows). The `prompt` takes
-no axis flag — it auto-targets the single worst module — and **requires `--top 1`**.
+Both rank modules with the same engine. The `scorecard` is steered by `--focus-rule`
+(narrow to one axis), `--focus-path` (scope to a subtree), `--severity` (which tier), and
+`--top` (how many rows). The `prompt` also honours `--focus-rule` (frame it by a metric or
+a principle); without it the prompt auto-targets the single worst module. Both **require
+`--top 1`** for the `prompt`.
 
 > **Advisory, not a gate.** Unlike [`check`](#check), these never fail the build and carry
-> no exit code. `check` enforces the rules *you* configure; `scorecard` / `prompt` surface
-> the worst hotspots against the snapshot's built-in, language-calibrated thresholds so you
-> know where to start. Both also work from a snapshot input
+> no exit code. They surface the worst hotspots against **the same thresholds `check`
+> enforces** — the `[rules.thresholds.file]` limits *you* configure — so the report shows
+> exactly what fails (or is about to fail) the gate. Both also work from a snapshot input
 > (`report snap.json --output.scorecard`) with no re-analysis.
 
 ### Severity tiers
 
-Every ranking metric carries two calibrated thresholds in the snapshot — **`info`** (the
-softer line; ~50 % of projects breach it) and **`warning`** (the harder line; ~10 %
-breach). A module is *in a tier* when its value crosses that threshold. `--severity`
+A ranking metric's tiers come from your gate config. **`warning`** is the
+`[rules.thresholds.file]` limit itself (the line that fails `check`); **`info`** is an
+optional softer line below it, set per metric via a `[metrics.<key>]` `info` field (kept
+only when it sits below `warning`). A metric with no configured threshold has no tiers and
+no breaches. A module is *in a tier* when its value crosses that line. `--severity`
 selects which tier drives the output:
 
 | Value | Meaning |
@@ -470,19 +476,40 @@ show several tiers at once; with none given it shows all tiers.
 Cycle-based principles (e.g. `ADP`) have **no numeric threshold** — every module in a
 dependency cycle counts, ranked by HK, and `--severity` is ignored for them.
 
-### Ranking axes (`--metric`)
+### Focus (`--focus-rule` / `--focus-path`)
 
-The `scorecard` ranks modules by a metric. `--metric <NAME>` narrows it to one axis:
-`hk` (Henry-Kafura coupling), `cycle` (dependency cycles — the ADP view), `sloc` (module
-size), `cognitive` / `cyclomatic` (complexity), `fan_in` / `fan_out` (coupling direction),
-`items` (interface size). An unknown name errors with the list of known metrics.
+`--focus-rule <NAME>` frames the output, resolving NAME (case-insensitive) against **two
+namespaces**:
 
-Without `--metric` the scorecard spans all principles (one row each). The principle
-*catalog* still lives in the snapshot's `presets` (shared with the HTML viewer's Prompt
-Generator and used for the prompt's prose) — but it is **no longer selected from the CLI**:
-the `prompt` auto-targets the single worst module's principle, and the `scorecard` narrows
-by metric. `cycle` has **no numeric threshold** — every module in a dependency cycle
-counts, ranked by HK, and `--severity` is ignored for it.
+- a **metric** — the bare key `hk` (Henry-Kafura coupling), `cycle` (dependency cycles —
+  the ADP view), `sloc` (module size), `cognitive` / `cyclomatic` (complexity), `fan_in` /
+  `fan_out` (coupling direction), `items` (interface size), **or** the full threshold rule
+  id (`threshold.file.hk`). Matched **by value**, so it works whether or not the metric has
+  a configured `[rules.thresholds.file]` threshold. This narrows the `scorecard`
+  to that axis and frames the `prompt` by the **metric itself** — its own name,
+  description, and `remediation` doc (e.g. `principles/rust/HK.md`), with **no** SOLID
+  design-principle wrapper.
+- a **principle** id — `LSP`, `ADP`, `SRP`, `OCP`, `DIP`, `ISP`, `DRY`, `KISS`, `LoD`,
+  `MISU`, `CoI`, `YAGNI`, `CPX`. This frames the output by that **design principle** (the
+  prior behaviour).
+
+An unknown name is a hard error that lists both namespaces (`unknown --focus-rule '<name>'.
+Metrics: …. Principles: …`).
+
+`--focus-rule` drives **both** outputs. `--focus-rule hk --output.prompt.path=stdout --top 1`
+emits an **HK-framed** fix-prompt directly (titled "HK — Henry-Kafura", no Liskov wrapper);
+`--focus-rule LSP …` emits the **Liskov-framed** prompt. Without `--focus-rule` the scorecard
+spans all principles (one row each) and the `prompt` auto-targets the single worst module's
+principle. The principle *catalog* lives in the snapshot's `presets` (shared with the HTML
+viewer's Prompt Generator and used for the prompt's prose). `cycle` has **no numeric
+threshold** — every module in a dependency cycle counts, ranked by HK, and `--severity` is
+ignored for it.
+
+`--focus-path <PATH>` restricts the ranked modules to a subtree (repeatable). The whole
+project is still analyzed (the graph needs it), but only modules under one of these
+repo-relative paths are ranked/listed; a folder matches everything beneath it. Combine with
+`--focus-rule` to intersect. A dependency cycle is a global unit, so `--focus-path` does
+**not** narrow cycle members — only the node-ranked metric/breach lists.
 
 ### `scorecard` — triage overview
 
@@ -494,7 +521,7 @@ modules overall:
 code-ranker report . --output.scorecard                     # all tiers, ~15 rows
 code-ranker report . --output.scorecard --severity warning --top 20
 code-ranker report . --output.scorecard.path=triage.txt     # to a file instead
-code-ranker report . --output.scorecard --metric sloc       # narrow to one axis
+code-ranker report . --output.scorecard --focus-rule sloc   # narrow to one axis
 ```
 
 ```text
@@ -513,8 +540,9 @@ WORST MODULES
 → code-ranker report . --output.prompt.path=… --top 1
 ```
 
-`--top N` caps the worst-modules list (default ~15); `--metric <NAME>` narrows the
-scorecard to a single ranking axis.
+`--top N` caps the worst-modules list (default ~15); `--focus-rule <NAME>` narrows the
+scorecard to a single ranking axis (or frames it by a principle); `--focus-path <PATH>`
+scopes the ranked modules to a subtree.
 
 ### `prompt` — AI fix-prompt for the worst module
 

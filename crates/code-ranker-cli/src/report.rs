@@ -27,8 +27,11 @@ pub(crate) struct ReportOutputs {
 
 /// Recommendation knobs for the `prompt` / `scorecard` formats.
 pub(crate) struct ReportReco {
-    /// Narrow the `scorecard` to one ranking axis (metric name). `scorecard` only.
-    pub(crate) metric: Option<String>,
+    /// Focus the `scorecard` / `prompt` on one axis — a metric / rule id (`hk`,
+    /// `threshold.file.hk`) or a principle id (`LSP`). Resolved against both.
+    pub(crate) focus_rule: Option<String>,
+    /// Restrict the ranked modules to these repo-relative paths (folder = subtree).
+    pub(crate) focus_path: Vec<String>,
     pub(crate) severity: Vec<String>,
     pub(crate) top: Option<usize>,
     pub(crate) index: Option<usize>,
@@ -65,16 +68,16 @@ pub(crate) fn run_report(
     }
     if !want_prompt
         && !want_scorecard
-        && (reco.metric.is_some() || !reco.severity.is_empty() || reco.top.is_some())
+        && (reco.focus_rule.is_some()
+            || !reco.focus_path.is_empty()
+            || !reco.severity.is_empty()
+            || reco.top.is_some())
     {
         anyhow::bail!(
-            "--metric/--severity/--top apply only with --output.prompt or --output.scorecard"
+            "--focus-rule/--focus-path/--severity/--top apply only with --output.prompt or --output.scorecard"
         );
     }
-    // `--metric` / `--severity` steer the scorecard only.
-    if reco.metric.is_some() && !want_scorecard {
-        anyhow::bail!("--metric applies only to --output.scorecard");
-    }
+    // `--severity` steers the scorecard only (tiers are a triage concern).
     if !reco.severity.is_empty() && !want_scorecard {
         anyhow::bail!("--severity applies only to --output.scorecard");
     }
@@ -213,8 +216,10 @@ pub(crate) fn run_report(
 }
 
 /// Write the recommendation artifacts (`prompt` / `scorecard`) for the analyzed
-/// snapshot. Both read the `files` level; the prompt resolves a single principle
-/// (explicit `--preset`, else the worst-violating one), the scorecard spans all.
+/// snapshot. Both read the `files` level. `--focus` picks the lens: a metric frames
+/// the output by the metric itself, a principle by that design principle; without
+/// it the prompt auto-targets the worst-violating principle and the scorecard spans
+/// all.
 #[allow(clippy::too_many_arguments)]
 fn write_recommendations(
     snap: &Snapshot,
@@ -232,19 +237,40 @@ fn write_recommendations(
         .get("files")
         .context("snapshot has no `files` level to build recommendations from")?;
 
+    // Resolve `--focus-rule` once against both namespaces (metric / rule id /
+    // principle id). `--focus-path` then narrows the ranked modules to a subtree.
+    let focus = reco
+        .focus_rule
+        .as_deref()
+        .map(|n| recommend::resolve_focus(level, &snap.presets, n))
+        .transpose()?;
+
     if want_prompt {
-        // Auto-targeted: no CLI principle selector — the prompt always describes
-        // the worst-violating principle's single worst module (`--top 1`, validated
-        // up front). `Auto` tier is irrelevant once `top = 1`.
-        let preset_id = recommend::worst_preset(level, &snap.presets)
-            .context("no presets in the snapshot to recommend from")?;
+        // Metric focus frames the prompt by a synthesized metric "preset" (no SOLID
+        // principle); a principle focus targets that preset; no focus auto-targets
+        // the worst-violating principle. `--top 1` is validated up front, so `Auto`
+        // tier is irrelevant.
+        let synth; // holds the metric-lens preset, if any, for the borrow below
+        let (presets_for_prompt, preset_id): (&[recommend::Preset], String) = match &focus {
+            Some(recommend::Focus::Metric(m)) => {
+                synth = [recommend::synth_metric_preset(level, m)];
+                (&synth, m.clone())
+            }
+            Some(recommend::Focus::Principle(id)) => (&snap.presets, id.clone()),
+            None => (
+                &snap.presets,
+                recommend::worst_preset(level, &snap.presets)
+                    .context("no presets in the snapshot to recommend from")?,
+            ),
+        };
         let md = recommend::compose_prompt(
             level,
-            &snap.presets,
+            presets_for_prompt,
             &snap.prompt,
             &preset_id,
             recommend::Severity::Auto,
             reco.top,
+            &reco.focus_path,
         )?;
         let dest =
             render_name(prompt_tpl, target, commit, generated_at).replace("{preset}", &preset_id);
@@ -266,7 +292,8 @@ fn write_recommendations(
             &snap.presets,
             &severities,
             reco.top,
-            reco.metric.as_deref(),
+            focus.as_ref(),
+            &reco.focus_path,
         )?;
         let dest = render_name(scorecard_tpl, target, commit, generated_at);
         write_artifact(&dest, &txt, "scorecard")?;

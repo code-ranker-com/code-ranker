@@ -183,6 +183,7 @@ fn compose_prompt_cycle_lists_modules_and_connections() {
         "ADP",
         Severity::Auto,
         None,
+        &[],
     )
     .unwrap();
     assert!(md.contains("# ADP — Acyclic"), "title heading: {md}");
@@ -273,6 +274,7 @@ fn compose_prompt_metric_orders_and_respects_top() {
         "SRP",
         Severity::Warning,
         Some(1),
+        &[],
     )
     .unwrap();
     assert!(
@@ -308,9 +310,10 @@ fn compose_prompt_unknown_preset_errors() {
         "NOPE",
         Severity::Auto,
         None,
+        &[],
     )
     .unwrap_err();
-    assert!(format!("{err}").contains("unknown --preset 'NOPE'"));
+    assert!(format!("{err}").contains("unknown preset 'NOPE'"));
 }
 
 #[test]
@@ -358,6 +361,7 @@ fn scorecard_shows_principle_and_worst_modules() {
         &[Severity::Warning, Severity::Info],
         None,
         None,
+        &[],
     )
     .unwrap();
     assert!(sc.contains("scorecard  (rust, 2 files)"), "header: {sc}");
@@ -419,7 +423,8 @@ fn scorecard_narrowed_metric_lists_ranked_modules() {
         &[srp_preset()],
         &[Severity::Warning],
         Some(2),
-        Some("sloc"),
+        Some(&Focus::Metric("sloc".into())),
+        &[],
     )
     .unwrap();
     assert!(sc.contains("WORST MODULES"), "modules section: {sc}");
@@ -464,7 +469,8 @@ fn scorecard_narrowed_cycle_lists_all_members() {
         &[adp_preset()],
         &[Severity::Warning],
         None,
-        Some("cycle"),
+        Some(&Focus::Metric("cycle".into())),
+        &[],
     )
     .unwrap();
     assert!(
@@ -477,27 +483,43 @@ fn scorecard_narrowed_cycle_lists_all_members() {
     );
 }
 
-/// An unknown `--metric` (narrow) is a hard error naming the known metrics.
+/// An unknown `--focus` name is a hard error naming both namespaces.
 #[test]
-fn scorecard_unknown_narrow_metric_errors() {
+fn resolve_focus_unknown_name_errors() {
     let level = level_with(vec![file_node("{target}/a.rs", &[])]);
-    let err = render_scorecard(
-        "rust",
-        &level,
-        &[srp_preset()],
-        &[Severity::Auto],
-        None,
-        Some("zzz"),
-    )
-    .unwrap_err()
-    .to_string();
+    let err = resolve_focus(&level, &[srp_preset()], "zzz")
+        .unwrap_err()
+        .to_string();
     assert!(
-        err.contains("unknown --metric 'zzz'"),
-        "names bad metric: {err}"
+        err.contains("unknown --focus-rule 'zzz'"),
+        "names bad focus: {err}"
     );
     assert!(
         err.contains("sloc") && err.contains("cycle"),
         "lists known metrics: {err}"
+    );
+    assert!(err.contains("SRP"), "lists known principles: {err}");
+}
+
+/// `--focus` resolves a metric key (case-insensitive) and a principle id.
+#[test]
+fn resolve_focus_picks_metric_or_principle() {
+    let level = level_with(vec![file_node("{target}/a.rs", &[])]);
+    let presets = [srp_preset()];
+    assert_eq!(
+        resolve_focus(&level, &presets, "HK").unwrap(),
+        Focus::Metric("hk".into()),
+        "metric key matched case-insensitively"
+    );
+    assert_eq!(
+        resolve_focus(&level, &presets, "SRP").unwrap(),
+        Focus::Principle("SRP".into()),
+        "principle id matched"
+    );
+    assert_eq!(
+        resolve_focus(&level, &presets, "threshold.file.hk").unwrap(),
+        Focus::Metric("hk".into()),
+        "full threshold rule id maps to its metric"
     );
 }
 
@@ -525,6 +547,7 @@ fn scorecard_info_tier_and_cycle_in_rest() {
         &[Severity::Warning, Severity::Info],
         None,
         None,
+        &[],
     )
     .unwrap();
     assert!(
@@ -551,6 +574,7 @@ fn scorecard_reports_no_breaches_when_clean() {
         &[Severity::Warning],
         None,
         None,
+        &[],
     )
     .unwrap();
     assert!(
@@ -613,6 +637,7 @@ fn compose_prompt_lists_multiple_cycles() {
         "ADP",
         Severity::Auto,
         Some(2),
+        &[],
     )
     .unwrap();
     assert!(
@@ -636,7 +661,8 @@ fn scorecard_narrowed_cycle_top_n_header() {
         &[adp_preset()],
         &[Severity::Warning],
         Some(2),
-        Some("cycle"),
+        Some(&Focus::Metric("cycle".into())),
+        &[],
     )
     .unwrap();
     assert!(
@@ -655,7 +681,8 @@ fn scorecard_narrowed_cycle_with_none_says_none() {
         &[adp_preset()],
         &[Severity::Warning],
         None,
-        Some("cycle"),
+        Some(&Focus::Metric("cycle".into())),
+        &[],
     )
     .unwrap();
     assert!(sc.contains("(none)"), "empty modules list: {sc}");
@@ -677,7 +704,16 @@ fn scorecard_clips_long_principle_name() {
         sort_metric: "hk".into(),
         connections: vec![],
     };
-    let sc = render_scorecard("rust", &level, &[preset], &[Severity::Warning], None, None).unwrap();
+    let sc = render_scorecard(
+        "rust",
+        &level,
+        &[preset],
+        &[Severity::Warning],
+        None,
+        None,
+        &[],
+    )
+    .unwrap();
     assert!(sc.contains('…'), "long name clipped with ellipsis: {sc}");
 }
 
@@ -685,4 +721,137 @@ fn scorecard_clips_long_principle_name() {
 fn parse_severity_rejects_garbage() {
     assert_eq!(parse_severity("warning").unwrap(), Severity::Warning);
     assert!(parse_severity("nope").is_err());
+}
+
+/// `synth_metric_preset` frames a metric as its own "principle": title from
+/// label+name, summary from description, `doc_url` extracted from the remediation
+/// URL, and in/out/common connections for a coupling metric (none otherwise).
+#[test]
+fn synth_metric_preset_frames_metric() {
+    let mut hk = AttributeSpec::new(ValueType::Float, "HK");
+    hk.short = Some("HK".into());
+    hk.name = Some("Henry–Kafura".into());
+    hk.description = Some("coupling × size".into());
+    hk.group = Some("coupling".into());
+    hk.remediation = Some("Download and follow https://x/HK.md please".into());
+    let mut sloc = AttributeSpec::new(ValueType::Int, "SLOC");
+    sloc.description = Some("source lines".into());
+    let mut na: BTreeMap<String, AttributeSpec> = BTreeMap::new();
+    na.insert("hk".into(), hk);
+    na.insert("sloc".into(), sloc);
+    let level = LevelGraph {
+        node_attributes: na,
+        ..Default::default()
+    };
+
+    let p = synth_metric_preset(&level, "hk");
+    assert_eq!(p.id, "hk");
+    assert_eq!(p.sort_metric, "hk");
+    assert_eq!(p.title, "HK — Henry–Kafura");
+    assert_eq!(p.prompt, "coupling × size");
+    assert_eq!(
+        p.doc_url.as_deref(),
+        Some("https://x/HK.md"),
+        "url from remediation"
+    );
+    assert_eq!(
+        p.connections,
+        vec!["in", "out", "common"],
+        "coupling → connections"
+    );
+
+    let q = synth_metric_preset(&level, "sloc");
+    assert_eq!(q.title, "SLOC", "no `name` → title is the label");
+    assert!(q.connections.is_empty(), "non-coupling → no connections");
+    assert!(q.doc_url.is_none(), "no remediation URL → no doc link");
+}
+
+/// The metric lens must not print the metric description twice — once is the
+/// Summary (the synth preset's `prompt`), so the modules section drops it.
+#[test]
+fn compose_prompt_metric_lens_omits_duplicate_description() {
+    let desc = "coupling and size, quadratic in fan";
+    let mut hk = AttributeSpec::new(ValueType::Float, "HK");
+    hk.short = Some("HK".into());
+    hk.description = Some(desc.into());
+    hk.formula = Some("sloc × (fan_in × fan_out)²".into());
+    let mut na: BTreeMap<String, AttributeSpec> = BTreeMap::new();
+    na.insert("hk".into(), hk);
+    let level = LevelGraph {
+        node_attributes: na,
+        nodes: vec![file_node("{target}/a.rs", &[("hk", AttrValue::Float(9.0))])],
+        ..Default::default()
+    };
+    let preset = synth_metric_preset(&level, "hk"); // preset.prompt == desc
+    let md = compose_prompt(
+        &level,
+        &[preset],
+        &code_ranker_graph::prompt_template(),
+        "hk",
+        Severity::Auto,
+        Some(1),
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        md.matches(desc).count(),
+        1,
+        "description appears once (Summary only), not again in the modules section: {md}"
+    );
+    assert!(
+        md.contains("**Formula:**"),
+        "the formula line still renders in the modules section: {md}"
+    );
+}
+
+/// `in_focus` mirrors `check`'s path matching: empty = no restriction; a folder
+/// matches everything beneath it; an exact file matches; `./` and trailing `/`
+/// normalize; anything outside is excluded.
+#[test]
+fn in_focus_matches_file_and_folder() {
+    let n = file_node("{target}/crates/a/src/lib.rs", &[]);
+    assert!(in_focus(&n, &[]), "empty = no restriction");
+    assert!(in_focus(&n, &["crates/a".to_string()]), "folder prefix");
+    assert!(
+        in_focus(&n, &["crates/a/src/lib.rs".to_string()]),
+        "exact file"
+    );
+    assert!(
+        in_focus(&n, &["./crates/a/".to_string()]),
+        "normalizes ./ and trailing /"
+    );
+    assert!(!in_focus(&n, &["crates/b".to_string()]), "outside the path");
+}
+
+/// A principle focus shows only that preset's row (others hidden) and ranks the
+/// worst modules by its `sort_metric`.
+#[test]
+fn scorecard_focus_principle_shows_only_that_preset() {
+    let level = level_with(vec![file_node(
+        "{target}/big.rs",
+        &[
+            ("hk", AttrValue::Float(2000.0)),
+            ("sloc", AttrValue::Int(300)),
+        ],
+    )]);
+    let presets = [srp_preset(), adp_preset()];
+    let sc = render_scorecard(
+        "rust",
+        &level,
+        &presets,
+        &[Severity::Warning, Severity::Info],
+        None,
+        Some(&Focus::Principle("SRP".into())),
+        &[],
+    )
+    .unwrap();
+    assert!(
+        sc.contains("SRP") && sc.contains("Single Responsibility"),
+        "focused principle row shown: {sc}"
+    );
+    assert!(!sc.contains("Acyclic"), "other principles hidden: {sc}");
+    assert!(
+        sc.contains("big.rs"),
+        "worst modules ranked by the principle's sort_metric: {sc}"
+    );
 }

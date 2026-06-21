@@ -10,12 +10,14 @@ Two commands underlie everything:
   files. Thresholds come from `code-ranker.toml` (or `--threshold` overrides).
 - **`report`** — produces **artifacts** (JSON snapshot, HTML viewer) and the **advisory**
   outputs (`scorecard` triage, `prompt` for an AI). The advisory tiers (⚠ warning / ⓘ info)
-  are language-calibrated and **independent of the gate thresholds**. Always exits `0`.
+  are driven by the **same `[rules.thresholds.file]` limits the gate enforces** — ⚠ is the
+  gate line, ⓘ an optional softer line below it — so the report shows what fails (or is
+  about to fail) `check`. Always exits `0`.
 
 `[input]` is polymorphic: a directory is analyzed; a `.json`/`.html` snapshot is read back
 with no re-analysis.
 
-Ranking metrics used below (the `--metric` axis that narrows the scorecard): `hk`
+Ranking metrics used below (the `--focus-rule` axis that narrows the scorecard): `hk`
 (Henry-Kafura coupling), `cycle` (dependency cycles — the ADP view), `sloc` (module size),
 `cognitive` / `cyclomatic` (complexity), `fan_in` / `fan_out` (coupling direction),
 `items` (interface size).
@@ -42,31 +44,37 @@ code-ranker report . --output.scorecard --top 5
 **Triage one metric — Henry-Kafura coupling.**
 
 ```sh
-code-ranker report . --output.scorecard --metric hk
+code-ranker report . --output.scorecard --focus-rule hk
 ```
 
 **Find the single worst HK module to fix first.**
 
 ```sh
-code-ranker report . --output.scorecard --metric hk --top 1
+code-ranker report . --output.scorecard --focus-rule hk --top 1
 ```
 
 **Find the single worst dependency cycle.**
 
 ```sh
-code-ranker report . --output.scorecard --metric cycle --top 1
+code-ranker report . --output.scorecard --focus-rule cycle --top 1
 ```
 
 **Triage the biggest files (module size).**
 
 ```sh
-code-ranker report . --output.scorecard --metric sloc --top 5
+code-ranker report . --output.scorecard --focus-rule sloc --top 5
 ```
 
 **Triage the most cognitively complex files.**
 
 ```sh
-code-ranker report . --output.scorecard --metric cognitive --top 5
+code-ranker report . --output.scorecard --focus-rule cognitive --top 5
+```
+
+**Triage one subtree — scope the ranking to a folder.**
+
+```sh
+code-ranker report . --output.scorecard --focus-rule hk --focus-path crates/code-ranker-cli/src/
 ```
 
 **Show only warning-tier breaches (hide info-tier noise).**

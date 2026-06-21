@@ -520,31 +520,76 @@ fn rust_sample_prompt_auto_picks_worst_principle() {
     );
 }
 
-/// `--metric` narrows the scorecard to one ranking axis. `--metric cycle` shows
-/// the dependency-cycle members (the ADP view) without the full principle table.
+/// `--focus-rule <metric>` frames the scorecard by that metric. `--focus-rule cycle`
+/// shows the dependency-cycle members (the ADP view) without the principle table.
 #[test]
-fn rust_sample_scorecard_narrow_metric() {
+fn rust_sample_scorecard_focus_metric() {
     let (ok, stdout, stderr) =
-        run_report_capture("rust", &["--output.scorecard", "--metric", "cycle"]);
-    assert!(ok, "narrowed scorecard run failed: {stderr}");
+        run_report_capture("rust", &["--output.scorecard", "--focus-rule", "cycle"]);
+    assert!(ok, "focused scorecard run failed: {stderr}");
     assert!(
         stdout.contains("scorecard  (rust, 25 files)"),
         "header present: {stdout}"
     );
     assert!(
-        stdout.contains("WORST MODULES") && stdout.contains("src/a.rs"),
-        "cycle members ranked under the narrowed metric: {stdout}"
+        stdout.contains("WORST MODULES") && stdout.contains("src/chain/one.rs"),
+        "cycle members ranked under the focused metric: {stdout}"
     );
 }
 
-/// An unknown `--metric` is a hard error naming the known metrics.
+/// `--focus-rule HK` (a metric, by value) frames the output by the metric itself —
+/// no SOLID principle (the Liskov row the hk-ranking preset would otherwise show).
+/// Also accepts the full threshold rule id `threshold.file.hk`.
 #[test]
-fn rust_sample_scorecard_unknown_metric() {
-    let (ok, _stdout, stderr) =
-        run_report_capture("rust", &["--output.scorecard", "--metric", "nope"]);
-    assert!(!ok, "unknown metric must fail");
+fn rust_sample_scorecard_focus_metric_hides_principle() {
+    for rule in ["HK", "threshold.file.hk"] {
+        let (ok, stdout, stderr) =
+            run_report_capture("rust", &["--output.scorecard", "--focus-rule", rule]);
+        assert!(ok, "metric-lens scorecard failed for {rule}: {stderr}");
+        assert!(
+            stdout.contains("focus: HK"),
+            "names the focused metric for {rule}: {stdout}"
+        );
+        assert!(
+            !stdout.contains("Liskov"),
+            "metric lens must not surface the SOLID principle for {rule}: {stdout}"
+        );
+    }
+}
+
+/// `--focus-path` restricts the ranked modules to a subtree (whole project still
+/// analyzed). Modules outside the path are absent from the worst-modules list.
+#[test]
+fn rust_sample_scorecard_focus_path_scopes_modules() {
+    let (ok, stdout, stderr) = run_report_capture(
+        "rust",
+        &[
+            "--output.scorecard",
+            "--focus-rule",
+            "hk",
+            "--focus-path",
+            "src/chain",
+        ],
+    );
+    assert!(ok, "focus-path scorecard failed: {stderr}");
     assert!(
-        stderr.contains("unknown --metric 'nope'"),
+        stdout.contains("src/chain/"),
+        "lists modules under the focus path: {stdout}"
+    );
+    assert!(
+        !stdout.contains("src/a.rs"),
+        "modules outside the focus path are excluded: {stdout}"
+    );
+}
+
+/// An unknown `--focus-rule` name is a hard error naming both namespaces.
+#[test]
+fn rust_sample_scorecard_unknown_focus() {
+    let (ok, _stdout, stderr) =
+        run_report_capture("rust", &["--output.scorecard", "--focus-rule", "nope"]);
+    assert!(!ok, "unknown focus must fail");
+    assert!(
+        stderr.contains("unknown --focus-rule 'nope'"),
         "actionable error: {stderr}"
     );
 }
@@ -597,8 +642,11 @@ fn rust_sample_report_rejects_index() {
 /// The recommendation knobs only apply with a `prompt` / `scorecard` format.
 #[test]
 fn rust_sample_report_rejects_stray_reco_flags() {
-    let (ok, _stdout, stderr) = run_report_capture("rust", &["--metric", "hk"]);
-    assert!(!ok, "--metric without a prompt/scorecard format must fail");
+    let (ok, _stdout, stderr) = run_report_capture("rust", &["--focus-rule", "hk"]);
+    assert!(
+        !ok,
+        "--focus-rule without a prompt/scorecard format must fail"
+    );
     assert!(
         stderr.contains("apply only with --output.prompt or --output.scorecard"),
         "actionable error: {stderr}"

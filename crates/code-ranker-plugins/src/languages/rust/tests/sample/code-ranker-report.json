@@ -36,12 +36,12 @@
         "chain": {
           "description": "Three or more units form a strongly-connected component (A → B → C → A); the whole component must be loaded and changed together, defeating modular boundaries.",
           "label": "Chain",
-          "remediation": "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/Cycles.md"
+          "remediation": "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/ADP.md"
         },
         "mutual": {
           "description": "Two units import each other (A ↔ B), so neither can be built, tested, or understood in isolation — the tightest possible coupling.",
           "label": "Mutual",
-          "remediation": "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/Cycles.md"
+          "remediation": "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/ADP.md"
         }
       },
       "cycles": [
@@ -512,10 +512,6 @@
           "name": "Fan-out",
           "remediation": "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/Fan-out.md",
           "short": "Fan-out",
-          "thresholds": {
-            "info": 8.0,
-            "warning": 18.0
-          },
           "value_type": "int"
         },
         "fan_out_external": {
@@ -537,10 +533,6 @@
           "name": "Henry–Kafura",
           "remediation": "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/HK.md",
           "short": "HK",
-          "thresholds": {
-            "info": 150000.0,
-            "warning": 10000000.0
-          },
           "value_type": "float"
         },
         "imports": {
@@ -552,10 +544,6 @@
           "description": "Number of top-level items (`fn` / `struct` / `enum` / `impl` / `trait` / `mod` / `const` / …) defined in the file — a structural size signal complementary to line counts.",
           "label": "Items",
           "remediation": "Split the file by responsibility into focused modules; move large impls or trait clusters into their own files.",
-          "thresholds": {
-            "info": 20.0,
-            "warning": 50.0
-          },
           "value_type": "int"
         },
         "length": {
@@ -638,10 +626,6 @@
           "label": "Source",
           "name": "Source lines",
           "short": "SLOC",
-          "thresholds": {
-            "info": 800.0,
-            "warning": 3000.0
-          },
           "value_type": "int"
         },
         "spaces": {

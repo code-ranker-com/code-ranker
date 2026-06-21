@@ -14,7 +14,7 @@
 //! never names a concrete language.
 
 use crate::graph::Graph;
-use crate::level::{AttributeSpec, Level, Thresholds};
+use crate::level::{AttributeSpec, Level};
 use crate::metrics::MetricInputs;
 use crate::node::Node;
 use crate::preset::Preset;
@@ -135,12 +135,6 @@ pub trait LanguagePlugin: Sync {
         defaults
     }
 
-    /// Language-calibrated per-metric thresholds (attribute key → tiers). The
-    /// orchestrator overlays these onto the attribute specs. Default: none.
-    fn thresholds(&self) -> BTreeMap<String, Thresholds> {
-        BTreeMap::new()
-    }
-
     /// Per-language patches over the global report lists — the table `columns`,
     /// the card-featured metrics, and the JSON `stats` keys (all inherited from
     /// the metric catalog). A language adds its own metric (e.g. Rust `unsafe`),
@@ -223,7 +217,6 @@ mod tests {
         assert!(p.metrics(&empty_graph).is_empty(), "default: no metrics");
         assert!(p.versions(ws, &input).is_empty(), "default: no versions");
         assert!(p.roots(ws).is_empty(), "default: no roots");
-        assert!(p.thresholds().is_empty(), "default: no thresholds");
 
         // config defaults to an empty table (a stub with no config file).
         assert!(p.config().is_empty(), "default: empty config table");

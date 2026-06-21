@@ -56,7 +56,8 @@ pub(super) fn assemble_level(
     attribute_groups.extend(metric_groups);
     attribute_groups.extend(coupling_groups);
 
-    // Overlay language-calibrated thresholds onto the matching specs.
+    // Overlay the gate-derived advisory thresholds onto the matching specs
+    // (`warning` = the `[rules.thresholds.file]` limit; see `gate_thresholds`).
     for (key, th) in thresholds {
         if let Some(s) = node_attributes.get_mut(&key) {
             s.thresholds = Some(th);

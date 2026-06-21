@@ -449,12 +449,13 @@ workspaces. The plugin MUST:
   (`use crate::parent::Item`, `super::Item`), stays a real `uses` edge. And
   Henry-Kafura (`HK = sloc × (fan_in × fan_out)²`) — all written into the node's
   flat `attrs`. Edges to external nodes are excluded from `fan_in`/`fan_out`/`hk`
-  and counted in `fan_out_external` instead. The Rust plugin additionally
-  supplies language-calibrated `thresholds()` for `hk`/`sloc`/`fan_out`/`items`.
+  and counted in `fan_out_external` instead. The advisory scorecard / viewer /
+  prompt tiers are derived from the project's own `[rules.thresholds.file]` gate
+  (not language-calibrated), so the report shows exactly what fails `check`.
   The recommendation catalog is the shared 13 design-principle presets (from
   `defaults.toml`); each coupling/complexity **metric** carries its own
   fix-prompt doc under `principles/rust/` (`HK`, `Fan-in`, `Fan-out`, `Cognitive`,
-  `Cyclomatic`, `Cycles`), referenced from the metric's `remediation`
+  `Cyclomatic`; the cycle metric reuses `ADP`), referenced from the metric's `remediation`
 
 **Rationale**: Rust is the primary use-case for the initial release.
 The `rust` module of the `code-ranker-plugins` crate (cargo metadata + `syn`,

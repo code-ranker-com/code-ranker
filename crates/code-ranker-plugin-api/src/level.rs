@@ -37,8 +37,11 @@ pub struct AttributeGroup {
 }
 
 /// Two-tier per-metric thresholds (at/under `info` is fine; above `warning` is
-/// likely a problem). Carried on an [`AttributeSpec`]; produced by a plugin
-/// (language-calibrated), absent when a metric has no calibration.
+/// likely a problem). Carried on an [`AttributeSpec`] for the advisory scorecard /
+/// viewer / prompt. `warning` is the `check` gate's own `[rules.thresholds.file]`
+/// limit, so the report shows exactly what fails the gate; `info` is an optional
+/// lower line (from a `[metrics.<key>]` spec, kept only when below `warning`).
+/// Absent when the metric has no configured gate threshold.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Thresholds {
     pub info: f64,

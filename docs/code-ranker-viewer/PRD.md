@@ -107,8 +107,9 @@ controls) are built from the snapshot's `ui.filter` — the built-in
 the nodes where the active filter metric has signal; for `cycle` that is the nodes
 in a cycle and the edges between them (callers/dependencies clusters kept). Cycle
 data is sourced solely from the backend (`graph.cycles`); the per-metric
-`info` / `warning` colour thresholds are language-calibrated and carried in the
-snapshot's `node_attributes` (see the CLI **Severity tiers** reference).
+`info` / `warning` colour thresholds are derived from the `[rules.thresholds.file]`
+gate and carried in the snapshot's `node_attributes` (see the CLI **Severity tiers**
+reference).
 
 **Rationale**: A flat per-file map does not scale to large workspaces. Semantic
 zoom lets a developer start at the crate level and drill toward the files that
@@ -128,7 +129,7 @@ be copyable as plain text for direct paste into any LLM interface.
 
 The **same recommendation engine is exposed on the CLI** as two `report`
 output formats, so the guidance is reachable without opening the HTML
-(driven from the snapshot's calibrated `node_attributes[*].thresholds`
+(driven from the snapshot's gate-derived `node_attributes[*].thresholds`
 `info` / `warning` tiers — advisory, never a gate):
 
 - `--output.prompt[.path]` — the LLM prompt for **one** principle, the same
@@ -141,7 +142,7 @@ output formats, so the guidance is reachable without opening the HTML
   overall, then a hint to the prompt for the worst principle). Defaults to
   `stdout`.
 
-The `scorecard` is narrowed by `--metric <NAME>` (one ranking axis: `hk`, `cycle`,
+The `scorecard` is narrowed by `--focus-rule <NAME>` (one ranking axis: `hk`, `cycle`,
 `sloc`, `cognitive`, …; without it the table spans all principles) and `--severity
 <info|warning|auto>` (the tier; repeatable; `auto` = warning-if-any-else-info), and
 capped by `--top <N>`. The `prompt` is **auto-targeted at the single worst module**

@@ -27,10 +27,13 @@
 #                        (these are inherently grammar-specific, so the base
 #                        leaves them to each language).
 
-# The principle-doc URL prefix shared by every language. Each `<lang>.toml` adds
-# its own `doc_lang`; a preset's `doc_url` resolves to
-# `{doc_base}/{doc_lang}/{id}.md`.
-doc_base = "https://github.com/ffedoroff/code-ranker/blob/main/principles"
+# The principle-doc URL prefix shared by every language. A preset's `doc_url`
+# resolves to `{doc_base}/{doc_lang}/{id}.md` for the ids a language overrides
+# (its `doc_overrides`), and to `{doc_base}/base/{id}.md` otherwise — `base/` is
+# the shared fallback corpus a language inherits when it has no own doc, mirroring
+# how config inherits this `defaults.toml`. A language ships its own corpus by
+# setting `doc_lang` + `doc_overrides` (see `rust/config.toml`).
+doc_base = "https://github.com/ffedoroff/code-ranker/blob/main/languages"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Field-omission defaults for the metric engine's role config — the fallbacks a

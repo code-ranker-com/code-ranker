@@ -77,7 +77,7 @@ fn ecmascript_toml_kinds_load() {
 // Per-language keyword look-alike guard set — the construct keywords/operators a
 // complexity metric can key on. The FP matrix injects these *only* as
 // look-alikes and asserts no metric moves. Mirrors the "Keyword look-alike guard
-// set" in principles/typescript/metrics.md, and
+// set" in languages/typescript/metrics.md, and
 // `typescript_trigger_set_documented_in_spec` asserts the spec documents every
 // entry — so the two cannot drift. A superset of the analyzer's real triggers is
 // fine.
@@ -201,12 +201,12 @@ fn typescript_trigger_set_documented_in_spec() {
     // the TypeScript metrics spec, so the trigger list and the spec's "Keyword
     // look-alike guard set" cannot drift apart.
     let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
-    let path = format!("{root}/principles/typescript/metrics.md");
+    let path = format!("{root}/languages/typescript/metrics.md");
     let spec = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path}: {e}"));
     for kw in TS_TRIGGERS {
         assert!(
             spec.contains(&format!("`{kw}`")),
-            "trigger `{kw}` is not documented in principles/typescript/metrics.md — spec and FP test drifted"
+            "trigger `{kw}` is not documented in languages/typescript/metrics.md — spec and FP test drifted"
         );
     }
 }

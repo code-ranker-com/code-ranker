@@ -5,7 +5,9 @@
 # tables below. Go adds NO presets/thresholds/spec-overrides of its own beyond the
 # Halstead token descriptions; it inherits the common catalog from `defaults.toml`.
 
-# Principle-corpus language for doc links (`doc_base` inherited from defaults).
+# No own principle corpus yet: with no `doc_overrides`, every `doc_url` inherits
+# the shared `base/` corpus. `doc_lang` names the folder a future own corpus would
+# use (add `doc_overrides` then, to route the overridden ids there).
 doc_lang = "go"
 
 # File-collection extensions, project-detect markers, and walk skip-dirs — DATA.

@@ -12,9 +12,13 @@
 #   [specs.<key>]                 Rust tweaks to a metric's display, applied over
 #                                 the central `builtin.toml` specs.
 
-# Principle-corpus language for doc links: `doc_url` = `{doc_base}/rust/<slug>.md`
-# (`doc_base` is inherited from `defaults.toml`).
+# Principle-corpus language for doc links: `doc_url` = `{doc_base}/rust/<id>.md`
+# (`doc_base` is inherited from `defaults.toml`). Rust ships a full own corpus, so
+# `doc_overrides = "*"` routes every principle to `rust/` rather than the shared
+# `base/` fallback. A partial corpus would instead list the overridden ids
+# (`doc_overrides = ["SRP", …]`), inheriting the rest from `base/`.
 doc_lang = "rust"
+doc_overrides = "*"
 
 # Project-detect marker filenames — DATA, not code (see `../README.md` §3). Rust
 # detects a workspace by its `Cargo.toml` manifest; `detect()` reads this list.

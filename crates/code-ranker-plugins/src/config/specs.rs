@@ -4,8 +4,8 @@
 use code_ranker_plugin_api::Preset;
 use code_ranker_plugin_api::level::AttributeSpec;
 use serde::Deserialize;
-use std::collections::BTreeMap;
-use toml::Table;
+use std::collections::{BTreeMap, HashSet};
+use toml::{Table, Value};
 
 /// One `[[presets]]` entry as read from config. Mirrors the data shape of the
 /// CLI's generic preset catalog; the plugin turns it into a
@@ -42,21 +42,69 @@ fn string_field<'a>(cfg: &'a Table, key: &str) -> Option<&'a str> {
     cfg.get(key)?.as_str()
 }
 
+/// Which principle ids a language overrides with its own corpus doc — the doc
+/// analogue of the `defaults.toml ⊕ <lang>.toml` inheritance. Read from the
+/// `doc_overrides` key of a merged config:
+/// - `doc_overrides = "*"` → the language has its OWN doc for every principle
+///   (a full corpus: rust / python / typescript).
+/// - `doc_overrides = ["SRP", …]` → only these ids resolve to the language's own
+///   folder; the rest fall back to the shared `base/` corpus.
+/// - absent → the language has no own corpus; every doc resolves to `base/`.
+enum DocOverrides {
+    All,
+    Ids(HashSet<String>),
+    None,
+}
+
+impl DocOverrides {
+    fn covers(&self, id: &str) -> bool {
+        match self {
+            DocOverrides::All => true,
+            DocOverrides::Ids(ids) => ids.contains(id),
+            DocOverrides::None => false,
+        }
+    }
+}
+
+fn doc_overrides(cfg: &Table) -> DocOverrides {
+    match cfg.get("doc_overrides") {
+        Some(Value::String(s)) if s == "*" => DocOverrides::All,
+        Some(Value::Array(a)) => DocOverrides::Ids(
+            a.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect(),
+        ),
+        _ => DocOverrides::None,
+    }
+}
+
 /// Build the fully-resolved [`Preset`] list from a merged config: the common
 /// catalog (from `defaults.toml`) plus any language-specific presets, in that
-/// order (the merge-by-`id` already yields it). Each `doc_url` resolves to
-/// `{doc_base}/{doc_lang}/{id}.md` and `label` is the `id`.
+/// order (the merge-by-`id` already yields it). `label` is the `id`.
 ///
-/// `doc_base` (the host/repo prefix, common) lives in `defaults.toml`; each
-/// `<lang>.toml` supplies `doc_lang` (its principle-corpus language). If either
-/// is absent the `doc_url` is left `None`.
+/// `doc_url` inherits from a shared `base/` corpus the same way config inherits
+/// `defaults.toml`: it resolves to `{doc_base}/{doc_lang}/{id}.md` for the ids a
+/// language overrides (`doc_overrides`), and to `{doc_base}/base/{id}.md` for the
+/// rest. So a language without its own corpus (no `doc_overrides`) points every
+/// link at `base/`, and a full-corpus language (`doc_overrides = "*"`) points
+/// every link at its own folder. `doc_base` (the host/repo prefix, common) lives
+/// in `defaults.toml`; if it is absent the `doc_url` is left `None`.
 pub fn resolved_presets(cfg: &Table) -> Vec<Preset> {
     let base = string_field(cfg, "doc_base");
     let lang = string_field(cfg, "doc_lang");
+    let overrides = doc_overrides(cfg);
     presets(cfg)
         .into_iter()
         .map(|p| Preset {
-            doc_url: base.zip(lang).map(|(b, l)| format!("{b}/{l}/{}.md", p.id)),
+            doc_url: base.map(|b| {
+                // Own folder for an overridden id (needs a `doc_lang`); `base/`
+                // otherwise — the shared fallback corpus.
+                let folder = match lang {
+                    Some(l) if overrides.covers(&p.id) => l,
+                    _ => "base",
+                };
+                format!("{b}/{folder}/{}.md", p.id)
+            }),
             label: p.id.clone(),
             id: p.id,
             title: p.title,

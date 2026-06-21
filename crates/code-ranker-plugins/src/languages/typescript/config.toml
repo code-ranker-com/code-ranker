@@ -9,7 +9,10 @@
 # catalog from `defaults.toml`. `doc_url` = `{doc_base}/typescript/<slug>.md`.
 
 # Principle-corpus language for doc links (`doc_base` inherited from defaults).
+# TypeScript ships a full own corpus, so `doc_overrides = "*"` routes every
+# principle to `typescript/` instead of the shared `base/` fallback.
 doc_lang = "typescript"
+doc_overrides = "*"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # File-collection extensions, import-resolution order and project-detect markers

@@ -20,6 +20,11 @@ Custom metrics and thresholds are **project** config (runtime). The report
 list-override DSL is **language** config (compiled into the plugin). Both are
 described below.
 
+For the **full precedence ladder** — how the built-in defaults, config file(s),
+inline `--config KEY=VALUE`, and the CLI value-flags layer over each other, plus
+the complete flag ↔ config-key map — see
+[config-resolution.md](config-resolution.md).
+
 ---
 
 ## 1. Project config (`code-ranker.toml`)

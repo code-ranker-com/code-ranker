@@ -98,9 +98,59 @@ function updateHeader() {
 
 }
 
-// Files is the only graph level — nothing to toggle. Kept as a no-op so callers
-// (app bootstrap, snapshot swap) need no changes.
-function updateFilesTab() {}
+// Build the per-level views + the level switcher from the loaded snapshot's graph
+// levels. The `files` view is the static template in index.html; every other level
+// (e.g. `functions`, emitted when `[levels] functions = true`) is cloned from it —
+// rendering is level-agnostic (renderView / setupNodeTable scope to the section +
+// its `data-view`). The switcher row is shown only when more than one level is
+// present, so single-level reports look exactly as before. Idempotent: re-running
+// (on a snapshot swap) skips existing sections and just refreshes the switcher.
+function updateFilesTab() {
+  const snap = window.CURRENT ?? window.BASELINE ?? { graphs: {} };
+  const levels = Object.keys(snap.graphs || {});
+  if (!levels.length) return;
+  // Stable order: files first, then the rest in snapshot order.
+  levels.sort((a, b) => (a === 'files' ? -1 : b === 'files' ? 1 : 0));
+
+  const main = document.querySelector('main');
+  const template = document.querySelector('.view[data-view="files"]');
+  if (!main || !template) return;
+
+  // One section per extra level: clone the files template for any level missing a
+  // view. The clone is built clean (this runs before node-table setup), with its
+  // per-level element ids made unique (`*-files` → `*-<level>`).
+  for (const level of levels) {
+    if (level === 'files' || document.querySelector(`.view[data-view="${level}"]`)) continue;
+    const sec = template.cloneNode(true);
+    sec.dataset.view = level;
+    sec.classList.remove('active');
+    delete sec.dataset.rendered;
+    sec.querySelectorAll('.svg-frame').forEach(f => { f.innerHTML = ''; });
+    sec.querySelectorAll('[id]').forEach(el => { el.id = el.id.replace(/files$/, level); });
+    main.appendChild(sec);
+  }
+
+  // Level switcher: one tab per level, wired to switchToLevel + URL persistence.
+  const sw = document.getElementById('report-switch');
+  if (!sw) return;
+  sw.innerHTML = '';
+  const cur = currentLevel() ?? 'files';
+  for (const level of levels) {
+    const a = document.createElement('a');
+    a.href = '#';
+    a.dataset.view = level;
+    a.textContent = level.charAt(0).toUpperCase() + level.slice(1);
+    if (level === cur) a.classList.add('selected');
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (level === currentLevel()) return;
+      switchToLevel(level);
+      try { const st = navViewState(); history.pushState(st, '', navViewUrl(st)); } catch (_) {}
+    });
+    sw.appendChild(a);
+  }
+  sw.hidden = levels.length < 2;
+}
 
 
 function buildSnapPopupHTML(snap, refSnap, sideLabel) {

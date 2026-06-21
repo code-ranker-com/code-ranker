@@ -12,6 +12,17 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
+// The file→module-path mapping (`MODULE` + `file_to_module_path`), the workspace
+// module index, and the import resolver live in a cohesive child submodule
+// (`imports.rs`) that depends only on `crate::config` downward — never back on
+// `structure` — so the module graph stays acyclic. Re-import the moved items so
+// every call site below (and the `use super::*` tests) compiles exactly as before.
+#[path = "imports.rs"]
+mod imports;
+#[cfg(test)]
+use imports::absolute_base;
+use imports::{build_module_index, file_to_module_path, resolve_import};
+
 /// Import-graph tree-sitter NODE-KIND strings the walk keys on, plus the
 /// file-collection / skip-dir DATA lists, resolved once from `python/config.toml`.
 /// Loaded here (self-contained, depending only on `crate::config`) rather than
@@ -40,12 +51,9 @@ struct StructureKinds {
     /// `ext:` node-id namespace prefix for an external node (`[ids].external`,
     /// inherited from `defaults.toml`).
     ext_prefix: String,
-    /// The implicit package-init file stem (`pkg/__init__.py` → module `pkg`),
-    /// from `package_init_file`.
-    package_init_file: String,
     /// Source extensions with a leading dot (`[".py"]`), derived from
-    /// `extensions` — the suffix `file_to_module_path` strips and
-    /// `py_is_test_path` gates on. Not re-spelled in the config.
+    /// `extensions` — the suffix `py_is_test_path` gates on. Not re-spelled in
+    /// the config. (The file→module mapping's copy lives in `imports::MODULE`.)
     dot_exts: Vec<String>,
     /// tree-sitter field names the import walk navigates (`[fields]`).
     field_name: String,
@@ -82,11 +90,6 @@ static KINDS: LazyLock<StructureKinds> = LazyLock::new(|| {
             .get("external")
             .cloned()
             .expect("python [ids].external (inherited from defaults.toml)"),
-        package_init_file: cfg
-            .get("package_init_file")
-            .and_then(|v| v.as_str())
-            .expect("python/config.toml `package_init_file`")
-            .to_string(),
         dot_exts,
         field_name: field("name"),
         field_module_name: field("module_name"),
@@ -200,45 +203,6 @@ fn is_test_file(path: &Path, workspace: &Path) -> bool {
 }
 
 // ---------------------------------------------------------------------------
-// Module path helpers
-// ---------------------------------------------------------------------------
-
-/// `parser/shops/amazon/pdp.py` → `"parser.shops.amazon.pdp"`
-/// `parser/shops/amazon/__init__.py` → `"parser.shops.amazon"`
-fn file_to_module_path(workspace: &Path, path: &Path) -> Option<String> {
-    let rel = path.strip_prefix(workspace).ok()?;
-    let mut parts: Vec<String> = rel
-        .components()
-        .map(|c| c.as_os_str().to_string_lossy().into_owned())
-        .collect();
-
-    let last = parts.last_mut()?;
-    if *last == KINDS.package_init_file {
-        parts.pop();
-    } else if let Some(stem) = KINDS
-        .dot_exts
-        .iter()
-        .find_map(|e| last.strip_suffix(e.as_str()))
-    {
-        *last = stem.to_string();
-    } else {
-        return None;
-    }
-
-    if parts.is_empty() {
-        return None;
-    }
-    Some(parts.join("."))
-}
-
-fn build_module_index(workspace: &Path, py_files: &[PathBuf]) -> HashMap<String, PathBuf> {
-    py_files
-        .iter()
-        .filter_map(|p| file_to_module_path(workspace, p).map(|m| (m, p.clone())))
-        .collect()
-}
-
-// ---------------------------------------------------------------------------
 // Per-file parsing
 // ---------------------------------------------------------------------------
 
@@ -300,27 +264,7 @@ fn parse_and_add(
         let targets = resolve_import(&imp.base, &imp.names, mod_path, module_index);
         if targets.is_empty() {
             // Unresolved → external (3rd-party / stdlib). One External node per top-level package.
-            if let Some(top) = external_top_level(&imp.base) {
-                let ext_id = format!("{}{top}", KINDS.ext_prefix);
-                if ext_seen.insert(ext_id.clone()) {
-                    let mut ext_attrs = BTreeMap::new();
-                    ext_attrs.insert(attr_key("external").to_string(), AttrValue::Bool(true));
-                    nodes.push(Node {
-                        id: ext_id.clone(),
-                        kind: code_ranker_plugin_api::node::EXTERNAL.into(),
-                        name: top,
-                        parent: None,
-                        attrs: ext_attrs,
-                    });
-                }
-                edges.push(Edge {
-                    source: file_id.clone(),
-                    target: ext_id,
-                    kind: uses_edge_kind().into(),
-                    line: Some(imp.line),
-                    attrs: BTreeMap::new(),
-                });
-            }
+            add_external_edge(imp, &file_id, nodes, edges, ext_seen);
             continue;
         }
         for target_path in targets {
@@ -338,6 +282,40 @@ fn parse_and_add(
     }
 
     Ok(())
+}
+
+/// Emit a `uses` edge from `file_id` to the external node for an unresolved
+/// import, materialising the (deduplicated) External node on first sight. A
+/// no-op for relative imports, which are never external libraries.
+fn add_external_edge(
+    imp: &ExtractedImport,
+    file_id: &str,
+    nodes: &mut Vec<Node>,
+    edges: &mut Vec<Edge>,
+    ext_seen: &mut HashSet<String>,
+) {
+    let Some(top) = external_top_level(&imp.base) else {
+        return;
+    };
+    let ext_id = format!("{}{top}", KINDS.ext_prefix);
+    if ext_seen.insert(ext_id.clone()) {
+        let mut ext_attrs = BTreeMap::new();
+        ext_attrs.insert(attr_key("external").to_string(), AttrValue::Bool(true));
+        nodes.push(Node {
+            id: ext_id.clone(),
+            kind: code_ranker_plugin_api::node::EXTERNAL.into(),
+            name: top,
+            parent: None,
+            attrs: ext_attrs,
+        });
+    }
+    edges.push(Edge {
+        source: file_id.to_string(),
+        target: ext_id,
+        kind: uses_edge_kind().into(),
+        line: Some(imp.line),
+        attrs: BTreeMap::new(),
+    });
 }
 
 /// Top-level package name for an unresolved import, or `None` for relative
@@ -371,124 +349,77 @@ fn visit_imports<'t>(
         let kind = child.kind();
         if kind == KINDS.import_statement {
             // import a.b.c  OR  import a, b
-            let line = child.start_position().row as u32 + 1;
-            let mut ic = child.walk();
-            for c in child.children(&mut ic) {
-                let actual = if c.kind() == KINDS.aliased_import {
-                    c.child_by_field_name(&KINDS.field_name).unwrap_or(c)
-                } else {
-                    c
-                };
-                if actual.kind() == KINDS.dotted_name
-                    && let Ok(t) = actual.utf8_text(source)
-                {
-                    imports.push(ExtractedImport {
-                        base: t.to_string(),
-                        names: vec![],
-                        line,
-                    });
-                }
-            }
+            handle_import_statement(child, source, imports);
         } else if kind == KINDS.import_from_statement {
-            let base = child
-                .child_by_field_name(&KINDS.field_module_name)
-                .and_then(|n| n.utf8_text(source).ok())
-                .unwrap_or("")
-                .to_string();
-
-            let mut names = Vec::new();
-            let mut ic = child.walk();
-            for c in child.children(&mut ic) {
-                let actual = if c.kind() == KINDS.aliased_import {
-                    c.child_by_field_name(&KINDS.field_name).unwrap_or(c)
-                } else {
-                    c
-                };
-                if actual.kind() == KINDS.dotted_name
-                    && actual.start_byte()
-                        != child
-                            .child_by_field_name(&KINDS.field_module_name)
-                            .map_or(0, |n| n.start_byte())
-                    && let Ok(t) = actual.utf8_text(source)
-                {
-                    names.push(t.to_string());
-                }
-            }
-
-            if !base.is_empty() {
-                let line = child.start_position().row as u32 + 1;
-                imports.push(ExtractedImport { base, names, line });
-            }
+            handle_import_from_statement(child, source, imports);
         } else {
             visit_imports(child, source, imports);
         }
     }
 }
 
-// ---------------------------------------------------------------------------
-// Import resolution
-// ---------------------------------------------------------------------------
-
-/// Resolve one import record to a set of target file paths in this project.
-fn resolve_import(
-    base: &str,
-    names: &[String],
-    current_mod: &str,
-    index: &HashMap<String, PathBuf>,
-) -> Vec<PathBuf> {
-    let abs_base = absolute_base(base, current_mod);
-    let mut results: Vec<PathBuf> = Vec::new();
-    let mut seen: HashSet<PathBuf> = HashSet::new();
-
-    let mut try_add = |mod_path: &str| {
-        if let Some(p) = index.get(mod_path)
-            && seen.insert(p.clone())
+/// Collect every dotted name from a plain `import a.b.c` / `import a, b`
+/// statement, unwrapping `import x as y` aliases to their real name.
+fn handle_import_statement(
+    stmt: &tree_sitter::Node,
+    source: &[u8],
+    imports: &mut Vec<ExtractedImport>,
+) {
+    let line = stmt.start_position().row as u32 + 1;
+    let mut ic = stmt.walk();
+    for c in stmt.children(&mut ic) {
+        let actual = if c.kind() == KINDS.aliased_import {
+            c.child_by_field_name(&KINDS.field_name).unwrap_or(c)
+        } else {
+            c
+        };
+        if actual.kind() == KINDS.dotted_name
+            && let Ok(t) = actual.utf8_text(source)
         {
-            results.push(p.clone());
-        }
-    };
-
-    if names.is_empty() {
-        // plain `import X.Y.Z`
-        try_add(&abs_base);
-    } else {
-        for name in names {
-            let full = if abs_base.is_empty() {
-                name.clone()
-            } else {
-                format!("{abs_base}.{name}")
-            };
-            try_add(&full);
-        }
-        // Also add the base itself (might import symbols from it).
-        if !abs_base.is_empty() {
-            try_add(&abs_base);
+            imports.push(ExtractedImport {
+                base: t.to_string(),
+                names: vec![],
+                line,
+            });
         }
     }
-
-    results
 }
 
-/// Turn a possibly-relative base like `"."`, `".utils"`, `"..shops"` into
-/// an absolute dotted module path using `current_mod` as the anchor.
-fn absolute_base(base: &str, current_mod: &str) -> String {
-    if !base.starts_with('.') {
-        return base.to_string();
+/// Collect the module base plus imported names from a `from M import a, b`
+/// statement, skipping the module-name node itself and unwrapping aliases.
+fn handle_import_from_statement(
+    stmt: &tree_sitter::Node,
+    source: &[u8],
+    imports: &mut Vec<ExtractedImport>,
+) {
+    let base = stmt
+        .child_by_field_name(&KINDS.field_module_name)
+        .and_then(|n| n.utf8_text(source).ok())
+        .unwrap_or("")
+        .to_string();
+
+    let mut names = Vec::new();
+    let mut ic = stmt.walk();
+    for c in stmt.children(&mut ic) {
+        let actual = if c.kind() == KINDS.aliased_import {
+            c.child_by_field_name(&KINDS.field_name).unwrap_or(c)
+        } else {
+            c
+        };
+        if actual.kind() == KINDS.dotted_name
+            && actual.start_byte()
+                != stmt
+                    .child_by_field_name(&KINDS.field_module_name)
+                    .map_or(0, |n| n.start_byte())
+            && let Ok(t) = actual.utf8_text(source)
+        {
+            names.push(t.to_string());
+        }
     }
 
-    let dots = base.chars().take_while(|&c| c == '.').count();
-    let suffix = base[dots..].to_string(); // part after dots (may be empty)
-
-    let parts: Vec<&str> = current_mod.split('.').collect();
-    let keep = parts.len().saturating_sub(dots);
-    let pkg = parts[..keep].join(".");
-
-    if suffix.is_empty() {
-        pkg
-    } else if pkg.is_empty() {
-        suffix
-    } else {
-        format!("{pkg}.{suffix}")
+    if !base.is_empty() {
+        let line = stmt.start_position().row as u32 + 1;
+        imports.push(ExtractedImport { base, names, line });
     }
 }
 

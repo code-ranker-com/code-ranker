@@ -43,10 +43,10 @@ path = ".code-ranker/{project-dir}.html"
 # genuinely-too-big module (as config.rs was) over bumping it.
 [rules.thresholds.file]
 hk = 500000
-cyclomatic = 110
-cognitive = 60
+cyclomatic = 100
+cognitive = 70
 #fan_out = 18
-sloc = 800
+sloc = 400
 
 # ── Custom checks (config-only linters) ──────────────────────────────────────
 # Reusable CEL helper: is this file already a dedicated test file?

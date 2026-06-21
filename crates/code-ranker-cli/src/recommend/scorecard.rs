@@ -19,6 +19,26 @@ struct Breach {
     value: f64,
 }
 
+/// One row of the per-principle table.
+struct Row {
+    id: String,
+    name: String,
+    warn: usize,
+    info: usize,
+    top: String,
+}
+
+/// One row of the worst-modules list.
+struct ModRow {
+    warning_icon: bool,
+    path: String,
+    head: String,
+    rest: Vec<String>,
+    n_warn: usize,
+    n_info: usize,
+    hk: f64,
+}
+
 /// Every selected-tier threshold a node breaches, plus cycle membership (treated
 /// as a warning-tier signal — a cycle is always a real problem).
 fn node_breaches(
@@ -88,30 +108,7 @@ pub fn render_scorecard(
     // `cycle`, `sloc`). Validate it, then keep the presets that rank by it for the
     // table; the worst-modules list ranks by the metric directly.
     if let Some(m) = narrow {
-        let known = m == "cycle" || level.node_attributes.contains_key(m);
-        if !known {
-            // The narrow-able ranking axes: metrics that carry a calibrated
-            // threshold or a fix-prompt doc (`remediation`), plus the `cycle`
-            // pseudo-metric — derived from the data, not the preset catalog (so a
-            // metric stays listed even when no preset ranks by it).
-            let mut metrics: Vec<&str> = level
-                .node_attributes
-                .iter()
-                .filter(|(_, s)| {
-                    s.thresholds.is_some()
-                        || s.remediation
-                            .as_deref()
-                            .is_some_and(|r| r.contains("/principles/"))
-                })
-                .map(|(k, _)| k.as_str())
-                .collect();
-            metrics.push("cycle");
-            metrics.sort_unstable();
-            anyhow::bail!(
-                "unknown --metric '{m}'. Known metrics: {}",
-                metrics.join(", ")
-            );
-        }
+        validate_narrow_metric(level, m)?;
     }
     let shown_presets: Vec<&Preset> = match narrow {
         Some(m) => presets.iter().filter(|p| p.sort_metric == m).collect(),
@@ -125,15 +122,83 @@ pub fn render_scorecard(
     ));
 
     // ── Per-principle table ──────────────────────────────────────────────────
-    struct Row {
-        id: String,
-        name: String,
-        warn: usize,
-        info: usize,
-        top: String,
+    let mut rows = principle_rows(level, &shown_presets, narrow, want_warning, want_info);
+    rows.sort_by(|a, b| b.warn.cmp(&a.warn).then(b.info.cmp(&a.info)));
+
+    if rows.is_empty() && narrow.is_none() {
+        out.push_str("No threshold breaches for the selected severity.\n");
+        return Ok(out);
     }
+
+    // The per-principle table (skipped when narrowed to a metric no preset ranks
+    // by — the worst-modules list below carries the ranking instead).
+    if !rows.is_empty() {
+        render_principle_table(&mut out, &rows, want_warning, want_info);
+    }
+
+    // ── Worst modules ────────────────────────────────────────────────────────
+    out.push_str("\nWORST MODULES\n");
+    let limit = top.unwrap_or(15);
+
+    let mod_rows = match narrow {
+        // Narrowed: the chosen metric's ranked modules (note may emit a heading).
+        Some(m) => narrowed_mod_rows(&mut out, level, m, top, limit),
+        // Otherwise: every internal node with a breach, ranked by severity.
+        None => breach_mod_rows(level, want_warning, want_info, limit),
+    };
+
+    if mod_rows.is_empty() {
+        out.push_str("  (none)\n");
+    } else {
+        render_mod_rows(&mut out, &mod_rows);
+    }
+
+    // ── Next-step hint ───────────────────────────────────────────────────────
+    out.push_str("\n→ code-ranker report . --output.prompt.path=… --top 1\n");
+
+    Ok(out)
+}
+
+/// Validate a `--metric` narrowing axis, erroring with the known-metric list if
+/// the name isn't a thresholded/remediated metric or the `cycle` pseudo-metric.
+fn validate_narrow_metric(level: &LevelGraph, m: &str) -> Result<()> {
+    let known = m == "cycle" || level.node_attributes.contains_key(m);
+    if !known {
+        // The narrow-able ranking axes: metrics that carry a calibrated
+        // threshold or a fix-prompt doc (`remediation`), plus the `cycle`
+        // pseudo-metric — derived from the data, not the preset catalog (so a
+        // metric stays listed even when no preset ranks by it).
+        let mut metrics: Vec<&str> = level
+            .node_attributes
+            .iter()
+            .filter(|(_, s)| {
+                s.thresholds.is_some()
+                    || s.remediation
+                        .as_deref()
+                        .is_some_and(|r| r.contains("/principles/"))
+            })
+            .map(|(k, _)| k.as_str())
+            .collect();
+        metrics.push("cycle");
+        metrics.sort_unstable();
+        anyhow::bail!(
+            "unknown --metric '{m}'. Known metrics: {}",
+            metrics.join(", ")
+        );
+    }
+    Ok(())
+}
+
+/// Build the per-principle table rows from the shown presets.
+fn principle_rows(
+    level: &LevelGraph,
+    shown_presets: &[&Preset],
+    narrow: Option<&str>,
+    want_warning: bool,
+    want_info: bool,
+) -> Vec<Row> {
     let mut rows: Vec<Row> = Vec::new();
-    for p in &shown_presets {
+    for p in shown_presets {
         let reco = reco_for(level, &p.sort_metric);
         // Skip presets with nothing in the selected tiers (unless narrowed).
         let in_scope =
@@ -141,19 +206,7 @@ pub fn render_scorecard(
         if narrow.is_none() && !in_scope {
             continue;
         }
-        let top_module = match reco.sorted.first() {
-            Some(n) if p.sort_metric == "cycle" => format!("{} (cycle)", clean_path(&n.id)),
-            Some(n) => match num(n, &p.sort_metric) {
-                Some(v) if v != 0.0 => format!(
-                    "{} ({} {})",
-                    clean_path(&n.id),
-                    attr_short(level, &p.sort_metric),
-                    fmt_val(level, &p.sort_metric, v)
-                ),
-                _ => clean_path(&n.id),
-            },
-            None => "—".to_string(),
-        };
+        let top_module = principle_top_module(level, p, &reco);
         rows.push(Row {
             id: p.id.clone(),
             // Strip a leading "ID — " from the title to keep the column short.
@@ -168,189 +221,222 @@ pub fn render_scorecard(
             top: top_module,
         });
     }
-    rows.sort_by(|a, b| b.warn.cmp(&a.warn).then(b.info.cmp(&a.info)));
+    rows
+}
 
-    if rows.is_empty() && narrow.is_none() {
-        out.push_str("No threshold breaches for the selected severity.\n");
-        return Ok(out);
+/// The "top module" cell for a principle row: the worst-ranked module under the
+/// preset's metric, annotated with the metric value (or `(cycle)` / a bare path).
+fn principle_top_module(level: &LevelGraph, p: &Preset, reco: &super::Reco) -> String {
+    match reco.sorted.first() {
+        Some(n) if p.sort_metric == "cycle" => format!("{} (cycle)", clean_path(&n.id)),
+        Some(n) => match num(n, &p.sort_metric) {
+            Some(v) if v != 0.0 => format!(
+                "{} ({} {})",
+                clean_path(&n.id),
+                attr_short(level, &p.sort_metric),
+                fmt_val(level, &p.sort_metric, v)
+            ),
+            _ => clean_path(&n.id),
+        },
+        None => "—".to_string(),
     }
+}
 
-    // The per-principle table (skipped when narrowed to a metric no preset ranks
-    // by — the worst-modules list below carries the ranking instead).
-    if !rows.is_empty() {
-        let id_w = rows.iter().map(|r| r.id.len()).max().unwrap_or(6).max(6);
-        let name_w = rows
-            .iter()
-            .map(|r| r.name.len())
-            .max()
-            .unwrap_or(9)
-            .clamp(9, 34);
-        let clip = |s: &str, w: usize| -> String {
-            if s.len() > w {
-                format!("{}…", &s[..w.saturating_sub(1)])
-            } else {
-                s.to_string()
-            }
-        };
-        let mut header = format!("{:<id_w$}  {:<name_w$}", "PRESET", "PRINCIPLE");
+/// Render the per-principle table (header + one line per row) into `out`.
+fn render_principle_table(out: &mut String, rows: &[Row], want_warning: bool, want_info: bool) {
+    let id_w = rows.iter().map(|r| r.id.len()).max().unwrap_or(6).max(6);
+    let name_w = rows
+        .iter()
+        .map(|r| r.name.len())
+        .max()
+        .unwrap_or(9)
+        .clamp(9, 34);
+    let clip = |s: &str, w: usize| -> String {
+        if s.len() > w {
+            format!("{}…", &s[..w.saturating_sub(1)])
+        } else {
+            s.to_string()
+        }
+    };
+    let mut header = format!("{:<id_w$}  {:<name_w$}", "PRESET", "PRINCIPLE");
+    if want_warning {
+        header.push_str("  ⚠");
+    }
+    if want_info {
+        header.push_str("  ⓘ");
+    }
+    header.push_str("  TOP MODULE");
+    out.push_str(&header);
+    out.push('\n');
+    for r in rows {
+        let mut line = format!("{:<id_w$}  {:<name_w$}", r.id, clip(&r.name, name_w));
         if want_warning {
-            header.push_str("  ⚠");
+            line.push_str(&format!("  {:>1}", r.warn));
         }
         if want_info {
-            header.push_str("  ⓘ");
+            line.push_str(&format!("  {:>1}", r.info));
         }
-        header.push_str("  TOP MODULE");
-        out.push_str(&header);
+        line.push_str(&format!("  {}", r.top));
+        out.push_str(&line);
         out.push('\n');
-        for r in &rows {
-            let mut line = format!("{:<id_w$}  {:<name_w$}", r.id, clip(&r.name, name_w));
-            if want_warning {
-                line.push_str(&format!("  {:>1}", r.warn));
-            }
-            if want_info {
-                line.push_str(&format!("  {:>1}", r.info));
-            }
-            line.push_str(&format!("  {}", r.top));
-            out.push_str(&line);
-            out.push('\n');
-        }
     }
+}
 
-    // ── Worst modules ────────────────────────────────────────────────────────
-    out.push_str("\nWORST MODULES\n");
-    let limit = top.unwrap_or(15);
+/// Worst-modules rows when narrowed to one metric (or the `cycle` pseudo-metric).
+/// May push an explanatory heading line into `out` (the cycle branch does).
+fn narrowed_mod_rows(
+    out: &mut String,
+    level: &LevelGraph,
+    m: &str,
+    top: Option<usize>,
+    limit: usize,
+) -> Vec<ModRow> {
+    if m == "cycle" {
+        cycle_mod_rows(out, level, top)
+    } else {
+        metric_mod_rows(level, m, limit)
+    }
+}
 
-    struct ModRow {
-        warning_icon: bool,
-        path: String,
-        head: String,
-        rest: Vec<String>,
-        n_warn: usize,
-        n_info: usize,
-        hk: f64,
+/// Cycle-narrowed worst-modules rows: list every member of each selected cycle
+/// (so the whole loop is visible). Pushes the explanatory heading into `out`.
+fn cycle_mod_rows(out: &mut String, level: &LevelGraph, top: Option<usize>) -> Vec<ModRow> {
+    // ADP: `--top` counts CYCLES (default 1 — the biggest chain).
+    let groups = top_cycle_groups(level, top.unwrap_or(1));
+    match groups.as_slice() {
+        [(g, members)] => out.push_str(&format!(
+            "  one cycle ({}, {} modules) — all members listed; fix one cycle at a \
+             time (avoid --top 2+):\n",
+            g.kind,
+            members.len()
+        )),
+        _ => out.push_str(&format!(
+            "  {} cycles — all members listed:\n",
+            groups.len()
+        )),
     }
     let mut mod_rows: Vec<ModRow> = Vec::new();
-
-    if let Some(m) = narrow {
-        // Narrowed: the chosen metric's ranked modules.
-        if m == "cycle" {
-            // ADP: `--top` counts CYCLES (default 1 — the biggest chain). List
-            // every member of each selected cycle so the whole loop is visible.
-            let groups = top_cycle_groups(level, top.unwrap_or(1));
-            match groups.as_slice() {
-                [(g, members)] => out.push_str(&format!(
-                    "  one cycle ({}, {} modules) — all members listed; fix one cycle at a \
-                     time (avoid --top 2+):\n",
-                    g.kind,
-                    members.len()
-                )),
-                _ => out.push_str(&format!(
-                    "  {} cycles — all members listed:\n",
-                    groups.len()
-                )),
-            }
-            for (g, members) in &groups {
-                for n in members {
-                    mod_rows.push(ModRow {
-                        warning_icon: true,
-                        path: clean_path(&n.id),
-                        head: g.kind.clone(),
-                        rest: Vec::new(),
-                        n_warn: 0,
-                        n_info: 0,
-                        hk: num(n, "hk").unwrap_or(0.0),
-                    });
-                }
-            }
-        } else {
-            let reco = reco_for(level, m);
-            for n in reco.sorted.iter().take(limit) {
-                let head = match num(n, m) {
-                    Some(v) if v != 0.0 => {
-                        format!("{} {}", attr_short(level, m), fmt_val(level, m, v))
-                    }
-                    _ => attr_short(level, m).to_string(),
-                };
-                mod_rows.push(ModRow {
-                    warning_icon: true,
-                    path: clean_path(&n.id),
-                    head,
-                    rest: Vec::new(),
-                    n_warn: 0,
-                    n_info: 0,
-                    hk: num(n, "hk").unwrap_or(0.0),
-                });
-            }
-        }
-    } else {
-        for n in level.nodes.iter().filter(|n| is_internal(n)) {
-            let breaches = node_breaches(level, n, want_warning, want_info);
-            if breaches.is_empty() {
-                continue;
-            }
-            let n_warn = breaches.iter().filter(|b| b.warning).count();
-            let n_info = breaches.iter().filter(|b| !b.warning).count();
-            // Worst metric = the largest over-threshold ratio.
-            let worst = breaches
-                .iter()
-                .max_by(|a, b| a.ratio.total_cmp(&b.ratio))
-                .unwrap();
-            let head = if worst.metric == "cycle" {
-                "cycle".to_string()
-            } else {
-                format!(
-                    "{} {}",
-                    attr_short(level, &worst.metric),
-                    fmt_val(level, &worst.metric, worst.value)
-                )
-            };
-            let rest: Vec<String> = breaches
-                .iter()
-                .filter(|b| b.metric != worst.metric)
-                .map(|b| {
-                    if b.metric == "cycle" {
-                        "cycle".to_string()
-                    } else {
-                        attr_short(level, &b.metric).to_string()
-                    }
-                })
-                .collect();
+    for (g, members) in &groups {
+        for n in members {
             mod_rows.push(ModRow {
-                warning_icon: n_warn > 0,
+                warning_icon: true,
                 path: clean_path(&n.id),
-                head,
-                rest,
-                n_warn,
-                n_info,
+                head: g.kind.clone(),
+                rest: Vec::new(),
+                n_warn: 0,
+                n_info: 0,
                 hk: num(n, "hk").unwrap_or(0.0),
             });
         }
-        mod_rows.sort_by(|a, b| {
-            b.n_warn
-                .cmp(&a.n_warn)
-                .then(b.n_info.cmp(&a.n_info))
-                .then(b.hk.total_cmp(&a.hk))
-        });
-        mod_rows.truncate(limit);
     }
+    mod_rows
+}
 
-    if mod_rows.is_empty() {
-        out.push_str("  (none)\n");
-    } else {
-        let path_w = mod_rows.iter().map(|r| r.path.len()).max().unwrap_or(0);
-        for (i, r) in mod_rows.iter().enumerate() {
-            let icon = if r.warning_icon { "⚠" } else { "ⓘ" };
-            let mut line = format!("{:>2} {} {:<path_w$}  {}", i + 1, icon, r.path, r.head);
-            if !r.rest.is_empty() {
-                line.push_str(&format!("  +{}", r.rest.join(", ")));
+/// Metric-narrowed worst-modules rows: the metric's ranked modules, capped.
+fn metric_mod_rows(level: &LevelGraph, m: &str, limit: usize) -> Vec<ModRow> {
+    let reco = reco_for(level, m);
+    reco.sorted
+        .iter()
+        .take(limit)
+        .map(|n| {
+            let head = match num(n, m) {
+                Some(v) if v != 0.0 => {
+                    format!("{} {}", attr_short(level, m), fmt_val(level, m, v))
+                }
+                _ => attr_short(level, m).to_string(),
+            };
+            ModRow {
+                warning_icon: true,
+                path: clean_path(&n.id),
+                head,
+                rest: Vec::new(),
+                n_warn: 0,
+                n_info: 0,
+                hk: num(n, "hk").unwrap_or(0.0),
             }
-            out.push_str(&line);
-            out.push('\n');
+        })
+        .collect()
+}
+
+/// Worst-modules rows for the unnarrowed view: every internal node with a breach
+/// in the selected tiers, ranked by warning/info counts then `hk`, truncated.
+fn breach_mod_rows(
+    level: &LevelGraph,
+    want_warning: bool,
+    want_info: bool,
+    limit: usize,
+) -> Vec<ModRow> {
+    let mut mod_rows: Vec<ModRow> = Vec::new();
+    for n in level.nodes.iter().filter(|n| is_internal(n)) {
+        let breaches = node_breaches(level, n, want_warning, want_info);
+        if breaches.is_empty() {
+            continue;
         }
+        mod_rows.push(breach_row(level, n, &breaches));
     }
+    mod_rows.sort_by(|a, b| {
+        b.n_warn
+            .cmp(&a.n_warn)
+            .then(b.n_info.cmp(&a.n_info))
+            .then(b.hk.total_cmp(&a.hk))
+    });
+    mod_rows.truncate(limit);
+    mod_rows
+}
 
-    // ── Next-step hint ───────────────────────────────────────────────────────
-    out.push_str("\n→ code-ranker report . --output.prompt.path=… --top 1\n");
+/// Build the worst-modules row for one node from its (non-empty) breach list:
+/// headline the worst metric (largest over-threshold ratio) and tag the rest.
+fn breach_row(level: &LevelGraph, n: &Node, breaches: &[Breach]) -> ModRow {
+    let n_warn = breaches.iter().filter(|b| b.warning).count();
+    let n_info = breaches.iter().filter(|b| !b.warning).count();
+    // Worst metric = the largest over-threshold ratio.
+    let worst = breaches
+        .iter()
+        .max_by(|a, b| a.ratio.total_cmp(&b.ratio))
+        .unwrap();
+    let head = breach_label(level, &worst.metric, Some(worst.value));
+    let rest: Vec<String> = breaches
+        .iter()
+        .filter(|b| b.metric != worst.metric)
+        .map(|b| breach_label(level, &b.metric, None))
+        .collect();
+    ModRow {
+        warning_icon: n_warn > 0,
+        path: clean_path(&n.id),
+        head,
+        rest,
+        n_warn,
+        n_info,
+        hk: num(n, "hk").unwrap_or(0.0),
+    }
+}
 
-    Ok(out)
+/// Short label for one breached metric: `"cycle"` for the cycle pseudo-metric,
+/// else the metric's short name, optionally suffixed with its formatted value.
+fn breach_label(level: &LevelGraph, metric: &str, value: Option<f64>) -> String {
+    if metric == "cycle" {
+        return "cycle".to_string();
+    }
+    match value {
+        Some(v) => format!(
+            "{} {}",
+            attr_short(level, metric),
+            fmt_val(level, metric, v)
+        ),
+        None => attr_short(level, metric).to_string(),
+    }
+}
+
+/// Render the worst-modules list (one numbered line per row) into `out`.
+fn render_mod_rows(out: &mut String, mod_rows: &[ModRow]) {
+    let path_w = mod_rows.iter().map(|r| r.path.len()).max().unwrap_or(0);
+    for (i, r) in mod_rows.iter().enumerate() {
+        let icon = if r.warning_icon { "⚠" } else { "ⓘ" };
+        let mut line = format!("{:>2} {} {:<path_w$}  {}", i + 1, icon, r.path, r.head);
+        if !r.rest.is_empty() {
+            line.push_str(&format!("  +{}", r.rest.join(", ")));
+        }
+        out.push_str(&line);
+        out.push('\n');
+    }
 }

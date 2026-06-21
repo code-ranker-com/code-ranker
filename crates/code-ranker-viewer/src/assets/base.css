@@ -24,6 +24,16 @@ header code { color: #1abc9c; }
 /* Big mode word, now a toggle button — "toggle" between the two controls (click /
    hotkey `t` to switch baseline⇄current), "view" after the single control in
    review (disabled). Sized to match the header title; flex `order` reseats it. */
+/* Level switcher (Files / Functions / …) — shown only for multi-level reports. */
+.report-switch { display: flex; gap: 6px; padding: 10px 16px 0; align-items: flex-end; }
+.report-switch[hidden] { display: none; }
+.report-switch a { font: inherit; font-size: 13px; font-weight: 500; color: #455a73;
+                   text-decoration: none; padding: 6px 14px; border-radius: 6px 6px 0 0;
+                   background: #e8e8e8; border: 1px solid #d7e0ea; border-bottom: 0;
+                   cursor: pointer; user-select: none; transition: background .15s, color .15s; }
+.report-switch a:hover { background: #d7e0ea; }
+.report-switch a.selected { background: #1abc9c; color: #fff; border-color: #1abc9c; }
+
 .meta-mode { font: inherit; font-size: 13px; color: #ecf0f1; white-space: nowrap;
              text-transform: lowercase; margin: 0 4px; order: 2; user-select: none;
              background: #455a73; border: 0; border-radius: 4px; padding: 6px 14px;

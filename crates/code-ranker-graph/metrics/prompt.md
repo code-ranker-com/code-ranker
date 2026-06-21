@@ -5,9 +5,9 @@ parsed into `PromptTemplate` by `prompt_template()` and carried in the snapshot 
 the CLI `prompt` format and the HTML viewer render the same text from one source.
 Each `## <field>` section maps to a `PromptTemplate` field; `## task` is a list
 (one entry per bullet, kept verbatim — the leading `- ` is part of the rendered
-line). `{id}` in a `task` line is substituted with the active preset id at render
-time. This is internal template prose, not a published corpus doc — it lives next
-to `builtin.toml`, not under `languages/`.
+line). `{id}` in a `task` or `doc_note` line is substituted with the active preset
+id at render time (e.g. `--doc {id}` → `--doc HK`). This is internal template prose,
+not a published corpus doc — it lives next to `builtin.toml`, not under `languages/`.
 
 ## intro
 
@@ -15,7 +15,7 @@ I want to apply this to some modules in my system.
 
 ## doc_note
 
-Download and read the full principle to understand it in detail. If you cannot download it, **stop the task immediately**.
+To understand the principle in detail, run `code-ranker report --doc {id}` — it prints the full principle to your terminal. Read it before proposing any changes.
 
 ## task
 

@@ -358,24 +358,10 @@ pub(super) fn file_count(level: &LevelGraph) -> usize {
     level.nodes.iter().filter(|n| is_internal(n)).count()
 }
 
-/// Format a metric value: abbreviate large numbers to K/M/G when the attribute
-/// is flagged `abbreviate`, else a plain rounded integer.
-pub(super) fn fmt_val(level: &LevelGraph, metric: &str, v: f64) -> String {
-    let abbreviate = level
-        .node_attributes
-        .get(metric)
-        .and_then(|s| s.abbreviate)
-        .unwrap_or(false);
-    if abbreviate && v.abs() >= 1000.0 {
-        for (suf, div) in [("G", 1e9), ("M", 1e6), ("K", 1e3)] {
-            if v.abs() >= div {
-                let n = v / div;
-                let s = format!("{n:.1}");
-                let s = s.strip_suffix(".0").map(str::to_string).unwrap_or(s);
-                return format!("{s}{suf}");
-            }
-        }
-    }
+/// Format a metric value for CLI output: the exact rounded integer (never
+/// abbreviated — the K/M/G `abbreviate` spec flag is a viewer-only concern, so the
+/// scorecard and prompt always show the precise number, e.g. `295488` not `295.5K`).
+pub(super) fn fmt_val(v: f64) -> String {
     format!("{}", v.round() as i64)
 }
 

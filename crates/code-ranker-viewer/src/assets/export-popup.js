@@ -76,7 +76,10 @@ function openExportPopup(level, restore) {
   const activeG     = (typeof activeGraph === 'function') ? activeGraph(level) : (window.DIFF?.[level] || {});
   const allNodes    = activeG.nodes || [];
   const localIds    = new Set(allNodes.filter(n => !isExternalNode(n, level)).map(n => n.id));
-  const allEdges    = (activeG.edges || []).filter(e => localIds.has(e.source) && localIds.has(e.target));
+  // Only FLOW edges (`uses`) drive coupling/cycles/HK; structural
+  // `contains`/`reexports` are noise in the crossroads, so the prompt's connection
+  // lists use the same edge set the metrics are computed over.
+  const allEdges    = (activeG.edges || []).filter(e => localIds.has(e.source) && localIds.has(e.target) && edgeIsFlow(level, e.kind));
   const selNodes    = allNodes.filter(n => selectedIds?.has(n.id));
 
   const cleanPath = p => (p || '').replace(/^\{[^}]+\}\//, '');
@@ -150,10 +153,11 @@ function openExportPopup(level, restore) {
     });
   }
 
-  // Wrap a preset's title + prompt + doc_url into the full instruction the AI
-  // receives: intent, the summary, the link to the full principle, and a
-  // research/report protocol (download & read the principle, report violations
-  // in the modules below, save the report to `.code-ranker/<timestamp>-<id>.md`).
+  // Wrap a preset's title + prompt into the full instruction the AI receives:
+  // intent, the summary, how to read the full principle (the offline
+  // `code-ranker report --doc <id>` command — no network URL), and a
+  // research/report protocol (report violations in the modules below, save the
+  // report to `.code-ranker/<timestamp>-<id>.md`).
   const composePrompt = id => {
     const preset = snapshotPresets().find(p => p.id === id);
     if (!preset) return '';
@@ -171,12 +175,10 @@ function openExportPopup(level, restore) {
       summary,
       '',
     ];
+    // A doc exists (signalled by `doc_url`): point the agent at the offline
+    // `--doc <id>` command rather than a network URL.
     if (url) {
-      lines.push(
-        `**Full principle:** [${url}](${url})`,
-        '',
-        t.doc_note || '',
-        '');
+      lines.push((t.doc_note || '').replaceAll('{id}', id), '');
     }
     lines.push('## Task', '');
     for (const line of (t.task || [])) lines.push(line.replaceAll('{id}', id));
@@ -322,22 +324,43 @@ function openExportPopup(level, restore) {
           const lines = activeNodes.map(n => `- \`${path(n)}\``).join('\n');
           parts.push(['## Modules in a dependency cycle', lines].filter(Boolean).join('\n\n'));
         } else {
-          const label   = attrShort(level, m);
-          const desc    = attrDesc(level, m);
-          const formula = attrFormula(level, m);
+          const label = attrShort(level, m);
           const lines = activeNodes.map(n => {
             const v = nodeAttr(n, m);
             const vr = typeof v === 'number' ? Math.round(v) : v;
             return (vr != null && vr !== 0) ? `- \`${path(n)}\` (${label}: ${vr})` : `- \`${path(n)}\``;
           }).join('\n');
-          const intro = [desc, formula ? `**Formula:** \`${formula}\`` : ''].filter(Boolean).join('\n\n');
-          parts.push([`## Modules ordered by ${label}`, intro, lines].filter(Boolean).join('\n\n'));
+          // A single target reads as one module, not a ranking. The formula is
+          // dropped (it lives in `--doc <id>`); the description is skipped when it
+          // already appears verbatim as the Summary above (the metric lens).
+          const heading = activeNodes.length === 1 ? `## Target module (${label})` : `## Modules ordered by ${label}`;
+          const presetPrompt = snapshotPresets().find(p => p.id === activePresetKey)?.prompt;
+          const desc = attrDesc(level, m);
+          const intro = (desc && desc !== presetPrompt) ? desc : '';
+          parts.push([heading, intro, lines].filter(Boolean).join('\n\n'));
         }
       } else {
         parts.push('## Modules\n\n' + activeNodes.map(n => `- \`${path(n)}\``).join('\n'));
       }
     }
-    const edgeFmt = edges => edges.length ? edges.map(e => `- \`${pathOf(e.source)}\` → \`${pathOf(e.target)}\` (${e.kind})`).join('\n') : '_(none)_';
+    // A `uses` edge's line lives in its SOURCE file (where the import is written).
+    // With a single focus module, drop the focus path: an `in` edge's use-site is
+    // the dependant (`dependant:line`); an `out` edge's use-site is the focus
+    // itself, so report it as "line N" against the named target. Several focus
+    // modules → keep both endpoints (`source:line → target`).
+    const single = activeSet.size === 1;
+    const colon = e => (e.line != null ? `:${e.line}` : '');
+    const edgeFmt = edges => {
+      if (!edges.length) return '_(none)_';
+      return edges.map(e => {
+        if (single && activeSet.has(e.source)) {
+          const ln = e.line != null ? `, line ${e.line}` : '';
+          return `- \`${pathOf(e.target)}\` (${e.kind}${ln})`;
+        }
+        if (single) return `- \`${pathOf(e.source)}${colon(e)}\` (${e.kind})`;
+        return `- \`${pathOf(e.source)}${colon(e)}\` → \`${pathOf(e.target)}\` (${e.kind})`;
+      }).join('\n');
+    };
     if (on('conn-common')) parts.push('## Connections — common\n\n' + edgeFmt(innerEdges));
     if (on('conn-in'))     parts.push('## Connections — in\n\n'  + edgeFmt(inEdges));
     if (on('conn-out'))    parts.push('## Connections — out\n\n' + edgeFmt(outEdges));

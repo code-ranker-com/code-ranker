@@ -251,7 +251,7 @@ corpus, `prompt.md` is **internal template prose**: it sits next to `builtin.tom
 | Field | Role |
 |---|---|
 | `intro` | one-line intent under the title |
-| `doc_note` | shown after the `doc_url` link — read the full principle first |
+| `doc_note` | how to read the full principle — points at the offline `code-ranker report --doc <id>` command (`{id}` substituted), not a network URL |
 | `task` | the task-protocol bullets (`{id}` → active preset id) |
 | `focus` | closing emphasis line |
 | `cycle_note` | note prepended to a single dependency-cycle's module list |

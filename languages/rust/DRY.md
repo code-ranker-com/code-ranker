@@ -1,11 +1,3 @@
-# DRY — Don't Repeat Yourself (in Rust)
-
-**TL;DR**: Every piece of knowledge must have a single, unambiguous,
-authoritative representation within a system. DRY is about **knowledge
-duplication**, not **code duplication** — copy-pasted lines that
-encode different decisions are not DRY violations; one line in two
-different modules that means "the maximum retry count" is.
-
 ## Canonical sources
 
 - Andy Hunt and Dave Thomas, *The Pragmatic Programmer* (1999,

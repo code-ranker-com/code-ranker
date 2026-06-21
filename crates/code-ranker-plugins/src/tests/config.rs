@@ -312,8 +312,10 @@ fn string_list_reads_data_lists_verbatim() {
 
 /// The common catalog lives in `defaults.toml` and is inherited by every
 /// language; `resolved_presets` returns it (catalog first, language presets
-/// appended) with each `doc_url` resolved to `{doc_base}/{doc_lang}/{id}.md`
-/// and `label = id`.
+/// appended) with `label = id`. Each `doc_url` resolves to its own
+/// `{doc_base}/{doc_lang}/{id}.md` for a language that overrides the id
+/// (`doc_overrides`), and to the shared `{doc_base}/base/{id}.md` fallback
+/// otherwise.
 #[test]
 fn resolved_presets_inherit_catalog_and_resolve_doc_urls() {
     let rust = resolved_presets(&load(include_str!("../languages/rust/config.toml")));
@@ -328,12 +330,13 @@ fn resolved_presets_inherit_catalog_and_resolve_doc_urls() {
             "YAGNI"
         ]
     );
-    // doc_url = {doc_base}/{doc_lang}/{id}.md; label = id.
+    // Rust ships a full own corpus (`doc_overrides = "*"`), so every doc_url
+    // routes to its own `rust/` folder. label = id.
     let cpx = &rust[0];
     assert_eq!(cpx.label, "CPX");
     assert_eq!(
         cpx.doc_url.as_deref(),
-        Some("https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/CPX.md")
+        Some("https://github.com/ffedoroff/code-ranker/blob/main/languages/rust/CPX.md")
     );
 
     // Languages with no own presets inherit the full 13-entry catalog, and JS
@@ -344,6 +347,20 @@ fn resolved_presets_inherit_catalog_and_resolve_doc_urls() {
     let js = resolved_presets(&load(include_str!("../languages/javascript/config.toml")));
     assert_eq!(js.len(), 13);
     assert!(js[0].doc_url.as_deref().unwrap().contains("/typescript/"));
+
+    // A language with no own corpus (no `doc_overrides`) inherits every doc from
+    // the shared `base/` fallback — fixing what used to be a dead `/go/` link.
+    let go = resolved_presets(&load(include_str!("../languages/go/config.toml")));
+    assert_eq!(go.len(), 13);
+    assert_eq!(
+        go[0].doc_url.as_deref(),
+        Some("https://github.com/ffedoroff/code-ranker/blob/main/languages/base/CPX.md")
+    );
+    assert!(
+        go.iter()
+            .all(|p| p.doc_url.as_deref().unwrap().contains("/base/")),
+        "every go doc_url falls back to base"
+    );
 }
 
 /// An inherited list is patched in place by an op-table (the list-override DSL);

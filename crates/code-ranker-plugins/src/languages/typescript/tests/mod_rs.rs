@@ -274,7 +274,7 @@ fn tsx_file_is_analyzed() {
 
 #[test]
 fn dynamic_import_and_import_equals_are_non_goals() {
-    // Documented limitations (see principles/typescript/metrics.md): a
+    // Documented limitations (see languages/typescript/metrics.md): a
     // *dynamic* `import("./b")` and the TS `import b = require("./b")` form
     // are NOT resolved into edges — the specifier sits inside a call the
     // import walker does not descend into. Purely syntactic scope, like

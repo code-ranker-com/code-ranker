@@ -6,6 +6,8 @@
 # another local `.md` file — so the orchestrator still derives coupling
 # (fan_in / fan_out / hk) and cycles over the doc link graph.
 
+# No own principle corpus yet: with no `doc_overrides`, every `doc_url` inherits
+# the shared `base/` corpus. `doc_lang` names the folder a future own corpus would use.
 doc_lang = "markdown"
 
 extensions = ["md", "markdown"]

@@ -38,7 +38,7 @@ Focus on these; treat everything else as secondary.
   module on a busy crossroads of incoming/outgoing dependencies. Full
   diagnose-and-split workflow (measure one file, list its fan_in/fan_out, find
   the mixed scenarios, split, verify with a before/after diff report):
-  [HK principle](https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/HK.md).
+  [HK principle](https://github.com/ffedoroff/code-ranker/blob/main/languages/base/HK.md).
 
 **Strategy:** fix one thing at a time, worst-first. Cycles (ADP) are structural —
 clear them first; then coupling (HK). Focus an axis with `--focus-rule` and inspect

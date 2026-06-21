@@ -20,7 +20,7 @@
         "chain": {
           "description": "Three or more units form a strongly-connected component (A → B → C → A); the whole component must be loaded and changed together, defeating modular boundaries.",
           "label": "Chain",
-          "remediation": "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/ADP.md"
+          "remediation": "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/languages/base/ADP.md"
         }
       },
       "cycles": [
@@ -98,7 +98,7 @@
           "group": "coupling",
           "label": "Fan-in",
           "name": "Fan-in",
-          "remediation": "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/Fan-in.md",
+          "remediation": "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/languages/base/Fan-in.md",
           "short": "Fan-in",
           "value_type": "int"
         },
@@ -107,7 +107,7 @@
           "group": "coupling",
           "label": "Fan-out",
           "name": "Fan-out",
-          "remediation": "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/Fan-out.md",
+          "remediation": "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/languages/base/Fan-out.md",
           "short": "Fan-out",
           "value_type": "int"
         },
@@ -127,7 +127,7 @@
           "group": "coupling",
           "label": "HK",
           "name": "Henry–Kafura",
-          "remediation": "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/HK.md",
+          "remediation": "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/languages/base/HK.md",
           "short": "HK",
           "value_type": "float"
         },

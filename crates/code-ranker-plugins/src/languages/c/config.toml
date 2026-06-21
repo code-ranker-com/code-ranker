@@ -3,6 +3,8 @@
 # base supplies the `#include` graph vocab and the node-kind entries identical
 # for C and C++; this file carries only what is C-specific.
 
+# No own principle corpus yet: with no `doc_overrides`, every `doc_url` inherits
+# the shared `base/` corpus. `doc_lang` names the folder a future own corpus would use.
 doc_lang = "c"
 
 # `.c` source and `.h` headers (C++ owns the `.cc`/`.cpp`/`.hpp` extensions).

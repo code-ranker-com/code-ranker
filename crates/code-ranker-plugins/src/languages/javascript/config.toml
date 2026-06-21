@@ -11,7 +11,10 @@
 # `doc_url` = `{doc_base}/typescript/<slug>.md`.
 
 # Principle-corpus language for doc links (`doc_base` inherited from defaults).
+# JavaScript shares the TypeScript corpus; `doc_overrides = "*"` routes every
+# principle to `typescript/` instead of the shared `base/` fallback.
 doc_lang = "typescript"
+doc_overrides = "*"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # File-collection extensions and project-detect markers — DATA, not code (see

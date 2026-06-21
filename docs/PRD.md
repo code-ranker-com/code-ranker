@@ -224,7 +224,7 @@ required.
 | Step | Scope |
 |------|-------|
 | Step 1 | Additional language plugins: Python, JavaScript, Go, C#, PHP; framework-specific plugins (Django, WordPress, etc.) with domain-specific metadata |
-| Step 2 | AI prompt generation for principles review using the `principles/` corpus (per-language: `principles/rust/`, `principles/python/`, `principles/typescript/`) |
+| Step 2 | AI prompt generation for principles review using the `languages/` corpus (per-language: `languages/rust/`, `languages/python/`, `languages/typescript/`) |
 
 ### 4.2 Out of Scope (All Versions)
 
@@ -454,7 +454,7 @@ workspaces. The plugin MUST:
   (not language-calibrated), so the report shows exactly what fails `check`.
   The recommendation catalog is the shared 13 design-principle presets (from
   `defaults.toml`); each coupling/complexity **metric** carries its own
-  fix-prompt doc under `principles/rust/` (`HK`, `Fan-in`, `Fan-out`, `Cognitive`,
+  fix-prompt doc under `languages/base/` (`HK`, `Fan-in`, `Fan-out`, `Cognitive`,
   `Cyclomatic`; the cycle metric reuses `ADP`), referenced from the metric's `remediation`
 
 **Rationale**: Rust is the primary use-case for the initial release.

@@ -137,7 +137,7 @@ That nesting penalty is the point — deeply indented logic is what actually str
 Summed across every function in the file."""
 direction = "lower_better"
 category = "complexity"
-remediation = "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/Cognitive.md"
+remediation = "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/languages/base/Cognitive.md"
 
 [ast.exits]
 value_type = "int"
@@ -228,7 +228,7 @@ formula_js = "spaces + branches"
 direction = "lower_better"
 category = "complexity"
 omit_at = 1.0
-remediation = "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/Cyclomatic.md"
+remediation = "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/languages/base/Cyclomatic.md"
 
 [fields.effort]
 value_type = "float"
@@ -324,14 +324,14 @@ value_type = "int"
 label = "Fan-in"
 description = "Many other units depend on this one, making it risky to change and a single point of failure — though some hubs (shared types) carry high fan-in legitimately."
 category = "coupling"
-remediation = "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/Fan-in.md"
+remediation = "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/languages/base/Fan-in.md"
 
 [coupling.fan_out]
 value_type = "int"
 label = "Fan-out"
 description = "This unit depends on many others, so it breaks when any of them change and is hard to test in isolation."
 category = "coupling"
-remediation = "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/Fan-out.md"
+remediation = "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/languages/base/Fan-out.md"
 
 [coupling.fan_out_external]
 value_type = "int"
@@ -350,7 +350,7 @@ formula_js = "sloc * (fan_in * fan_out) ** 2"
 direction = "lower_better"
 category = "coupling"
 abbreviate = true
-remediation = "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/HK.md"
+remediation = "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/languages/base/HK.md"
 
 [coupling.cycle]
 value_type = "str"
@@ -365,12 +365,12 @@ description = "Cycle kind this node participates in."
 [cycles.mutual]
 label = "Mutual"
 description = "Two units import each other (A ↔ B), so neither can be built, tested, or understood in isolation — the tightest possible coupling."
-remediation = "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/ADP.md"
+remediation = "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/languages/base/ADP.md"
 
 [cycles.chain]
 label = "Chain"
 description = "Three or more units form a strongly-connected component (A → B → C → A); the whole component must be loaded and changed together, defeating modular boundaries."
-remediation = "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/ADP.md"
+remediation = "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/languages/base/ADP.md"
 
 # ── prompt scaffolding (Prompt-Generator framing) ─────────────────────────────
 # The language-neutral prose the prompt wraps a preset in — DATA, not code.

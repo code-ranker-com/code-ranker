@@ -231,7 +231,7 @@ as external nodes — are defined scope, kept out by design rather than missed.
 **Changing a metric — adding one or fixing a bug — follow the runbook
 [`docs/metric-correctness.md`](metric-correctness.md):** it maps where
 each metric is computed (which crate), the per-task checklist, the normative spec
-to define "correct" against (`principles/<lang>/metrics.md`), and which tests
+to define "correct" against (`languages/<lang>/metrics.md`), and which tests
 prove it where (the metamorphic / generative / anchor / differential / mutation
 layers and the ≤ 20 s budget). Do not change a detector without going through it —
 that runbook is how this principle and the Metric Accuracy NFR stay enforced
@@ -1259,11 +1259,16 @@ code-ranker/
     DESIGN.md              # Product technical design (architecture, domain model, plugins)
     code-ranker-cli/        # CLI component docs: PRD, DESIGN, CLI.md, config.md, ERRORS.md
     code-ranker-viewer/     # HTML viewer component docs: PRD, DESIGN
-  principles/              # Principle corpus (used at P3 for prompt generation)
+  languages/              # Principle corpus (used at P3 for prompt generation)
+    base/                  # Language-neutral fallback corpus (inherited when a language has no own doc)
     rust/                  # Rust-specific principle docs
     python/                # Python-specific principle docs
     typescript/            # TypeScript/JavaScript principle docs
 ```
+
+A preset's `doc_url` resolves to `languages/<doc_lang>/<id>.md` for the principles
+a language overrides (its `doc_overrides`), and to `languages/base/<id>.md`
+otherwise — so a language without its own corpus inherits `base/`.
 
 **Out of scope for this revision (deferred to P2/P3)**:
 

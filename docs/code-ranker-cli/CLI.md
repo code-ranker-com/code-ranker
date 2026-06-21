@@ -487,7 +487,7 @@ namespaces**:
   id (`threshold.file.hk`). Matched **by value**, so it works whether or not the metric has
   a configured `[rules.thresholds.file]` threshold. This narrows the `scorecard`
   to that axis and frames the `prompt` by the **metric itself** — its own name,
-  description, and `remediation` doc (e.g. `principles/rust/HK.md`), with **no** SOLID
+  description, and `remediation` doc (e.g. `languages/base/HK.md`), with **no** SOLID
   design-principle wrapper.
 - a **principle** id — `LSP`, `ADP`, `SRP`, `OCP`, `DIP`, `ISP`, `DRY`, `KISS`, `LoD`,
   `MISU`, `CoI`, `YAGNI`, `CPX`. This frames the output by that **design principle** (the

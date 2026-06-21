@@ -18,7 +18,7 @@
   "globs": [
     "docs/**/*.md",
     "contrib/**/*.md",
-    "principles/**/*.md",
+    "languages/**/*.md",
     "AGENTS.md",
     "CLAUDE.md"
   ],

@@ -14,7 +14,10 @@
 #                                 in Rust, *which* kinds it counts is data.
 
 # Principle-corpus language for doc links (`doc_base` inherited from defaults).
+# Python ships a full own corpus, so `doc_overrides = "*"` routes every principle
+# to `python/` instead of the shared `base/` fallback.
 doc_lang = "python"
+doc_overrides = "*"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # File-collection extensions, project-detect markers and walk skip-dirs — DATA,

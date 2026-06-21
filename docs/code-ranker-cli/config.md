@@ -160,15 +160,15 @@ path = "gl-code-quality-report.json"  # default if unset: .code-ranker/{ts}-{git
 # functions = true           # emit a `functions` level with per-function metrics
 
 [metrics.comment_ratio]      # user-defined metric (CEL formula + spec)
-formula   = "sloc > 0.0 ? cloc / sloc * 100.0 : 0.0"
-label     = "Comments %"
-direction = "higher_better"  # lower_better | higher_better
-group     = "loc"
-# scope   = "node"           # node (per file/function, default) | graph (aggregate)
+formula_cel = "sloc > 0.0 ? cloc / sloc * 100.0 : 0.0"
+label       = "Comments %"
+direction   = "higher_better"  # lower_better | higher_better
+group       = "loc"
+# scope     = "node"           # node (per file/function, default) | graph (aggregate)
 
 [metrics.cyclomatic_p90]     # a graph-scope aggregate → lands in the `stats` block
-scope     = "graph"
-formula   = "agg('cyclomatic', 'p90', 'not_empty')"
+scope       = "graph"
+formula_cel = "agg('cyclomatic', 'p90', 'not_empty')"
 ```
 
 The threshold scope is always `file` — a single source file on the one graph
@@ -222,11 +222,11 @@ Functions tabs); the JSON snapshot carries it under `graphs.functions`.
 
 ### `[metrics.<key>]` — declarative metrics
 
-Every tier-2 metric is **data**: a CEL `formula` plus display spec. The built-in
+Every tier-2 metric is **data**: a CEL `formula_cel` plus display spec. The built-in
 set ships in `code-ranker-graph/metrics/builtin.toml`; you add or override metrics
 here with no code change. Fields:
 
-- `formula` (required) — a CEL expression over other metric keys and the tier-1
+- `formula_cel` (required) — a CEL expression over other metric keys and the tier-1
   inputs (`eta1`/`eta2`/`n1`/`n2`/`spaces`/`branches`/`sloc`/`cloc`/`span_sloc`/…),
   plus host math (`log2`/`ln`/`pow`/`sqrt`/`sin`/…). A bad formula or a definition
   cycle is a hard config error.
@@ -236,13 +236,13 @@ here with no code change. Fields:
   by numpy R-7), and `top<N>`/`top<N>_<reducer>` (keep the N largest, then reduce —
   default `avg`). Populations: `not_empty` (value ≠ `omit_at`) / `all` (missing
   counted at the floor).
-- `label` / `name` / `short` / `description` / `formula_pretty` / `calc` /
+- `label` / `name` / `short` / `description` / `formula_pretty` / `formula_js` /
   `direction` / `group` / `value_type` / `omit_at` — display spec (rendered like
   any built-in metric). `name` is the tooltip title, `short` the table header,
   `description` the tooltip body, `formula_pretty` the readable formula's first
-  tooltip line. `calc` is the JS the viewer re-runs with the node's values for the
-  second line (the formula filled with numbers, like `hk`); it defaults to the CEL
-  `formula`, so plain-arithmetic metrics get the line for free.
+  tooltip line. `formula_js` is the JS the viewer re-runs with the node's values for
+  the second line (the formula filled with numbers, like `hk`); it defaults to the
+  CEL `formula_cel`, so plain-arithmetic metrics get the line for free.
 - `warning` / `info` — optional two-tier advisory severity thresholds the scorecard
   and viewer badge against (a missing tier mirrors the other). If the metric is also
   gated in `[rules.thresholds.file]`, the gate limit overrides `warning` (the gate

@@ -24,12 +24,12 @@ pub enum Scope {
 
 /// One metric definition: a CEL formula plus the spec fields needed to emit it
 /// as a first-class, sortable, delta-coloured attribute. Spec fields are
-/// optional so a quick user formula needs only `formula`.
+/// optional so a quick user formula needs only `formula_cel`.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MetricDef {
     /// CEL expression over other metric keys + the registered math functions.
-    pub formula: String,
+    pub formula_cel: String,
     #[serde(default)]
     pub scope: Scope,
     #[serde(default = "default_value_type")]
@@ -44,11 +44,11 @@ pub struct MetricDef {
     /// Human-readable formula shown in the viewer (display only).
     pub formula_pretty: Option<String>,
     /// JS expression the viewer re-runs with the node's values to show the live
-    /// "formula = numbers" line (like a built-in's `formula_js`). When omitted, a
-    /// node-scope metric falls back to its CEL `formula` — valid JS for plain
-    /// arithmetic / ternaries; if it uses CEL-only host functions (`log2`, `pow`,
-    /// …) the viewer simply skips the line. Set `calc` explicitly to control it.
-    pub calc: Option<String>,
+    /// "formula = numbers" line. When omitted, a node-scope metric falls back to
+    /// its CEL `formula_cel` — valid JS for plain arithmetic / ternaries; if it
+    /// uses CEL-only host functions (`log2`, `pow`, …) the viewer simply skips the
+    /// line. Set `formula_js` explicitly to control it.
+    pub formula_js: Option<String>,
     /// `lower_better` / `higher_better`.
     pub direction: Option<String>,
     pub group: Option<String>,
@@ -113,7 +113,7 @@ impl MetricDef {
     /// The viewer-facing [`AttributeSpec`] for this metric, so a config-defined
     /// metric renders as a named, sortable, delta-coloured column like any
     /// built-in — including the live "formula = numbers" tooltip line, driven by
-    /// `calc` (defaulted from the CEL `formula` for node-scope metrics).
+    /// `formula_js` (defaulted from the CEL `formula_cel` for node-scope metrics).
     pub fn to_attribute_spec(&self) -> AttributeSpec {
         let value_type = match self.value_type.as_str() {
             "int" => ValueType::Int,
@@ -138,9 +138,9 @@ impl MetricDef {
             // (valid JS for arithmetic; the viewer no-ops if it can't run it). A
             // graph aggregate isn't shown per node, so it carries no `calc`.
             calc: self
-                .calc
+                .formula_js
                 .clone()
-                .or_else(|| (self.scope == Scope::Node).then(|| self.formula.clone())),
+                .or_else(|| (self.scope == Scope::Node).then(|| self.formula_cel.clone())),
             direction,
             abbreviate: None,
             group: self.group.clone(),
@@ -154,7 +154,7 @@ impl MetricDef {
 /// (not per node), so a bad user formula fails fast with a clear message.
 #[derive(Debug)]
 pub enum RegistryError {
-    /// A `formula` failed to parse as CEL.
+    /// A `formula_cel` failed to parse as CEL.
     Parse { key: String, message: String },
     /// The metric dependency graph has a cycle (`a` ← `b` ← `a`).
     Cycle { keys: Vec<String> },

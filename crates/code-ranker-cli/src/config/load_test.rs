@@ -177,7 +177,7 @@ fn validate_thresholds_accepts_registry_and_custom_keys() {
     cfg.metrics.insert(
         "tsr".into(),
         MetricDef {
-            formula: "1.0".into(),
+            formula_cel: "1.0".into(),
             ..Default::default()
         },
     );

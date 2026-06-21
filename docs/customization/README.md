@@ -44,9 +44,9 @@ shown.
 
 ```toml
 [metrics.comment_ratio]
-formula        = "sloc > 0.0 ? cloc / sloc * 100.0 : 0.0"  # CEL; guard against /0
+formula_cel    = "sloc > 0.0 ? cloc / sloc * 100.0 : 0.0"  # CEL; guard against /0
 formula_pretty = "cloc / sloc * 100"   # readable form shown in tooltips/popup
-# calc        = "cloc / sloc * 100"    # JS for the live "= numbers" line; defaults to `formula`
+# formula_js   = "cloc / sloc * 100"   # JS for the live "= numbers" line; defaults to `formula_cel`
 label          = "Comments %"          # column / card label
 name           = "Comment density"     # tooltip title
 short          = "Cmt%"                # compact table header
@@ -59,7 +59,7 @@ info           = 15.0
 # also optional: value_type ("float"|"int"|"bool"|"str"), omit_at
 ```
 
-Only `formula` is required; every spec field is optional (a quick metric needs
+Only `formula_cel` is required; every spec field is optional (a quick metric needs
 just the formula). The metric is **omitted** from output when its value rounds to
 `omit_at` (default `0`) — so a guard like `sloc > 0.0 ? … : 0.0` both avoids
 divide-by-zero and drops the metric on files where it has no signal.
@@ -72,8 +72,8 @@ divide-by-zero and drops the metric on files where it has no signal.
 | `name` | the **tooltip title** (hover a column header or a popup value) |
 | `short` | the compact **table-header** text (falls back to `label`, then key) |
 | `description` | the **tooltip body** — write a full sentence; this is the docs for the metric |
-| `formula_pretty` | the human-readable formula shown as the **first tooltip line** (the executable `formula` is CEL and isn't shown raw) |
-| `calc` | JS the viewer re-runs with the node's values to show the **second line** — the same formula filled with this file's numbers (`81 / 105 = 0.771`), exactly like the built-in `hk`. Defaults to the CEL `formula`, so a plain-arithmetic metric needs nothing; set it explicitly only if the formula uses CEL-only functions (`log2`/`pow`/…), which the viewer can't run. |
+| `formula_pretty` | the human-readable formula shown as the **first tooltip line** (the executable `formula_cel` is CEL and isn't shown raw) |
+| `formula_js` | JS the viewer re-runs with the node's values to show the **second line** — the same formula filled with this file's numbers (`81 / 105 = 0.771`), exactly like the built-in `hk`. Defaults to the CEL `formula_cel`, so a plain-arithmetic metric needs nothing; set it explicitly only if the formula uses CEL-only functions (`log2`/`pow`/…), which the viewer can't run. |
 | `direction` | colours deltas green/red (`higher_better` / `lower_better`) |
 | `warning` / `info` | two-tier **severity thresholds** the scorecard counts and the viewer badges against (see §1.7); a missing tier mirrors the other |
 
@@ -99,9 +99,9 @@ emitted into the report's per-graph `stats` block (the summary numbers). Use the
 
 ```toml
 [metrics.cognitive_p90]
-scope   = "graph"
-formula = "agg('cognitive', 'p90', 'not_empty')"
-label   = "Cognitive (p90)"
+scope       = "graph"
+formula_cel = "agg('cognitive', 'p90', 'not_empty')"
+label       = "Cognitive (p90)"
 ```
 
 `agg(metric, reducer, population)`:
@@ -128,28 +128,28 @@ shows the per-file ratio as a table column right after `hk`. The full config is
 # 1) The per-file ratio. Guarded so files with no source don't divide by zero;
 #    its value is dropped (omit_at = 0) where it has no signal.
 [metrics.tsr]
-formula   = "sloc > 0.0 ? tloc / sloc : 0.0"
-label     = "TLOC/SLOC"
-direction = "lower_better"
-group     = "loc"
+formula_cel = "sloc > 0.0 ? tloc / sloc : 0.0"
+label       = "TLOC/SLOC"
+direction   = "lower_better"
+group       = "loc"
 
 # 2) The same ratio, but ONLY on large files — zero elsewhere. Because the value
 #    is 0 (the omit floor) on files with loc <= 300, the `not_empty` population
 #    excludes them automatically. No special "filter" syntax is needed: a guarded
 #    metric + `not_empty` *is* the population filter.
 [metrics.tsr_big]
-formula   = "loc > 300.0 ? (sloc > 0.0 ? tloc / sloc : 0.0) : 0.0"
-label     = "TLOC/SLOC (loc>300)"
-direction = "lower_better"
-group     = "loc"
+formula_cel = "loc > 300.0 ? (sloc > 0.0 ? tloc / sloc : 0.0) : 0.0"
+label       = "TLOC/SLOC (loc>300)"
+direction   = "lower_better"
+group       = "loc"
 
 # 3) The aggregate: the worst ratio among the TOP 10 of those large files.
 #    `top10_max` = keep the 10 largest values, then take their max. Into `stats`.
 #    (Swap the reducer freely: `top10_avg` averages the same 10, `p90`, `sum`, …)
 [metrics.tsr_big_avg]
-scope   = "graph"
-formula = "agg('tsr_big', 'top10_max', 'not_empty')"
-label   = "TLOC/SLOC avg (top 10, loc>300)"
+scope       = "graph"
+formula_cel = "agg('tsr_big', 'top10_max', 'not_empty')"
+label       = "TLOC/SLOC avg (top 10, loc>300)"
 
 # 4) Show the per-file ratios as table columns — right after `hk` — and feature
 #    `tsr` on the node card. (A project [report] override; §1.6.)
@@ -219,8 +219,8 @@ metrics — `sloc` `loc` `lloc` `cloc` `blank` `cyclomatic` `cognitive` `hk`
 
 ```toml
 [metrics.tsr]
-formula = "sloc > 0.0 ? tloc / sloc : 0.0"
-group   = "loc"
+formula_cel = "sloc > 0.0 ? tloc / sloc : 0.0"
+group       = "loc"
 
 [rules.thresholds.file]
 tsr = 1.5      # `check` now flags every file whose test-to-source ratio > 1.5
@@ -521,10 +521,10 @@ HTML report and the map offers a **TLOC/SLOC** size mode and a **tsr_big** filte
 ## Quick reference
 
 ```text
-node metric     [metrics.k] formula="<CEL over node values>"   (+ label/direction/group/…)
+node metric     [metrics.k] formula_cel="<CEL over node values>"   (+ label/direction/group/…)
   ui fields     name=tooltip-title  short=table-header  description=tooltip-body
                 formula_pretty=readable-formula   warning=/info= two-tier severity thresholds
-aggregate       [metrics.k] scope="graph" formula="agg('m','reducer','population')"
+aggregate       [metrics.k] scope="graph" formula_cel="agg('m','reducer','population')"
   reducers      sum avg|mean min max count median p<q>  top<N> top<N>_<reducer>
   populations   not_empty (signal only)  |  all (missing = floor)
   "where cond"  put the predicate in a node metric: cond ? value : 0  → not_empty drops the rest

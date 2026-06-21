@@ -151,7 +151,7 @@ pub(crate) fn topo_order(
     for (key, def) in defs {
         for cand in &keyset {
             if *cand != key.as_str()
-                && references(&def.formula, cand)
+                && references(&def.formula_cel, cand)
                 && deps.get_mut(*key).unwrap().insert((*cand).to_string())
             {
                 *indeg.get_mut(*key).unwrap() += 1;

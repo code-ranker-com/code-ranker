@@ -2,7 +2,7 @@ use super::*;
 
 fn def(formula: &str) -> MetricDef {
     MetricDef {
-        formula: formula.to_string(),
+        formula_cel: formula.to_string(),
         value_type: "float".to_string(),
         ..Default::default()
     }

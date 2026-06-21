@@ -7,7 +7,7 @@ function, and exactly what is in scope in each place. It is written so an AI age
 can author correct CEL from this page alone.
 
 > **TL;DR for agents.** Two contexts, different scopes:
-> 1. **`[metrics.<key>] formula`** — arithmetic over a file's **numeric** values
+> 1. **`[metrics.<key>] formula_cel`** — arithmetic over a file's **numeric** values
 >    (+ `path`/`name`/… so a formula can branch on location). Inputs are floats,
 >    so `/` is real division. Math helpers (`pow`, `log2`, …) available.
 >    Graph-scope variant uses `agg(...)` → the `stats` block.
@@ -22,7 +22,7 @@ can author correct CEL from this page alone.
 
 ## 1. The two contexts at a glance
 
-| | `[metrics.<key>]` `formula` | `[rules.checks.<id>]` `when` |
+| | `[metrics.<key>]` `formula_cel` | `[rules.checks.<id>]` `when` |
 |---|---|---|
 | Result type | number | boolean |
 | Evaluated | once per node (or once per graph if `scope = "graph"`) | once per file node |
@@ -179,11 +179,11 @@ block):
 
 ```toml
 [metrics.comment_ratio]
-formula = "sloc > 0.0 ? cloc / sloc * 100.0 : 0.0"   # float division, guarded
+formula_cel = "sloc > 0.0 ? cloc / sloc * 100.0 : 0.0"   # float division, guarded
 
 [metrics.cognitive_p90]
-scope   = "graph"
-formula = "agg('cognitive', 'p90', 'not_empty')"
+scope       = "graph"
+formula_cel = "agg('cognitive', 'p90', 'not_empty')"
 ```
 
 > Strings/paths are **not** in scope in a metric formula — only numbers. Path and
@@ -274,7 +274,7 @@ An unknown `{key}` is left verbatim.
 ```toml
 # Metric: a guarded ratio (floats → real division)
 [metrics.tsr]
-formula = "sloc > 0.0 ? tloc / sloc : 0.0"
+formula_cel = "sloc > 0.0 ? tloc / sloc : 0.0"
 
 # Check: test bulk over a production file, exempting test files
 [rules.checks.inline_test_bulk]
@@ -303,7 +303,7 @@ message = "{name}: cyclomatic {cyclomatic} is in the project's worst 10%"
 
 # Metric: branch on path (blank the metric for generated code)
 [metrics.real_hk]
-formula = 'path.contains("/generated/") ? 0.0 : hk'
+formula_cel = 'path.contains("/generated/") ? 0.0 : hk'
 ```
 
 ---

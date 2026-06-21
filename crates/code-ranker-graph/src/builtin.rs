@@ -1,12 +1,12 @@
 //! The metric catalog, read from `metrics/builtin.toml`: `[categories.*]`,
-//! `[ast.*]` (tier-1 measured), `[fields.*]` (derived, each a `cel` formula), and
+//! `[ast.*]` (tier-1 measured), `[fields.*]` (derived, each a `formula_cel`), and
 //! the `[report]` view section (+ `[report.stats]` aggregate formulas).
 //! The crate root re-exports the accessors below; the tier-1 input types
 //! (`MetricInputs` / `FunctionUnit`) come from `code-ranker-plugin-api`.
 //!
 //! Wire encoding:
-//! - the executable `cel` formula is internal; the emitted [`AttributeSpec`]
-//!   carries `formula` (from `formula_human`) and `calc` (from `formula_js`);
+//! - the executable `formula_cel` is internal; the emitted [`AttributeSpec`]
+//!   carries `formula` (from `formula_pretty`) and `calc` (from `formula_js`);
 //! - `name` / `short` fall back to `label` (a field only spells out what differs);
 //! - `\n` in a description (TOML multiline) is encoded as `<br>` on the wire;
 //! - the `stats` block is produced by [`crate::stats::compute_stats`] over the
@@ -43,9 +43,9 @@ struct FieldDef {
     /// How to fix a breach — the `fix` line in `check` diagnostics.
     remediation: Option<String>,
     /// Executable CEL formula (derived `[fields.*]` only).
-    cel: Option<String>,
+    formula_cel: Option<String>,
     /// Pretty display formula (NOT CEL) — emitted as `AttributeSpec.formula`.
-    formula_human: Option<String>,
+    formula_pretty: Option<String>,
     /// JS the viewer can re-run — emitted as `AttributeSpec.calc`.
     formula_js: Option<String>,
     direction: Option<String>,
@@ -110,7 +110,7 @@ struct Builtin {
 static BUILTIN: LazyLock<Builtin> =
     LazyLock::new(|| toml::from_str(BUILTIN_TOML).expect("metrics/builtin.toml parses"));
 
-/// Compiled derived engine: `[fields.*]` `cel` formulas, with each metric's
+/// Compiled derived engine: `[fields.*]` `formula_cel` formulas, with each metric's
 /// `omit_at` from its spec, compiled once. Returned together with the defs (for
 /// the per-key `omit_at` used when writing values).
 static DERIVED: LazyLock<(BTreeMap<String, MetricDef>, Engine)> = LazyLock::new(|| {
@@ -118,7 +118,7 @@ static DERIVED: LazyLock<(BTreeMap<String, MetricDef>, Engine)> = LazyLock::new(
         .fields
         .iter()
         .filter_map(|(k, f)| {
-            f.cel
+            f.formula_cel
                 .as_ref()
                 .map(|cel| (k.clone(), derived_def(cel, f.omit_at)))
         })
@@ -129,7 +129,7 @@ static DERIVED: LazyLock<(BTreeMap<String, MetricDef>, Engine)> = LazyLock::new(
 
 fn derived_def(cel: &str, omit_at: f64) -> MetricDef {
     MetricDef {
-        formula: cel.to_string(),
+        formula_cel: cel.to_string(),
         value_type: "float".to_string(),
         omit_at,
         ..MetricDef::default()
@@ -186,7 +186,7 @@ fn direction(s: Option<&str>) -> Direction {
 }
 
 /// Build the emitted [`AttributeSpec`] from a metric entry, applying the
-/// `name`/`short` ← `label` fallback, the `formula_human`→`formula` /
+/// `name`/`short` ← `label` fallback, the `formula_pretty`→`formula` /
 /// `formula_js`→`calc` mapping, and the `\n`→`<br>` description re-encoding.
 fn to_spec(d: &FieldDef) -> AttributeSpec {
     AttributeSpec {
@@ -196,7 +196,7 @@ fn to_spec(d: &FieldDef) -> AttributeSpec {
         short: d.short.clone().or_else(|| d.label.clone()),
         description: d.description.as_deref().map(br),
         remediation: d.remediation.as_deref().map(br),
-        formula: d.formula_human.clone(),
+        formula: d.formula_pretty.clone(),
         calc: d.formula_js.clone(),
         direction: direction(d.direction.as_deref()),
         abbreviate: d.abbreviate,
@@ -380,7 +380,7 @@ mod tests {
     fn spec_field_mapping_is_wire_compatible() {
         let (specs, _) = metric_specs();
         let vol = &specs["volume"];
-        // formula_human → formula, formula_js → calc.
+        // formula_pretty → formula, formula_js → calc.
         assert_eq!(vol.formula.as_deref(), Some("length × log₂(vocabulary)"));
         assert_eq!(vol.calc.as_deref(), Some("length * Math.log2(vocabulary)"));
         // name/short fall back to label where the TOML omits them.

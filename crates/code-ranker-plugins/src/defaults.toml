@@ -20,7 +20,6 @@
 #                        language-neutral catalog lives here ONCE; every language
 #                        inherits it. A language may append its own presets (or
 #                        override one by `id`) in its `<lang>.toml`. Merged by id.
-#   [thresholds.<key>]   language-calibrated info/warning limits per metric.
 #   [specs.<key>]        per-language tweaks to a metric's display (e.g.
 #                        description), applied over the central builtin specs.
 #   [kinds] / [halstead] / [loc]

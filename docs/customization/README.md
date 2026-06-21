@@ -14,7 +14,7 @@ There are two places config lives — know which one you want:
 | Layer | File | Who edits it | What it controls |
 |---|---|---|---|
 | **Project** | `code-ranker.toml` (in your repo) | you, per project | custom `[metrics]`, `[rules]` thresholds/cycles/**checks**, `[report]` views, `[presets]`, `[ignore]`, `[levels]`, plugin/output |
-| **Language** | `<lang>.toml` (shipped in the binary) | a language plugin author | the node-kind vocabulary, presets, default thresholds, and the **report list overrides** (`[report]`) |
+| **Language** | `<lang>.toml` (shipped in the binary) | a language plugin author | the node-kind vocabulary, presets, and the **report list overrides** (`[report]`) |
 
 Custom metrics and thresholds are **project** config (runtime). The report
 list-override DSL is **language** config (compiled into the plugin). Both are
@@ -170,7 +170,7 @@ code-ranker check . --config docs/customization/custom-field-example.toml
 
 # triage scorecard ranked by the custom `tsr` metric (warning tier, worst file):
 code-ranker report . --config docs/customization/custom-field-example.toml \
-  --output.scorecard --metric tsr --severity warning --top 1
+  --output.scorecard --focus-rule tsr --severity warning --top 1
 
 # or send the JSON to an explicit path / stdout:
 code-ranker report . --config docs/customization/custom-field-example.toml --output.json.path=-
@@ -224,9 +224,10 @@ tsr = 1.5      # `check` now flags every file whose test-to-source ratio > 1.5
 `check` reads the metric off each node (the key doubles as the attribute key) and
 the breach inherits the metric's concern `group` (`loc` → the `SIZ` size group), so
 a custom-metric violation slots in beside the built-ins. A genuinely unknown
-key — a typo, or a metric you never defined — is still rejected at load. This is a
-**single-tier** gate; the **two-tier** `warning` / `info` thresholds on the metric
-itself (§1.1) drive the scorecard and viewer badges instead.
+key — a typo, or a metric you never defined — is still rejected at load. This
+**single-tier** gate limit is also what the scorecard and viewer badges visualize:
+it becomes the `warning` tier, and the metric's optional `info` (§1.1) adds a softer
+line below it.
 
 ### 1.5 Other project keys (brief)
 
@@ -274,7 +275,7 @@ patched list), so listing a metric the current language doesn't emit is harmless
 A **preset** is a refactoring lens: it ranks files by one metric and ships a
 ready-to-paste AI prompt. The plugin catalog has the usual SOLID / complexity
 presets; add your own (over a custom metric) with `[presets.<ID>]` — the table key
-is the preset id. It feeds the `scorecard` (narrow to it with `--metric`), the `prompt`, and the
+is the preset id. It feeds the `scorecard` (narrow to it with `--focus-rule`), the `prompt`, and the
 viewer's Prompt-Generator buttons:
 
 ```toml
@@ -294,7 +295,7 @@ overrides it; a new id appends. Run it:
 
 ```sh
 # scorecard narrowed to the metric, warning tier, worst file:
-code-ranker report . --config code-ranker.toml --output.scorecard --metric tsr --severity warning --top 1
+code-ranker report . --config code-ranker.toml --output.scorecard --focus-rule tsr --severity warning --top 1
 
 # or generate the auto-targeted refactoring prompt (single worst module):
 code-ranker report . --config code-ranker.toml --output.prompt --top 1
@@ -532,5 +533,5 @@ list patch      key = { clear=true, remove=[..], replace={old="new"},
                         after={anchor=[..]}, before={anchor=[..]}, prepend=[..], add=[..] }
 report views    [report] columns|card|stats = <list patch>   (works in <lang>.toml AND code-ranker.toml)
 map controls    [report] size|filter = <list patch>   (SVG circle-size modes / node filters; built-ins sloc,hk / cycle)
-preset          [presets.ID] sort_metric="k" title="…" prompt="…"   (scorecard --metric k / prompt)
+preset          [presets.ID] sort_metric="k" title="…" prompt="…"   (scorecard --focus-rule k / prompt)
 ```

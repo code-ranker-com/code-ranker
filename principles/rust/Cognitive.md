@@ -82,7 +82,7 @@ function dominates — it lowers the *true* reading cost. Run the test suite aft
   lives there. Reduce both together.
 - [KISS](KISS.md) — the qualitative root.
 - [SRP](SRP.md) — a deeply nested function often conflates several jobs.
-- [ADP](ADP.md) / [Cycles](Cycles.md) — the cycle trap a careless split triggers.
+- [ADP](ADP.md) — the cycle trap a careless split triggers.
 
 ## References
 

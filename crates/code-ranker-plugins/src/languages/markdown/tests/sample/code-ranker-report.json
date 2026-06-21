@@ -20,7 +20,7 @@
         "chain": {
           "description": "Three or more units form a strongly-connected component (A → B → C → A); the whole component must be loaded and changed together, defeating modular boundaries.",
           "label": "Chain",
-          "remediation": "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/Cycles.md"
+          "remediation": "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/ADP.md"
         }
       },
       "cycles": [
@@ -80,6 +80,10 @@
           "label": "Broken links",
           "remediation": "Fix or remove each dead link — correct the path, restore the target file, or drop the reference.",
           "short": "Broken",
+          "thresholds": {
+            "info": 0.0,
+            "warning": 0.0
+          },
           "value_type": "int"
         },
         "cycle": {

@@ -365,12 +365,12 @@ description = "Cycle kind this node participates in."
 [cycles.mutual]
 label = "Mutual"
 description = "Two units import each other (A ↔ B), so neither can be built, tested, or understood in isolation — the tightest possible coupling."
-remediation = "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/Cycles.md"
+remediation = "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/ADP.md"
 
 [cycles.chain]
 label = "Chain"
 description = "Three or more units form a strongly-connected component (A → B → C → A); the whole component must be loaded and changed together, defeating modular boundaries."
-remediation = "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/Cycles.md"
+remediation = "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/ADP.md"
 
 # ── prompt scaffolding (Prompt-Generator framing) ─────────────────────────────
 # The language-neutral prose the prompt wraps a preset in — DATA, not code.

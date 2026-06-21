@@ -2,7 +2,7 @@ use anyhow::Result;
 use code_ranker_plugin_api::{
     Preset, default_cycle_kinds, default_node_kinds,
     graph::Graph,
-    level::{AttributeSpec, EdgeKindSpec, Grouping, Level, NodeKindSpec, Thresholds},
+    level::{AttributeSpec, EdgeKindSpec, Grouping, Level, NodeKindSpec},
     metrics::MetricInputs,
     node::Node,
     plugin::{LanguagePlugin, PluginInput},
@@ -105,23 +105,6 @@ impl LanguagePlugin for RustPlugin {
                 grouping: None,
             },
         ]
-    }
-
-    fn thresholds(&self) -> BTreeMap<String, Thresholds> {
-        // Rust-calibrated info/warning limits, read from `[thresholds]` in
-        // `rust.toml` (see that file for the calibration notes).
-        crate::config::thresholds(&CONFIG)
-            .into_iter()
-            .map(|(k, t)| {
-                (
-                    k,
-                    Thresholds {
-                        info: t.info,
-                        warning: t.warning,
-                    },
-                )
-            })
-            .collect()
     }
 
     fn presets(&self, _input: &PluginInput) -> Vec<Preset> {

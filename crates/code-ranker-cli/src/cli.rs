@@ -178,7 +178,9 @@ pub(crate) enum Command {
         #[arg(long = "output.codequality.path", value_name = "PATH")]
         output_codequality_path: Option<String>,
 
-        /// Emit the AI prompt for one principle (default to a `…-{preset}.md` file).
+        /// Emit the AI fix-prompt, auto-targeted at the single worst module of the
+        /// worst-violating principle (requires `--top 1`; default to a `…-{preset}.md`
+        /// file, where {preset} is that principle).
         #[arg(long = "output.prompt")]
         output_prompt: bool,
 
@@ -196,11 +198,23 @@ pub(crate) enum Command {
         #[arg(long = "output.scorecard.path", value_name = "PATH")]
         output_scorecard_path: Option<String>,
 
-        /// Narrow the scorecard to one ranking axis: hk | cycle | sloc |
-        /// cognitive | cyclomatic | fan_in | fan_out | items. Without it the
-        /// scorecard spans every principle. `scorecard` only.
-        #[arg(long = "metric", value_name = "NAME")]
-        metric: Option<String>,
+        /// Focus the scorecard / prompt on one axis. Accepts a **metric**
+        /// (`hk`, `sloc`, … — case-insensitive, matched by value so it works with
+        /// or without a configured threshold), the full threshold rule id
+        /// (`threshold.file.hk`), or a **principle** id (`LSP`, `ADP`, …). A metric
+        /// frames the output by the metric itself (no SOLID wrapper); a principle by
+        /// that design principle. Without it, the scorecard spans every principle and
+        /// the prompt auto-targets the worst. Mirrors `check`'s `--focus-rule`.
+        #[arg(long = "focus-rule", value_name = "METRIC | RULE | PRINCIPLE")]
+        focus_rule: Option<String>,
+
+        /// Restrict the scorecard / prompt to modules under these paths (repeatable).
+        /// The whole project is still analyzed (the graph needs it), but only modules
+        /// located under one of these paths are ranked and listed. Paths are
+        /// repo-relative (matching the reported location); a folder matches everything
+        /// beneath it. Mirrors `check`'s `--focus-path`.
+        #[arg(long = "focus-path", value_name = "PATH")]
+        focus_path: Vec<String>,
 
         /// Threshold tier driving the scorecard: info | warning | auto.
         /// Repeatable to show several tiers. `scorecard` only.

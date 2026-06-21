@@ -1,5 +1,5 @@
-//! Preset catalog, metric thresholds, and the `[specs.<key>]` description
-//! overrides a plugin applies over the central `builtin.toml` attribute specs.
+//! Preset catalog and the `[specs.<key>]` description overrides a plugin applies
+//! over the central `builtin.toml` attribute specs.
 
 use code_ranker_plugin_api::Preset;
 use code_ranker_plugin_api::level::AttributeSpec;
@@ -27,13 +27,6 @@ pub struct PresetCfg {
 pub struct SpecOverride {
     #[serde(default)]
     pub description: Option<String>,
-}
-
-/// One `[thresholds.<key>]` row.
-#[derive(Debug, Clone, Copy, Deserialize)]
-pub struct ThresholdCfg {
-    pub info: f64,
-    pub warning: f64,
 }
 
 /// Read the `[[presets]]` array from a merged config (empty if absent).
@@ -72,15 +65,6 @@ pub fn resolved_presets(cfg: &Table) -> Vec<Preset> {
             connections: p.connections,
         })
         .collect()
-}
-
-/// Read the `[thresholds]` table from a merged config as `key → (info, warning)`
-/// (empty if absent).
-pub fn thresholds(cfg: &Table) -> BTreeMap<String, ThresholdCfg> {
-    cfg.get("thresholds")
-        .cloned()
-        .map(|v| v.try_into().expect("[thresholds] shape"))
-        .unwrap_or_default()
 }
 
 /// Read the `[specs]` table from a merged config as `key → override`

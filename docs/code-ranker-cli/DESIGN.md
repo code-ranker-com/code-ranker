@@ -182,8 +182,9 @@ the snapshot's `graphs` map under `"files"`.
   (`write_recommendations` → the `recommend` module, the console counterpart of
   the viewer's Prompt Generator): `prompt` emits the LLM Markdown for one
   principle, `scorecard` a console triage table. The `scorecard` is narrowed by
-  `--metric` (one ranking axis) and `--severity` (`info` / `warning` / `auto`;
-  repeatable) and capped by `--top`. The `prompt` is **auto-targeted at the single
+  `--focus-rule` (one ranking axis, a full threshold rule id, or a principle),
+  `--focus-path` (scope the ranked modules to a subtree) and `--severity` (`info` /
+  `warning` / `auto`; repeatable) and capped by `--top`. The `prompt` is **auto-targeted at the single
   worst module** and requires `--top 1` — there is no CLI principle selector. These
   knobs are validated up front (rejected without a prompt/scorecard format,
   `--output.prompt` requires `--top 1`, and an explicit `--index` is rejected with a
@@ -199,7 +200,7 @@ dispatch, and artifact I/O routing.
 
 `crates/code-ranker-cli/src/recommend.rs` is the console counterpart of the HTML
 viewer's Prompt Generator (`export-popup.js`) — it derives refactoring guidance
-from the snapshot's calibrated `node_attributes[*].thresholds`. It is pure
+from the snapshot's gate-derived `node_attributes[*].thresholds`. It is pure
 (reads a `LevelGraph` + `presets`, no I/O) and language-agnostic (it hardcodes no
 metric — it reads each preset's `sort_metric` and the metric's thresholds from
 the snapshot). Functions:

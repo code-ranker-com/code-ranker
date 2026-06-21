@@ -7,11 +7,17 @@ copy-paste recipes (one command per scenario): [USE-CASES.md](code-ranker-cli/US
 ## Install
 
 If a `code-ranker` command errors with "command not found" (the binary isn't
-installed) and you are working in a Rust project, install it with cargo:
+installed), install it via the channel that matches the project's existing
+toolchain — reuse what the user already has rather than introducing a new one:
 
 ```sh
-cargo install code-ranker
+cargo install code-ranker     # Rust project (Cargo on PATH)
+npm install -g code-ranker    # web / JS / TS project (npm on PATH)
+pip install code-ranker       # Python project (pip / uv / pipx)
 ```
+
+All channels ship the same binary. Full guide (universal shell installer, Docker,
+platform notes): [installation.md](installation.md).
 
 ## Two commands
 
@@ -35,7 +41,7 @@ Focus on these; treat everything else as secondary.
   [HK principle](https://github.com/ffedoroff/code-ranker/blob/main/principles/rust/HK.md).
 
 **Strategy:** fix one thing at a time, worst-first. Cycles (ADP) are structural —
-clear them first; then coupling (HK). Focus an axis with `--metric` and inspect
+clear them first; then coupling (HK). Focus an axis with `--focus-rule` and inspect
 the worst tier with `--severity warning`.
 
 ## The fix loop
@@ -46,10 +52,12 @@ One thing per pass, worst-first.
 # 1. Find what to fix. The gate verdict:
 code-ranker check .
 #    …or focus one axis in the triage (cycle = ADP, then hk, sloc, cognitive, …):
-code-ranker report . --output.scorecard --metric cycle --top 1
+code-ranker report . --output.scorecard --focus-rule cycle --top 1
 
 # 2. Get the actionable fix-prompt for the single worst module (auto-targeted):
 code-ranker report . --output.prompt.path=stdout --top 1
+#    …or get a focused fix-prompt directly (metric- or principle-framed):
+code-ranker report . --output.prompt.path=stdout --focus-rule hk --top 1
 
 # 3. Review it; propose the fix to the user and get agreement.
 
@@ -71,11 +79,22 @@ open .code-ranker/after.html          # macOS; xdg-open on Linux
 
 Notes:
 
-- `--output.prompt` is **auto-targeted** at the single worst module and **requires
-  `--top 1`**. There is no manual principle selection — it always describes the worst.
-- To focus a specific axis, narrow the triage with `--output.scorecard --metric <m>`:
-  `cycle`, `hk`, `sloc`, `cognitive`, `cyclomatic`, `fan_in`, `fan_out`, `items`.
-- For `--metric cycle`, `--top 1` shows **one whole cycle** — the biggest `chain`
+- `--output.prompt` **requires `--top 1`**. Without `--focus-rule` it is **auto-targeted**
+  at the single worst module of the worst-violating principle; add `--focus-rule` to pick
+  the axis yourself (see the next note).
+- To focus a specific axis, narrow the triage with `--output.scorecard --focus-rule <name>`:
+  a **metric** (`cycle`, `hk`, `sloc`, `cognitive`, `cyclomatic`, `fan_in`, `fan_out`,
+  `items` — also accepts the full rule id, e.g. `threshold.file.hk`) or a **principle** id
+  (`LSP`, `SRP`, `OCP`, …). `--focus-rule` also applies to
+  `--output.prompt`: `--focus-rule hk --output.prompt.path=stdout --top 1` emits a
+  **metric-framed** fix-prompt directly (titled "HK — Henry-Kafura", no Liskov wrapper),
+  while `--focus-rule <PRINCIPLE>` emits a **principle-framed** one. Without `--focus-rule`, the
+  prompt auto-targets the worst-violating principle.
+- To scope the ranking to a subtree, add `--focus-path <dir>` (repeatable): the whole
+  project is still analyzed, but only modules under those repo-relative paths are
+  ranked/listed (a folder matches everything beneath it). Combine with `--focus-rule` to
+  intersect; cycles stay global (they are not narrowed by `--focus-path`).
+- For `--focus-rule cycle`, `--top 1` shows **one whole cycle** — the biggest `chain`
   (else the biggest `mutual`) — with **all** its modules listed, so you can fix the
   loop as a unit.
 
@@ -99,7 +118,7 @@ threshold mismatch.
 
 ```sh
 code-ranker report . --output.scorecard                       # triage: all principles
-code-ranker report . --output.scorecard --metric hk --top 1   # focus one axis
+code-ranker report . --output.scorecard --focus-rule hk --top 1    # focus one axis
 code-ranker report . --output.prompt.path=stdout --top 1      # LLM fix-prompt for the worst module
 code-ranker check  . --baseline base.json --output-format json   # CI regression verdict
 ```
@@ -108,8 +127,8 @@ code-ranker check  . --baseline base.json --output-format json   # CI regression
 
 - Analysis is offline and fast. The Rust plugin needs a warm cargo cache
   (`cargo metadata --offline`); if it errors, run `cargo fetch` first.
-- `--metric` / `--severity` / `--top` are **report-only** — they require a
-  `--output.prompt` or `--output.scorecard`, else the run errors.
+- `--focus-rule` / `--focus-path` / `--severity` / `--top` are **report-only** — they
+  require a `--output.prompt` or `--output.scorecard`, else the run errors.
 - `--output.prompt` **requires `--top 1`** — it is auto-targeted at the single worst
   module. For a broader view use `--output.scorecard`.
 - `--top N` is a reporting limit (`--top 1` = the single worst); use it instead

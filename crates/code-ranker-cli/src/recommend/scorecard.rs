@@ -3,8 +3,8 @@
 //! modules overall.
 
 use super::{
-    Severity, attr_short, clean_path, file_count, fmt_val, in_cycle, is_internal, num, reco_for,
-    top_cycle_groups,
+    Severity, attr_short, clean_path, file_count, fmt_val, in_cycle, in_focus, is_internal, num,
+    reco_for, top_cycle_groups,
 };
 use anyhow::Result;
 use code_ranker_graph::level_graph::LevelGraph;
@@ -95,7 +95,8 @@ pub fn render_scorecard(
     presets: &[Preset],
     severities: &[Severity],
     top: Option<usize>,
-    narrow: Option<&str>,
+    focus: Option<&super::Focus>,
+    focus_paths: &[String],
 ) -> Result<String> {
     let want_warning = severities
         .iter()
@@ -104,15 +105,19 @@ pub fn render_scorecard(
         .iter()
         .any(|s| matches!(s, Severity::Info | Severity::Auto));
 
-    // Narrowing focuses the scorecard on one ranking axis (a metric, e.g. `hk`,
-    // `cycle`, `sloc`). Validate it, then keep the presets that rank by it for the
-    // table; the worst-modules list ranks by the metric directly.
-    if let Some(m) = narrow {
-        validate_narrow_metric(level, m)?;
-    }
-    let shown_presets: Vec<&Preset> = match narrow {
-        Some(m) => presets.iter().filter(|p| p.sort_metric == m).collect(),
-        None => presets.iter().collect(),
+    // `--focus` picks the lens. A metric frames the scorecard by that metric alone
+    // (no principle rows — the worst-modules list carries the ranking); a principle
+    // shows just that preset's row; without it, the full per-principle triage. The
+    // metric the worst-modules list ranks by is the focused metric, the focused
+    // principle's `sort_metric`, or none (a breach-ranked list).
+    let (shown_presets, narrow): (Vec<&Preset>, Option<&str>) = match focus {
+        Some(super::Focus::Metric(m)) => (Vec::new(), Some(m.as_str())),
+        Some(super::Focus::Principle(id)) => {
+            let p: Vec<&Preset> = presets.iter().filter(|p| &p.id == id).collect();
+            let m = p.first().map(|p| p.sort_metric.as_str());
+            (p, m)
+        }
+        None => (presets.iter().collect(), None),
     };
 
     let mut out = String::new();
@@ -120,18 +125,22 @@ pub fn render_scorecard(
         "scorecard  ({plugin}, {} files)\n\n",
         file_count(level)
     ));
+    // A metric lens names what it is focused on (there is no principle row to).
+    if let Some(super::Focus::Metric(m)) = focus {
+        out.push_str(&format!("focus: {}\n", metric_focus_label(level, m)));
+    }
 
     // ── Per-principle table ──────────────────────────────────────────────────
     let mut rows = principle_rows(level, &shown_presets, narrow, want_warning, want_info);
     rows.sort_by(|a, b| b.warn.cmp(&a.warn).then(b.info.cmp(&a.info)));
 
-    if rows.is_empty() && narrow.is_none() {
+    if rows.is_empty() && focus.is_none() {
         out.push_str("No threshold breaches for the selected severity.\n");
         return Ok(out);
     }
 
-    // The per-principle table (skipped when narrowed to a metric no preset ranks
-    // by — the worst-modules list below carries the ranking instead).
+    // The per-principle table (skipped under a metric lens — the worst-modules list
+    // below carries the ranking instead).
     if !rows.is_empty() {
         render_principle_table(&mut out, &rows, want_warning, want_info);
     }
@@ -141,10 +150,10 @@ pub fn render_scorecard(
     let limit = top.unwrap_or(15);
 
     let mod_rows = match narrow {
-        // Narrowed: the chosen metric's ranked modules (note may emit a heading).
-        Some(m) => narrowed_mod_rows(&mut out, level, m, top, limit),
+        // Focused on a metric: that metric's ranked modules (may emit a heading).
+        Some(m) => narrowed_mod_rows(&mut out, level, m, top, limit, focus_paths),
         // Otherwise: every internal node with a breach, ranked by severity.
-        None => breach_mod_rows(level, want_warning, want_info, limit),
+        None => breach_mod_rows(level, want_warning, want_info, limit, focus_paths),
     };
 
     if mod_rows.is_empty() {
@@ -159,34 +168,20 @@ pub fn render_scorecard(
     Ok(out)
 }
 
-/// Validate a `--metric` narrowing axis, erroring with the known-metric list if
-/// the name isn't a thresholded/remediated metric or the `cycle` pseudo-metric.
-fn validate_narrow_metric(level: &LevelGraph, m: &str) -> Result<()> {
-    let known = m == "cycle" || level.node_attributes.contains_key(m);
-    if !known {
-        // The narrow-able ranking axes: metrics that carry a calibrated
-        // threshold or a fix-prompt doc (`remediation`), plus the `cycle`
-        // pseudo-metric — derived from the data, not the preset catalog (so a
-        // metric stays listed even when no preset ranks by it).
-        let mut metrics: Vec<&str> = level
-            .node_attributes
-            .iter()
-            .filter(|(_, s)| {
-                s.thresholds.is_some()
-                    || s.remediation
-                        .as_deref()
-                        .is_some_and(|r| r.contains("/principles/"))
-            })
-            .map(|(k, _)| k.as_str())
-            .collect();
-        metrics.push("cycle");
-        metrics.sort_unstable();
-        anyhow::bail!(
-            "unknown --metric '{m}'. Known metrics: {}",
-            metrics.join(", ")
-        );
+/// The metric lens's header label: `HK — Henry–Kafura` (short/label + `name`),
+/// or just the key when no richer names exist.
+fn metric_focus_label(level: &LevelGraph, m: &str) -> String {
+    if m == "cycle" {
+        return "cycle — dependency cycles".to_string();
     }
-    Ok(())
+    let spec = level.node_attributes.get(m);
+    let label = spec
+        .and_then(|s| s.short.as_deref().or(s.label.as_deref()))
+        .unwrap_or(m);
+    match spec.and_then(|s| s.name.as_deref()) {
+        Some(n) if n != label => format!("{label} — {n}"),
+        _ => label.to_string(),
+    }
 }
 
 /// Build the per-principle table rows from the shown presets.
@@ -290,11 +285,13 @@ fn narrowed_mod_rows(
     m: &str,
     top: Option<usize>,
     limit: usize,
+    focus_paths: &[String],
 ) -> Vec<ModRow> {
     if m == "cycle" {
+        // A cycle is a global unit, so `--focus-path` does not narrow its members.
         cycle_mod_rows(out, level, top)
     } else {
-        metric_mod_rows(level, m, limit)
+        metric_mod_rows(level, m, limit, focus_paths)
     }
 }
 
@@ -332,11 +329,18 @@ fn cycle_mod_rows(out: &mut String, level: &LevelGraph, top: Option<usize>) -> V
     mod_rows
 }
 
-/// Metric-narrowed worst-modules rows: the metric's ranked modules, capped.
-fn metric_mod_rows(level: &LevelGraph, m: &str, limit: usize) -> Vec<ModRow> {
+/// Metric-narrowed worst-modules rows: the metric's ranked modules, capped,
+/// restricted to `--focus-path` (empty = no restriction).
+fn metric_mod_rows(
+    level: &LevelGraph,
+    m: &str,
+    limit: usize,
+    focus_paths: &[String],
+) -> Vec<ModRow> {
     let reco = reco_for(level, m);
     reco.sorted
         .iter()
+        .filter(|n| in_focus(n, focus_paths))
         .take(limit)
         .map(|n| {
             let head = match num(n, m) {
@@ -365,9 +369,14 @@ fn breach_mod_rows(
     want_warning: bool,
     want_info: bool,
     limit: usize,
+    focus_paths: &[String],
 ) -> Vec<ModRow> {
     let mut mod_rows: Vec<ModRow> = Vec::new();
-    for n in level.nodes.iter().filter(|n| is_internal(n)) {
+    for n in level
+        .nodes
+        .iter()
+        .filter(|n| is_internal(n) && in_focus(n, focus_paths))
+    {
         let breaches = node_breaches(level, n, want_warning, want_info);
         if breaches.is_empty() {
             continue;

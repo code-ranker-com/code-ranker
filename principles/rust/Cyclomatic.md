@@ -92,7 +92,7 @@ use eval::{reduce, exec_f64};         // internal call sites unchanged
 ## The cycle trap (read this before you split)
 
 Splitting for **Lever B** has one failure mode that the gate will catch as a
-**dependency cycle** ([ADP](ADP.md) / [Cycles](Cycles.md)): if the functions you
+**dependency cycle** ([ADP](ADP.md)): if the functions you
 move still reference items *defined in the parent* — a type, a `static`, a helper —
 while the parent imports the moved functions, you have created a **mutual
 parent ↔ child dependency**. The file-level cyclomatic drops, but a new violation
@@ -171,7 +171,7 @@ construction (pure relocation), so any test change is a mistake.
 - [KISS](KISS.md) — the qualitative root: fewer branches is fewer surprises.
 - [SRP](SRP.md) — a file that sums to a high cyclomatic is usually doing several
   jobs; splitting by responsibility lowers it for free.
-- [ADP](ADP.md) / [Cycles](Cycles.md) — the cycle trap a careless split triggers.
+- [ADP](ADP.md) — the cycle trap a careless split triggers.
 - [HK](HK.md) — contrast: there, relocation does *not* help (coupling is squared).
 
 ## References

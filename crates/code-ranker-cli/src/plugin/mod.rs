@@ -8,7 +8,7 @@ use anyhow::{Result, bail};
 use code_ranker_graph::write_metrics;
 use code_ranker_plugin_api::{
     graph::Graph,
-    level::{AttributeSpec, Level, Thresholds},
+    level::{AttributeSpec, Level},
     metrics::MetricInputs,
     node::Node,
     plugin::{LanguagePlugin, PluginInput},
@@ -103,15 +103,6 @@ pub fn roots(name: &str, workspace: &Path) -> Vec<(String, String)> {
         .iter()
         .find(|p| p.name() == name)
         .map(|p| p.roots(workspace))
-        .unwrap_or_default()
-}
-
-/// Language-calibrated per-metric thresholds from the matching plugin.
-pub fn thresholds(name: &str) -> BTreeMap<String, Thresholds> {
-    registry()
-        .iter()
-        .find(|p| p.name() == name)
-        .map(|p| p.thresholds())
         .unwrap_or_default()
 }
 

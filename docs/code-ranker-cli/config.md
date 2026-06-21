@@ -243,9 +243,10 @@ here with no code change. Fields:
   tooltip line. `calc` is the JS the viewer re-runs with the node's values for the
   second line (the formula filled with numbers, like `hk`); it defaults to the CEL
   `formula`, so plain-arithmetic metrics get the line for free.
-- `warning` / `info` — optional two-tier severity thresholds the scorecard and
-  viewer badge against (a missing tier mirrors the other). Distinct from the
-  single-tier `[rules.thresholds.file]` `check` gate.
+- `warning` / `info` — optional two-tier advisory severity thresholds the scorecard
+  and viewer badge against (a missing tier mirrors the other). If the metric is also
+  gated in `[rules.thresholds.file]`, the gate limit overrides `warning` (the gate
+  wins) and `info` is kept only when it stays below it.
 
 A node-scope metric is computed for every file (and function, when that level is
 on) and is usable as a `[rules.thresholds.file]` limit like any built-in (the key

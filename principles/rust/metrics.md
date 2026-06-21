@@ -256,7 +256,7 @@ A single 0–100 score (higher = more maintainable) folding volume, branching,
 and size together:
 
 ```
-mi      = 171 − 5.2·ln(volume) − 0.23·cyclomatic − 16.2·ln(sloc)
+mi      = 171 − 5.2·ln(volume)   − 0.23·cyclomatic − 16.2·ln(sloc)
 mi_sei  = 171 − 5.2·log₂(volume) − 0.23·cyclomatic − 16.2·log₂(sloc)
                 + 50·sin(√(2.4 × comment_ratio))        comment_ratio = cloc ÷ sloc
 ```
@@ -286,11 +286,11 @@ Worked on `parser.rs`. First, what `parser.rs` itself imports (`fan_out`):
 
 ```rust
 // parser.rs
-use crate::ast::{Node, Expr};   // uses → ast.rs        → fan_out +1
+use crate::ast::{Node, Expr};   // uses → ast.rs         → fan_out +1
 use crate::lexer::Token;        // uses → lexer.rs       → fan_out +1
 use crate::ast::Stmt;           // uses → ast.rs (same file) — already counted
 use serde::Serialize;           // uses → serde, but external → fan_out_external, not fan_out
-                                 //                       → fan_out = 2
+                                //                       → fan_out = 2
 ```
 
 `ast.rs` and `lexer.rs` are two distinct internal files, so `fan_out = 2`. The

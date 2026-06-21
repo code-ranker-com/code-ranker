@@ -3,7 +3,7 @@
 //! `buildContent`).
 
 use super::{
-    Severity, attr_short, clean_path, fmt_val, is_internal, num, reco_for, tier_count,
+    Severity, attr_short, clean_path, fmt_val, in_focus, is_internal, num, reco_for, tier_count,
     top_cycle_groups,
 };
 use anyhow::{Result, bail};
@@ -13,6 +13,7 @@ use code_ranker_plugin_api::{Preset, PromptTemplate, node::Node};
 /// Compose the AI prompt for one principle — the same Markdown the HTML viewer's
 /// Prompt Generator produces: intent + summary + principle link + task checklist,
 /// then the ranked offending modules, then the preset's connection lists.
+/// `focus_paths` (empty = no restriction) narrows the ranked modules to a subtree.
 pub fn compose_prompt(
     level: &LevelGraph,
     presets: &[Preset],
@@ -20,11 +21,12 @@ pub fn compose_prompt(
     preset_id: &str,
     sev: Severity,
     top: Option<usize>,
+    focus_paths: &[String],
 ) -> Result<String> {
     let Some(preset) = presets.iter().find(|p| p.id == preset_id) else {
         let known: Vec<&str> = presets.iter().map(|p| p.id.as_str()).collect();
         bail!(
-            "unknown --preset '{preset_id}'. Known presets: {}",
+            "unknown preset '{preset_id}'. Known presets: {}",
             known.join(", ")
         );
     };
@@ -33,7 +35,8 @@ pub fn compose_prompt(
     // For the cycle (ADP) preset the unit is a whole cycle group, not a node:
     // `--top` counts CYCLES (default 1 — the single biggest chain), and every
     // member of each selected cycle is listed. Other presets rank nodes, and
-    // the default count = the active tier's size (≥ 1).
+    // the default count = the active tier's size (≥ 1). A cycle is a global unit,
+    // so `--focus-path` only narrows the node-ranked (non-cycle) lists.
     let is_cycle = preset.sort_metric == "cycle";
     let cycle_groups = if is_cycle {
         top_cycle_groups(level, top.unwrap_or(1))
@@ -47,7 +50,12 @@ pub fn compose_prompt(
             .collect()
     } else {
         let n = top.unwrap_or_else(|| tier_count(&reco, sev).max(1));
-        reco.sorted.iter().take(n).copied().collect()
+        reco.sorted
+            .iter()
+            .filter(|node| in_focus(node, focus_paths))
+            .take(n)
+            .copied()
+            .collect()
     };
 
     let mut parts: Vec<String> = Vec::new();
@@ -119,7 +127,12 @@ pub fn compose_prompt(
             let label = attr_short(level, m);
             let mut s = format!("## Modules ordered by {label}\n\n");
             if let Some(spec) = level.node_attributes.get(m) {
-                if let Some(d) = &spec.description {
+                // Skip the metric description when it already appears verbatim as the
+                // Summary above — true for the metric lens, whose summary IS the
+                // metric's description, so it would otherwise print twice.
+                if let Some(d) = &spec.description
+                    && d != &preset.prompt
+                {
                     s.push_str(d);
                     s.push_str("\n\n");
                 }

@@ -36,7 +36,12 @@
 
 <main>
 
-<!-- ── Files view (the single graph level) ───────────────────────────────── -->
+<!-- ── Level switcher (Files / Functions / …) — populated by updateFilesTab()
+     from the snapshot's graph levels; hidden for a single-level report. ─────── -->
+<nav class="report-switch" id="report-switch" hidden></nav>
+
+<!-- ── Per-level views. The `files` section is the template; updateFilesTab()
+     clones it for every other level present in the snapshot. ───────────────── -->
 <section class="view active" data-view="files">
   <div class="frame-wrap">
     <div class="svg-frame" id="frame-files"></div>

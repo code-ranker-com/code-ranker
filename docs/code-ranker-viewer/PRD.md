@@ -195,7 +195,11 @@ diff between the baseline snapshot and the current `[input]`: nodes and
 edges added, removed, or affected. The diff includes an overall
 verdict: `improved`, `degraded`, or `neutral`. The interactive
 diff HTML uses Graphviz WASM (bundled in the binary) for client-side
-DOT→SVG layout; there is a single Files view (no level switcher). On a fresh load
+DOT→SVG layout. The viewer shows the `files` level by default; when the snapshot
+carries extra levels (e.g. `functions`, emitted by `[levels] functions = true`) a
+**level switcher** (Files / Functions tabs above the map) selects which level's
+map + node table to show — the switcher is hidden for a single-level report, so
+those look exactly as before. On a fresh load
 the map opens a **default view**: the files tier, drilled through any single-folder
 chain from the root to the first branching folder, at the node-budget reveal depth
 (so it comes up usefully expanded rather than at a bare overview). The underlying

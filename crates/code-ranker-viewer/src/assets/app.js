@@ -34,6 +34,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!window._ntSelected) window._ntSelected = {};
     window._ntSelected[epState.level] = new Set(epState.sel);
   }
+  // Build any extra level views (e.g. `functions`) + the level switcher BEFORE
+  // node-table setup, so the per-level tables are wired up by the loop below.
+  updateFilesTab();
   document.querySelectorAll('.view').forEach(sec => setupNodeTable(sec, sec.dataset.view));
   setupSnapPopup();
   setupModeToggle();
@@ -42,7 +45,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   buildSummary();
   setupSummaryStatControl();
   setupSummaryPopup();
-  updateFilesTab();
   updateHeader();
   if (window._statsOpen) openSummaryPopup(false);   // restore the popup from the URL
 

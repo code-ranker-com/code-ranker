@@ -216,7 +216,9 @@ sub-file unit (function / method / closure / …) carrying the same per-unit
 metrics. **Off by default**, so the default output (and goldens) is unchanged;
 the `files` level is always emitted. Function nodes have `parent` = their file
 node id and a per-language `kind` (e.g. `fn`/`method`/`closure`,
-`function`/`arrow`/`generator`). No call graph is built (no `Calls` edges).
+`function`/`arrow`/`generator`). No call graph is built (no `Calls` edges). The
+HTML viewer surfaces the extra level through a **level switcher** (Files /
+Functions tabs); the JSON snapshot carries it under `graphs.functions`.
 
 ### `[metrics.<key>]` — declarative metrics
 

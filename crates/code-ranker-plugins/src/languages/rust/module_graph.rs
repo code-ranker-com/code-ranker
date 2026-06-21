@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 mod resolve;
 mod shared;
+mod visitors;
 mod walk;
 
 use resolve::emit_uses;

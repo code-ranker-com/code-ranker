@@ -317,3 +317,7 @@ pub(crate) fn collapse_to_files(full: InternalGraph) -> Graph {
 
     Graph { nodes, edges }
 }
+
+#[cfg(test)]
+#[path = "tests/collapse.rs"]
+mod collapse_tests;

@@ -5,13 +5,14 @@
 //! can serve a principle's Markdown (e.g. `--doc HK`) from the binary itself with
 //! no filesystem at runtime. Dependency-free (no `include_dir` crate).
 //!
-//! The corpus lives at the repo root (`../../languages`), OUTSIDE this crate, so it
-//! is NOT in the published crate tarball. A workspace build (the prebuilt binaries
-//! shipped via the installer / npm / PyPI / Docker / GitHub Release) finds it and
-//! embeds the full corpus; an ISOLATED build (`cargo publish` verify, or
-//! `cargo install code-ranker` from crates.io source) won't — so the corpus is
-//! resolved best-effort and absence yields an EMPTY corpus (never a build failure).
-//! `--doc` then reports "not embedded" on such builds; everything else works.
+//! The single source of truth lives at the repo root (`../../languages`), OUTSIDE
+//! this crate. So that `cargo install code-ranker` from crates.io still embeds the
+//! corpus, the publish workflow copies that tree into a package-local `languages/`
+//! right before `cargo publish` (mirroring the per-crate README copy) — and this
+//! build script prefers that package-local copy, falling back to the repo-root tree
+//! for workspace/dev builds. If NEITHER exists (an unexpected isolated build) the
+//! corpus resolves best-effort to EMPTY (never a build failure); `--doc` then reports
+//! "not embedded" while everything else works.
 
 use std::path::{Path, PathBuf};
 use std::{env, fs};
@@ -20,9 +21,13 @@ fn main() {
     let manifest = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
 
     let mut entries: Vec<(String, PathBuf)> = Vec::new();
-    // Best-effort: a missing corpus (isolated/published build) is NOT an error —
-    // it must never break `cargo publish`/`cargo install`. See module docs.
-    match Path::new(&manifest).join("../../languages").canonicalize() {
+    // Prefer the package-local copy (present in the published tarball), else the
+    // repo-root tree (workspace/dev builds). Best-effort: a missing corpus is NOT
+    // an error — it must never break `cargo publish`/`cargo install`. See module docs.
+    let local = Path::new(&manifest).join("languages");
+    let root = Path::new(&manifest).join("../../languages");
+    let resolved = local.canonicalize().or_else(|_| root.canonicalize());
+    match resolved {
         Ok(corpus) => {
             // Re-run when the tree changes (added/removed files) and on any file edit.
             println!("cargo:rerun-if-changed={}", corpus.display());
@@ -31,9 +36,10 @@ fn main() {
         }
         Err(_) => {
             println!(
-                "cargo:warning=languages/ corpus not found (isolated build, e.g. \
-                 `cargo install code-ranker` from crates.io) — embedding an empty corpus; \
-                 `--doc` will report \"not embedded\". Prebuilt binaries embed the full corpus."
+                "cargo:warning=languages/ corpus not found at ./languages or ../../languages \
+                 — embedding an empty corpus; `--doc` will report \"not embedded\". Published \
+                 builds carry a package-local copy (see crates-io.yml); workspace builds use the \
+                 repo-root tree."
             );
         }
     }

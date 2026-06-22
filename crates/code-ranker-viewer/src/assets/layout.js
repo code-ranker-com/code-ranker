@@ -210,7 +210,10 @@ function buildDOT(nodes, edges, level, viewport) {
       let ci = 0;
       for (const [crate, entries] of byCrate) {
         dot += `  subgraph cluster_crate_${ci++} {\n`;
-        dot += `    label=${dotId(crate)} style=filled fillcolor="#fff2f2" color="#e3b3b3" fontname="Helvetica" fontsize=11 fontcolor="#a05a5a"\n`;
+        // Red signals "crate" only at the overview (dig 0). Once dug in (dig>0) the
+        // crate is just a container around its folders — render it neutral, matching
+        // the folder sub-clusters, so the red is reserved for the top-level boxes.
+        dot += `    label=${dotId(crate)} style=filled fillcolor="#f7f7f7" color="#cccccc" fontname="Helvetica" fontsize=11 fontcolor="#666666"\n`;
         for (const [g, gNodes] of entries) dot += `    ${groupBoxDot(g, gNodes)}\n`;
         dot += '  }\n';
       }

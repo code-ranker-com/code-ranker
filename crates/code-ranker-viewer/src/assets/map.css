@@ -3,14 +3,16 @@
 .frame-wrap { position: relative; margin-bottom: 10px; }
 .svg-frame { background: #fff; border: 1px solid #ddd; border-radius: 6px;
              overflow: hidden; user-select: none;
-             height: calc(100vh - 240px); min-height: 200px; }
+             height: calc(100vh - 240px); min-height: 420px; }
 .svg-frame svg { width: 100%; height: 100%; display: block; cursor: grab; }
 /* Drag-to-pan, GitHub-style: open hand at rest, closed hand while dragging
    (the closed hand wins over a node's `pointer` cursor for the whole drag). */
 .svg-frame.panning svg { cursor: grabbing; }
 .svg-frame.panning svg g.node { cursor: grabbing; }
 
-.zoom-controls { position: absolute; bottom: 12px; right: 12px;
+/* bottom: lifted clear of the ~22px-tall status bar (`.svg-status-bar`, bottom:0)
+   that surfaces on node/cluster hover, so the tooltip never overlaps the buttons. */
+.zoom-controls { position: absolute; bottom: 34px; right: 12px;
                  display: flex; flex-direction: column; gap: 5px;
                  opacity: 0; transition: opacity .15s; pointer-events: none; }
 .frame-wrap.show-zoom .zoom-controls { opacity: 1; pointer-events: auto; }

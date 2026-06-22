@@ -129,7 +129,8 @@ text.sn-hint, tspan.sn-hint, g.sn-hint { cursor: inherit; }
 .tier-opt { background: none; border: none; cursor: pointer; text-align: left;
             font-size: 12px; color: #444; padding: 5px 10px; line-height: 1; }
 .tier-opt:hover { background: #f0f0f0; }
-.tier-opt.on { font-weight: 700; color: #1abc9c; }
+/* All tier options share one style/colour — the active tier is not visually
+   distinguished in the dropdown (no bold/accent on .on). */
 
 /* Reveal-depth lens chip: ⊟ depth N/max ⊞ at the end of the breadcrumb. */
 .crumb-lens { display: inline-flex; align-items: flex-start; gap: 6px;

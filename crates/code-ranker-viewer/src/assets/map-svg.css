@@ -73,44 +73,48 @@ g.node polygon, g.node ellipse { stroke-width: 1; }
 body.shift-select .svg-frame svg { cursor: crosshair; }
 body.shift-select .svg-frame g.node { cursor: copy; }
 
-/* ── Ctrl/⌘ = "open source" on the main map: cursor signals click-to-open ───── */
-body.ctrl-link .svg-frame svg { cursor: default; }
-body.ctrl-link .svg-frame g.node { cursor: alias; }
+/* ── Alt/⌥ = "open source" on the main map: cursor signals click-to-open ────── */
+body.src-link .svg-frame svg { cursor: default; }
+body.src-link .svg-frame g.node { cursor: alias; }
 
 /* Same modifier cursors inside the per-node popup diagram; 3rd-party (`.diag-ext`)
    cards are inert (not selectable, no source) so they show `not-allowed`. */
 body.shift-select #node-modal-diagram g[data-diag-node]:not(.diag-ext) { cursor: copy; }
-body.ctrl-link    #node-modal-diagram g[data-diag-node]:not(.diag-ext) { cursor: alias; }
+body.src-link    #node-modal-diagram g[data-diag-node]:not(.diag-ext) { cursor: alias; }
 body.shift-select #node-modal-diagram g.diag-ext,
-body.ctrl-link    #node-modal-diagram g.diag-ext { cursor: not-allowed; }
+body.src-link    #node-modal-diagram g.diag-ext { cursor: not-allowed; }
 /* The central (main) card reacts to modifiers too (copy/view-source); external
    main cards are inert. */
 body.shift-select #node-modal-diagram .mn-card:not(.diag-ext) { cursor: copy; }
-body.ctrl-link    #node-modal-diagram .mn-card:not(.diag-ext) { cursor: alias; }
+body.src-link    #node-modal-diagram .mn-card:not(.diag-ext) { cursor: alias; }
 body.shift-select #node-modal-diagram .mn-card.diag-ext,
-body.ctrl-link    #node-modal-diagram .mn-card.diag-ext { cursor: not-allowed; }
+body.src-link    #node-modal-diagram .mn-card.diag-ext { cursor: not-allowed; }
 
 /* Popup's own shortcut legend (bottom-left of the fullscreen modal), shown while
    a modifier is held — the map's legend is hidden behind the popup. */
 #node-modal-hints { z-index: 5; }
 body.shift-select #node-modal-hints,
-body.ctrl-link    #node-modal-hints { opacity: 1; }
+body.src-link    #node-modal-hints { opacity: 1; }
 
-/* While a modifier is held, a Shift/⌘-click on a card must not drag-select the
+/* While a modifier is held, a Shift/⌥-click on a card must not drag-select the
    SVG/label text (without a modifier, normal text selection is left intact). */
-body.shift-select, body.ctrl-link { user-select: none; -webkit-user-select: none; }
+body.shift-select, body.src-link { user-select: none; -webkit-user-select: none; }
 
 /* While a map hotkey is held, reveal the same right-side controls (zoom + size)
    that a hover into the right edge shows — visual cue that a mode is active. */
 body.shift-select .frame-wrap .zoom-controls,
-body.ctrl-link   .frame-wrap .zoom-controls,
+body.src-link   .frame-wrap .zoom-controls,
 body.shift-select .frame-wrap .size-controls,
-body.ctrl-link   .frame-wrap .size-controls { opacity: 1; pointer-events: auto; }
+body.src-link   .frame-wrap .size-controls { opacity: 1; pointer-events: auto; }
 
 /* ── Shortcut legend (bottom-left): shown on the same hover/hotkey as controls ── */
 .kbd-hints { position: absolute; bottom: 12px; left: 12px; z-index: 10;
              display: flex; gap: 8px; opacity: 0; transition: opacity .15s;
              pointer-events: none; }
+/* Homepage (single-snapshot) view: lift the legend clear of the bottom status bar
+   (~22px tall) — it shows on the same hover that surfaces a node's status line, so
+   the two would otherwise stack at bottom:12px and the bar (z-index 15) would win. */
+body.mode-review .kbd-hints { bottom: 34px; }
 .kbd-hint { display: inline-flex; align-items: center; gap: 5px; font-size: 11px;
             color: #5c7a96; background: rgba(255,255,255,.95); border: 1px solid #d0dcea;
             border-radius: 6px; padding: 3px 8px; }
@@ -119,7 +123,7 @@ body.ctrl-link   .frame-wrap .size-controls { opacity: 1; pointer-events: auto; 
                 border: 1px solid #cdd7e2; border-radius: 4px; padding: 0 5px; }
 .frame-wrap.show-zoom .kbd-hints,
 body.shift-select .frame-wrap .kbd-hints,
-body.ctrl-link   .frame-wrap .kbd-hints { opacity: 1; }
+body.src-link   .frame-wrap .kbd-hints { opacity: 1; }
 
 /* ── Selection: persistent yellow highlight ─────────────────────────────────── */
 .node-table tr.row-selected td { background: rgb(254,245,222); }
@@ -159,10 +163,12 @@ g.node.node-hl { filter: drop-shadow(0 0 7px rgba(30,160,220,1)) drop-shadow(0 0
 /* The bar is toggled with the `hidden` attribute; no extra display rule needed. */
 
 /* ── SVG edge hover / cluster edge visibility ─────────────────────────────── */
-/* Base transition so all opacity changes animate smoothly */
-.svg-frame g.edge > path,
-.svg-frame g.edge > polygon,
-.svg-frame g.edge > text { transition: opacity 0.12s; }
+/* NO opacity transition on edges. A hover toggles the opacity of hundreds of edge
+   path/polygon/text elements at once; animating them made Chrome promote each to
+   its own compositor layer for the ~0.12s tween and immediately discard it — a
+   layer-churn storm that flickered the whole page (worse the more elements there
+   are). Snapping opacity (no transition) is a single repaint — no churn, no flicker.
+   Confirmed via a performance trace: 7408 opacity Animation events on edges. */
 
 /* Cluster IN/OUT edges (>10): hidden until cluster zone is hovered */
 .svg-frame g.edge.cluster-edge-hidden > path,

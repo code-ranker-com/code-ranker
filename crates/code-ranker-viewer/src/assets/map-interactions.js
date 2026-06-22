@@ -27,13 +27,13 @@ function toggleNodeSelected(node, level, section) {
   section?._updateAllCb?.();
 }
 
-// The "open source" modifier is platform-specific: ⌘ (Meta) on macOS — where
-// Ctrl is deliberately left alone (it maps to right-click) — and Ctrl elsewhere.
+// The "open source" modifier is Alt/Option (⌥) on every platform — chosen over ⌘
+// (which clashes with copy/paste on macOS) and Ctrl (which is right-click on macOS).
 const IS_MAC = /Mac|iP(hone|ad|od)/.test(
   (typeof navigator !== 'undefined' && (navigator.platform || navigator.userAgent)) || ''
 );
-const OPEN_SRC_KEY = IS_MAC ? 'Meta' : 'Control';
-const isOpenSrcClick = e => (IS_MAC ? e.metaKey : e.ctrlKey);
+const OPEN_SRC_KEY = 'Alt';
+const isOpenSrcClick = e => e.altKey;
 // Exposed on window so modal.js (the popup diagram) can mirror the gesture —
 // `const` declarations are not auto-attached to the global object.
 window.isOpenSrcClick = isOpenSrcClick;
@@ -41,7 +41,7 @@ window.isOpenSrcClick = isOpenSrcClick;
 // Shortcut-legend markup with the platform's actual keys; reused by the main map
 // (`#kbd-hints`) and the popup (`#node-modal-hints`, filled in modal.js).
 function kbdHintsHtml() {
-  const srcKey = IS_MAC ? '⌘' : 'Ctrl';
+  const srcKey = IS_MAC ? '⌥ Option' : 'Alt';
   return `<span class="kbd-hint"><kbd>⇧ Shift</kbd> + click — select node</span>` +
          `<span class="kbd-hint"><kbd>${srcKey}</kbd> + click — view source</span>` +
          `<span class="kbd-hint kbd-hint-toggle"><kbd>t</kbd> — toggle baseline/current</span>`;
@@ -51,10 +51,10 @@ window.kbdHintsHtml = kbdHintsHtml;
 // Map modifier modes, each changing the cursor (see the CSS) and rerouting node
 // clicks (see the click handler in setupTooltips):
 //   • Shift (`.shift-select`)      — toggle a node's selection instead of the modal;
-//   • ⌘ (mac) / Ctrl (`.ctrl-link`) — open the node's source on the git host.
+//   • Alt/Option ⌥ (`.src-link`)   — open the node's source on the git host.
 (function initMapModifiers() {
   const setShift = on => document.body.classList.toggle('shift-select', on);
-  const setSrc   = on => document.body.classList.toggle('ctrl-link', on);
+  const setSrc   = on => document.body.classList.toggle('src-link', on);
 
   // Fill the bottom-left shortcut legend with the platform's actual keys.
   const hints = document.getElementById('kbd-hints');
@@ -337,6 +337,16 @@ function switchTier(tier, level) {
 window.switchTier = switchTier;
 
 function drillIntoGroup(groupId, level, dig) {
+  // A files-dig "group" key is the node's own id (`{target}/…/file.ext`) — not a
+  // folder. Folder keys are always {target}-stripped & filename-less, so an exact
+  // match against a real node id means this box is a single file: open it instead
+  // of drilling into a degenerate single-file group. Drilling would set drillGroup
+  // to the {target}-prefixed id and feed it to the folder-keyed breadcrumb, where
+  // every path chip mismatches → literal `{target}` chip + 0 counts everywhere.
+  if ((unionGraph(level).nodes || []).some(n => n.id === groupId)) {
+    if (window.openModalForNode?.(groupId, level)) window.navPush?.(level, groupId);
+    return;
+  }
   window.drillGroup = groupId;
   // The drilled view filters by the grouper that produced this group key, so
   // remember the dig it came from — caller may override (a crate cluster drills
@@ -768,6 +778,10 @@ const HOVER_DELAY = 70;   // ms before a hover effect applies — avoids flicker
 function wireNodeHover(el, onEnter, onLeave) {
   let timer = null, active = false;
   el.addEventListener('mouseenter', () => {
+    // Already settled on this node? A fresh mouseenter without a mouseleave is the
+    // synthetic re-fire from raisePaint's reparent — ignore it (avoids re-running
+    // onEnter + a redundant paint-raise, the source of the first-hover flicker).
+    if (active) return;
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
       timer = null; active = true;
@@ -945,8 +959,18 @@ function setupEdgeHighlight(svgFrame, level) {
 
     clusterEl.addEventListener('mouseenter', () =>
       ehSchedule(() => { applyHighlight(edges); showSB(statusText); setShowInOut(isIn, isOut); }));
-    clusterEl.addEventListener('mouseleave', () =>
-      ehSchedule(() => { clearHighlight(); hideSB(); setShowInOut(false, false); }));
+    clusterEl.addEventListener('mouseleave', e => {
+      // Nodes & edges are painted as SIBLINGS on TOP of the cluster background, so
+      // dragging the pointer across one of them — while still inside the folder —
+      // fires a spurious `mouseleave`. Clearing on it then re-applying on the
+      // re-enter toggled the highlight of all 574 edges on/off, repainting the whole
+      // map (and visibly the page) — the flicker. A leaf node has nothing painted
+      // over it, so files never flickered. Ignore a leave whose pointer is still
+      // within the cluster's bounding box (a real exit lands outside it).
+      const r = clusterEl.getBoundingClientRect();
+      if (e.clientX >= r.left && e.clientX < r.right && e.clientY >= r.top && e.clientY < r.bottom) return;
+      ehSchedule(() => { clearHighlight(); hideSB(); setShowInOut(false, false); });
+    });
   }
 
   // ── IN/OUT edges are always hidden by default; revealed on cluster/node hover ──
@@ -963,13 +987,21 @@ function setupEdgeHighlight(svgFrame, level) {
     const nodeId = nodeEl.querySelector('title')?.textContent?.trim();
     if (!nodeId) continue;
 
+    // `raisePaint` (first hover) reparents the node via appendChild, which makes the
+    // browser re-fire `mouseenter` on the SAME node with no intervening `mouseleave`
+    // — that re-runs the whole edge-highlight pass and flickers the map. Track the
+    // hovered state and swallow the synthetic, redundant re-enter.
+    let entered = false;
     nodeEl.addEventListener('mouseenter', () => {
+      if (entered) return;
+      entered = true;
       // Status bar is updated by setupTooltips handlers (fire after these). A node
       // is a leaf (file / collapsed box) → reveal its dashed non-flow edges.
       ehSchedule(() => { applyHighlight(edgeMap.get(nodeId) ?? new Set(), true); setShowInOut(false, false); });
     });
 
     nodeEl.addEventListener('mouseleave', e => {
+      entered = false;
       // Moving back onto a cluster background re-applies that cluster's full state
       // (highlight + in/out reveal); otherwise clear. All via the shared debounce.
       const destCluster = e.relatedTarget?.closest?.('g.cluster');
@@ -1097,6 +1129,33 @@ function setupTooltips(svgFrame, level) {
       const groupId = titleEl?.textContent?.trim();
       titleEl?.remove();
       if (!groupId) return;
+
+      // A files-dig box is a single real file node (key === its id), not a folder
+      // group. Wire it exactly like the drilled file view so the map stays
+      // consistent: Shift toggles selection (and highlights the box — which needs it
+      // registered in gNodeMap), the open-source modifier opens the source, a plain
+      // click opens the modal. Folder/crate group boxes fall through to drill below.
+      const fileNode = (unionGraph(level).nodes || []).find(n => n.id === groupId);
+      if (fileNode) {
+        g.dataset.nodeId = groupId;
+        gNodeMap.set(groupId, g);
+        if (window._ntSelected?.[level]?.has(groupId)) g.classList.add('node-selected');
+        g.addEventListener('click', e => {
+          e.stopPropagation();
+          if (isOpenSrcClick(e)) {
+            const url = nodeSourceUrl(fileNode, level);
+            if (url) window.open(url, '_blank', 'noopener');
+            return;
+          }
+          if (e.shiftKey) { toggleNodeSelected(fileNode, level, section); return; }
+          if (window.openModalForNode?.(groupId, level)) window.navPush?.(level, groupId);
+        });
+        wireNodeHover(g,
+          () => { showStatus(statusLineFor(fileNode, level)); window.fanHighlightFile?.(true, groupId); },
+          e => { window.fanHighlightFile?.(false, groupId); if (!e.relatedTarget?.closest?.('g.cluster')) hideStatus(); });
+        return;
+      }
+
       const stats = groupStats.get(groupId);
       if (!stats) return;
 

@@ -2,7 +2,6 @@
 
 [![CI](https://github.com/ffedoroff/code-ranker/actions/workflows/ci.yml/badge.svg)](https://github.com/ffedoroff/code-ranker/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/ffedoroff/code-ranker/branch/main/graph/badge.svg)](https://codecov.io/gh/ffedoroff/code-ranker)
-[![dependencies](https://deps.rs/repo/github/ffedoroff/code-ranker/status.svg)](https://deps.rs/repo/github/ffedoroff/code-ranker)
 [![Crates.io](https://img.shields.io/crates/v/code-ranker.svg)](https://crates.io/crates/code-ranker)
 [![npm](https://img.shields.io/npm/v/code-ranker.svg)](https://www.npmjs.com/package/code-ranker)
 [![PyPI](https://img.shields.io/pypi/v/code-ranker.svg)](https://pypi.org/project/code-ranker/)

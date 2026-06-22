@@ -272,7 +272,7 @@ function buildDiagramSVG(node, level) {
     const cls     = [ext ? 'diag-ext' : (selectedIds?.has(n.id) ? 'diag-selected' : ''),
                      cycle ? 'diag-cycle' : '',
                      inMap ? '' : 'sn-static'].filter(Boolean).join(' ');   // cursor via CSS
-    const open    = `<g data-diag-node="${esc(n.id)}"${cls ? ` class="${cls}"` : ''}>` +
+    const open    = `<g data-diag-node="${escA(n.id)}"${cls ? ` class="${cls}"` : ''}>` +
       `<rect x="${x}" y="${y}" width="${SNW}" height="${SNH}" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="${strokeW}"${dash}/>`;
     const pathTip = ext ? (n.path || n.id)
                         : ((n.path || '').replace(/^\{[^}]+\}\//, '') || n.id);
@@ -391,7 +391,7 @@ function buildDiagramSVG(node, level) {
   // Copying is per-label (each `.mn-copy` text copies its own value on click),
   // not whole-card — so a stray click on the card never copies. `copyVal` is kept
   // only as the initial "copied" preview text.
-  s += `<g class="mn-card${mnCls ? ' ' + mnCls : ''}" data-node-id="${esc(node.id)}">`;
+  s += `<g class="mn-card${mnCls ? ' ' + mnCls : ''}" data-node-id="${escA(node.id)}">`;
   s += `<rect x="${MNX}" y="${MNY}" width="${MNW}" height="${MNH2}" rx="10" fill="${mnFill}" stroke="${mnStroke}" stroke-width="${mnCycle ? '3' : '2'}"/>`;
   s += `<g class="mn-card-body" clip-path="url(#mn-clip)">`;
 

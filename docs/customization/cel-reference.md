@@ -291,10 +291,18 @@ message = "test/source ratio too high ({tloc}/{sloc})"
 when    = 'depends_on("ext:sqlx")'
 message = "imports the sqlx crate directly"
 
-# Check: list macros over the dependency set
-[rules.checks.wide_hub]
-when    = "deps.size() > 20"
-message = "depends on {fan_out} modules — a coupling hub"
+# Check: a list-comprehension macro over the dependency set. `filter` is the
+# macro; `size()` is the collection function that counts the result. (A bare
+# `deps.size() > 20` needs no macro and just equals `fan_out > 20`.)
+[rules.checks.wide_ext_hub]
+when    = 'deps.filter(d, d.startsWith("ext:")).size() > 20'
+message = "{name}: depends on many external crates — a coupling hub"
+
+# Metric: the same macro in a formula. Graph lists (`deps`/`files`/…) are
+# checks-only (§4.2), so a metric macro runs over a *literal* list — here the
+# file's own complexity signals — counting how many exceed a floor.
+[metrics.complexity_signals]
+formula_cel = "[cyclomatic, cognitive, branches].filter(x, x > 10.0).size().double()"
 
 # Check: relative threshold (this node vs the project distribution)
 [rules.checks.complexity_outlier]
@@ -304,6 +312,36 @@ message = "{name}: cyclomatic {cyclomatic} is in the project's worst 10%"
 # Metric: branch on path (blank the metric for generated code)
 [metrics.real_hk]
 formula_cel = 'path.contains("/generated/") ? 0.0 : hk'
+
+# Metrics: size-normalized complexity — branching *per 100 source lines*. A raw
+# `cognitive`/`cyclomatic` count just tracks size; dividing by `sloc` measures
+# DENSITY, in intuitive units (e.g. 42 = 42 points of cognitive load per 100 lines).
+# Guard the divide (`sloc == 0 -> 0`).
+[metrics.cognitive_per_100sloc]
+formula_cel = "sloc > 0.0 ? cognitive / sloc * 100.0 : 0.0"
+
+[metrics.cyclomatic_per_100sloc]
+formula_cel = "sloc > 0.0 ? cyclomatic / sloc * 100.0 : 0.0"
+
+# Check: a SHORT-but-DENSE file — the most complexity packed into the fewest lines,
+# judged RELATIVE to this repo (no fixed number ports across codebases). Custom
+# `[metrics]` are aggregatable, so we threshold each density against its own p90:
+#   1. top-decile cognitive density    cognitive_per_100sloc  > p90
+#   2. top-decile branching density     cyclomatic_per_100sloc > p90
+#   3. genuinely short                   sloc < project median  → true density, not bulk
+# (3) is what excludes large-and-dense files: a 200-line file can top the density
+# deciles yet isn't "short". A multi-line `when` (TOML `'''…'''`) stays readable —
+# CEL ignores the newlines; a node missing an attr just doesn't fire (never errors).
+[rules.checks.dense_complexity]
+when = '''
+  cognitive_per_100sloc  > agg('cognitive_per_100sloc',  'p90', 'not_empty') &&
+  cyclomatic_per_100sloc > agg('cyclomatic_per_100sloc', 'p90', 'not_empty') &&
+  sloc.double() < agg('sloc', 'p50', 'not_empty')
+'''
+message = "{name}: dense complexity — {cognitive} cognitive / {cyclomatic} cyclomatic packed into {sloc} sloc (top-decile density for this repo)"
+why     = "High branching crammed into few lines reads as clever but is hard to follow and test."
+fix     = "Extract the nested branches into named helpers — trade a few more lines for lower per-line complexity."
+group   = "SRP"
 ```
 
 ---

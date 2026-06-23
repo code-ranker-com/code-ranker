@@ -48,6 +48,41 @@ pub struct B { pub a: Option<A> }
 
 This compiles. The compiler does not flag it. Code Ranker does.
 
+### Visibility paths count as dependency edges
+
+Code Ranker builds the module graph from **both** `use`
+imports **and visibility paths**. A `pub(in crate::a::b)`
+item is reachable from anywhere under `crate::a::b`, so it
+records an edge from the item's module **up to** that
+ancestor — even when nothing there calls it. That is a real
+coupling signal (the item joins that ancestor's internal API
+surface), but it means a reported back-edge is not always a
+real `use`.
+
+```rust
+// src/services/user_service/patch_user/status_handler.rs
+// the visibility path names the user_service module, so
+// code-ranker records an edge to user_service/mod.rs
+pub(in crate::services::user_service)
+fn update_user_status(/* … */) { /* … */ }
+```
+
+When a cycle's back-edges to the module root are **only**
+such visibility paths (not `use` statements), the smallest
+fix is to **tighten the visibility** to the narrowest scope
+the item's real consumers need — `pub(super)` if only the
+parent uses it, `pub(crate)` if a sibling subtree does. The
+edge to the root disappears, the cycle breaks, and the item
+is genuinely less exposed (least privilege) — no module moved.
+
+**Only do this when every consumer already lives in the
+narrower scope.** Check the call sites first: if the item is
+truly used across the whole subtree, narrowing won't compile
+— that is a *real* dependency, so extract the shared item
+into a leaf module or invert the dependency instead.
+Tightening a visibility you have not verified is silencing
+the metric, not fixing the structure.
+
 <!-- doc:base "Module-level cycles" -->
 <!-- doc:base "Common cycle shapes" -->
 <!-- doc:base "Violations and remedies" -->

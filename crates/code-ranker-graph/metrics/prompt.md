@@ -15,7 +15,7 @@ I want to apply this to some modules in my system.
 
 ## doc_note
 
-To understand the principle in detail, run `code-ranker report --doc {id}` — it prints the full principle to your terminal. Read it before proposing any changes.
+**First, before reading the source**, run `code-ranker report --doc {id}` — it prints the full principle and, for your language, the usual cause of this exact violation and the smallest correct fix, often with a worked example and how to confirm it. Read it first: it normally names the remedy outright, so you apply it instead of re-deriving the mechanism from the code.
 
 ## task
 

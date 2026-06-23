@@ -19,6 +19,10 @@ viewer assets see [`code-ranker-viewer/DESIGN.md`](../code-ranker-viewer/DESIGN.
   - [Report Generator](#report-generator)
   - [Check / Regression Gate](#check--regression-gate)
 - [3. CLI Reference and Examples](#3-cli-reference-and-examples)
+  - [Snapshots — `code-ranker report --output.json`](#snapshots--code-ranker-report---outputjson)
+  - [Visualization — `code-ranker report`](#visualization--code-ranker-report)
+  - [Compare against a baseline — `--baseline`](#compare-against-a-baseline----baseline)
+  - [Full end-to-end workflow](#full-end-to-end-workflow)
 
 <!-- /toc -->
 

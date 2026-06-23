@@ -13,6 +13,7 @@ plugin/extraction layer, graph model and JSON schema, see the main
 - [1. Visualization Reports — Step 2](#1-visualization-reports--step-2)
   - [HTML Report Generation](#html-report-generation)
   - [Node Sorting by Weight](#node-sorting-by-weight)
+  - [Map navigation — semantic zoom & cycle visibility](#map-navigation--semantic-zoom--cycle-visibility)
   - [AI Prompt Generator (P2)](#ai-prompt-generator-p2)
   - [Principles-Based Prompt Generation (P3)](#principles-based-prompt-generation-p3)
 - [2. Baseline Comparison — diff viewer (Step 4)](#2-baseline-comparison--diff-viewer-step-4)

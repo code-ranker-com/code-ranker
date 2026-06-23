@@ -177,7 +177,11 @@ nothing eval-related is left in `PROJECT`.
    (e.g. `20260623T1849Z_dc06762`) — in `PROJECT`, then return to `main`. Branch name ==
    evidence-folder name, so code ↔ evidence line up by one identical string, and the UTC
    `<TS>` makes every run's branch unique (no "bump `<n>`"). Pass that exact branch name
-   to the collector via `--branch`.
+   to the collector via `--branch`. **Commit-msg gotcha:** if `PROJECT` has a
+   `prepare-commit-msg` hook that derives a ticket from the branch name, the `<TS>_<CR_SHA>`
+   branch carries none so the commit is rejected — and `--no-verify` does **not** skip
+   `prepare-commit-msg` (only pre-commit / commit-msg). Prefix the eval commit message with
+   a pseudo-ticket, e.g. `PROMPTEVAL-1: <subject>`.
 9. **Measure.** Append one row to `prompt-eval/metrics.csv` with the collector —
    don't hand-compute it (see [Metrics](#metrics-metricscsv) → Collecting a row):
 

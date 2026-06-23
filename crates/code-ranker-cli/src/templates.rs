@@ -45,15 +45,24 @@ fn doc_rel_path(snap: &Snapshot, id: &str) -> Option<String> {
     // doc filename comes from the `--doc <ID>` token in its `remediation` (e.g. key
     // `fan_in` → doc `Fan-in.md`). Metric docs live in the neutral `base/` corpus.
     let key = id.to_ascii_lowercase();
-    if let Some(rel) = snap
+    if let Some(doc) = snap
         .graphs
         .get("files")
         .and_then(|f| f.node_attributes.get(&key))
         .and_then(|spec| spec.remediation.as_deref())
         .and_then(crate::recommend::doc_ref)
-        .map(|doc| format!("base/{doc}.md"))
     {
-        return Some(rel);
+        // Metric docs default to the neutral `base/` corpus, but honor a language's
+        // doc override exactly as principle docs do: if the plugin routes its
+        // principle docs to a `<lang>/` folder (via `doc_overrides`) and actually
+        // ships a `<lang>/<doc>.md`, serve that; otherwise the shared `base/`.
+        if let Some(lang) = override_lang(snap) {
+            let rel = format!("{lang}/{doc}.md");
+            if corpus_doc(&rel).is_some() {
+                return Some(rel);
+            }
+        }
+        return Some(format!("base/{doc}.md"));
     }
     // Fallback: any base corpus doc addressable by its filename stem
     // (case-insensitive) — covers docs that are neither a principle nor a metric:
@@ -72,6 +81,19 @@ fn url_tail(url: &str) -> Option<String> {
     let after = url.rsplit_once("/languages/")?.1;
     // Stop at whitespace in case the URL is embedded in a sentence.
     Some(after.split_whitespace().next()?.to_string())
+}
+
+/// The corpus folder a plugin's overridden docs resolve to (e.g. `rust`), inferred
+/// from the principle `doc_url`s the config already routed through `doc_overrides`;
+/// `None` when the plugin uses the shared `base/` corpus. Lets metric docs reuse the
+/// same override decision without re-reading the plugin config here.
+fn override_lang(snap: &Snapshot) -> Option<String> {
+    snap.principles
+        .iter()
+        .filter_map(|p| p.doc_url.as_deref())
+        .filter_map(url_tail)
+        .filter_map(|rel| rel.split_once('/').map(|(l, _)| l.to_string()))
+        .find(|l| l != "base")
 }
 
 /// A language doc is a **manifest** (assembled from the base) when it carries at

@@ -68,10 +68,17 @@ inspect the worst tier with `--severity warning`.
 ## The fix loop
 
 ```sh
-code-ranker check .                                                   # the gate verdict
-code-ranker report . --output.scorecard --focus cycle --top 1   # focus one metric/principle
-code-ranker report . --output.prompt.path=stdout --top 1             # fix-prompt, worst module
+code-ranker check .                                                   # 1. the gate verdict
+code-ranker report . --output.scorecard --focus cycle --top 1   # 2. focus one metric/principle, worst-first
+code-ranker report --doc <principle>                                  # 3. READ the deep doc — before you touch code
+code-ranker report . --output.prompt.path=stdout --top 1             # 4. fix-prompt for the worst module
 ```
+
+**Step 3 is not optional — read the `--doc <principle>` page before proposing a
+fix.** It names the *language-specific cause* of this violation and the *smallest
+correct remedy* for it, often with a worked example. Agents that skip it reach for a
+heavier, wrong-shaped refactor that can leave the real cycle intact, introduce a new
+one, or drop tests. Read it first; then fix.
 
 `--focus` takes any catalog id below (a principle like `ADP`, or a metric like
 `hk` / `cycle`): focusing on a metric frames the output by that metric; on a

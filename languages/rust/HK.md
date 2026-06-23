@@ -4,14 +4,45 @@
 ## In Rust
 
 Fan-in and fan-out are counted over real code dependencies (`use` paths,
-qualified paths, derives) — the flow edges, not structural `mod`/`pub use`
-relationships. A Rust module scores high HK when it is both widely imported
-and imports widely:
+qualified paths, derives) — the flow edges, not structural `mod` / `pub use`
+re-export relationships. **One thing inflates `fan_in` artificially:** a
+`pub(in <ancestor>)` restricted-visibility path is recorded as a fan-in edge up
+to that ancestor even when nothing there `use`s the item (the same modelling as
+[ADP](ADP.md)). A Rust module scores high HK when it is both widely imported and
+imports widely:
 
 - A `lib.rs` or `mod.rs` facade that re-exports and also orchestrates.
 - A `types.rs` / `model.rs` that every layer imports *and* that itself pulls
   in serialization, validation, and persistence concerns.
 - A `utils.rs` junk drawer that accumulates helpers used everywhere.
+
+### Remedies, in order
+
+**1. Narrow artificial fan-in first.** Before anything structural, check whether
+the hub's in-edges are real `use` imports or just over-broad
+`pub(in <ancestor>)` visibility. If artificial, narrow the visibility
+(`pub(super)` if only the parent uses the item, `pub(crate)` if a sibling subtree
+does): the edge dissolves, `fan_in` drops, and HK falls — a one-line change, no
+split. (`HK = sloc × (fan_in × fan_out)²`, so dropping `fan_in` from 5 to 2 alone
+is a ~6× cut.)
+
+**2. The highest-value fix: split a multi-role hub by responsibility.** When the
+in-edges are *real*, the most valuable thing you can do is separate a component
+that has accreted **2–3 distinct roles** into **one module per role**. A file
+that does, say, *field mapping* **and** *platform-API orchestration* **and**
+*status handling* is three components wearing one name; giving each its own
+module is what genuinely cuts HK, because each role then couples only to its own
+dependencies — **both `fan_in` and `fan_out` drop for real**, and each piece
+becomes independently testable and changeable. Find the seams (distinct
+responsibilities, distinct dependency sets) and cut along them.
+
+**3. Do not shave `sloc` by mechanical splitting.** Moving a type declaration
+away from its `impl`, or hoisting a trait into a sibling file, splits **one
+cohesive role** across two files. It lowers the HK *number* (less `sloc`) without
+separating any responsibility — and can even *raise* coupling by widening
+visibility to make the move compile. That is metric-gaming, not decoupling; see
+"When a hub is legitimate" below. The test: if your split does not leave each
+new module owning a **distinct role**, it is not a real HK fix.
 <!-- doc:base "Reducing it" -->
 
 ## When a hub is legitimate (accept, don't game)

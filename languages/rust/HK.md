@@ -16,42 +16,33 @@ imports widely:
   in serialization, validation, and persistence concerns.
 - A `utils.rs` junk drawer that accumulates helpers used everywhere.
 
-### Diagnose first: who imports this hub, and for what?
+### Remedies, in order
 
-**Before choosing any remedy, run the _audiences_ check** — for each fan-in edge,
-look at what that consumer actually imports from the hub. The remedy is decided by
-the *shape* of that answer, **not** by the hub's own internal structure. Skipping
-this step is the most common way to "fix" HK and barely move it.
+**1. Narrow artificial fan-in first.** Before anything structural, check whether
+the hub's in-edges are real `use` imports or just over-broad
+`pub(in <ancestor>)` visibility. If artificial, narrow the visibility
+(`pub(super)` if only the parent uses the item, `pub(crate)` if a sibling subtree
+does): the edge dissolves, `fan_in` drops, and HK falls — a one-line change, no
+split. (`HK = sloc × (fan_in × fan_out)²`, so dropping `fan_in` from 5 to 2 alone
+is a ~6× cut.)
 
-`HK = sloc × (fan_in × fan_out)²` — the coupling term is squared, so the goal is
-always to cut **how many edges reach the hub, or what they reach for** — never to
-chase `sloc`.
+**2. The highest-value fix: split a multi-role hub by responsibility.** When the
+in-edges are *real*, the most valuable thing you can do is separate a component
+that has accreted **2–3 distinct roles** into **one module per role**. A file
+that does, say, *field mapping* **and** *platform-API orchestration* **and**
+*status handling* is three components wearing one name; giving each its own
+module is what genuinely cuts HK, because each role then couples only to its own
+dependencies — **both `fan_in` and `fan_out` drop for real**, and each piece
+becomes independently testable and changeable. Find the seams (distinct
+responsibilities, distinct dependency sets) and cut along them.
 
-- **Many consumers reach in for the SAME one or two items** (a shared type/alias, a
-  constant, a trait) → those items live in the **wrong home**. **Move them to a new
-  leaf module** and repoint the consumers. `fan_in` collapses (the edges now land on
-  a leaf with no fan-out of its own), the hub keeps only what it genuinely uses, and
-  nothing is split. On a real hub this is usually the **biggest, cheapest win** — and
-  it is exactly the one a size-based split misses.
-- **The in-edge is only a `pub(in <ancestor>)` visibility path**, not a real `use` →
-  **narrow the visibility** (`pub(super)` if only the parent uses the item,
-  `pub(crate)` if a sibling subtree does). The phantom edge dissolves; one-line change.
-- **Consumers genuinely need DIFFERENT parts of the hub** (group A imports one cluster
-  of items, group B another) → **split the hub by responsibility**, one module per
-  role, so each consumer depends only on the part it uses. Both `fan_in` and `fan_out`
-  drop for real, and each piece becomes independently testable.
-
-### The trap: splitting the hub by its own internal seams
-
-Carving a hub into sub-files along its *internal* structure — one file per trait
-`impl`, a type-decl moved away from its `impl`, a `worker`/`runtime` helper — **shaves
-`sloc` without cutting coupling**, and often *raises* `fan_in` (the new sub-files now
-import the parent). The HK number drops a little; the hub stays the worst module. That
-is metric-gaming, not decoupling. **A split is a real HK fix only when it changes _who
-depends on what_** — i.e. when it follows the audiences check above, not the hub's own
-table of contents. If the audiences check shows the coupling is a shared item in the
-wrong home, **move that item out; do not carve up the hub.** (See "When a hub is
-legitimate" below before splitting a genuine orchestrator.)
+**3. Do not shave `sloc` by mechanical splitting.** Moving a type declaration
+away from its `impl`, or hoisting a trait into a sibling file, splits **one
+cohesive role** across two files. It lowers the HK *number* (less `sloc`) without
+separating any responsibility — and can even *raise* coupling by widening
+visibility to make the move compile. That is metric-gaming, not decoupling; see
+"When a hub is legitimate" below. The test: if your split does not leave each
+new module owning a **distinct role**, it is not a real HK fix.
 <!-- doc:base "Reducing it" -->
 
 ## When a hub is legitimate (accept, don't game)

@@ -14,7 +14,7 @@ What it reads (all under one RUN_DIR = .../<ts>_<sha>/<model>-<focus>-<n>/):
   - before/after.json -> cycle counts -> focus_before/after, worst_before/after,
                     new_cycles   (ADP / cycle focus; blank for other metrics)
 And, when --project-path is given, the PROJECT branch git diff -> files_changed,
-loc_added, loc_removed (branch defaults to the run name).
+loc_added, loc_removed (branch defaults to <run>-<cr_sha>, unique per prompt version).
 
 Token extraction is format-aware: a full Claude Code session log carries a
 `result` event with authoritative cumulative usage + durations; a subagent log
@@ -248,7 +248,7 @@ def main():
     ap.add_argument("--project")
     ap.add_argument("--project-path", help="external PROJECT repo, for loc/files")
     ap.add_argument("--base-branch", default="main")
-    ap.add_argument("--branch", help="PROJECT branch (default: run name)")
+    ap.add_argument("--branch", help="PROJECT branch (default: <run>-<cr_sha>)")
     ap.add_argument("--in-price", type=float, default=5.0, help="USD per MTok input")
     ap.add_argument("--out-price", type=float, default=25.0, help="USD per MTok output")
     ap.add_argument("--quality", help="quality_1_5 (judged)")
@@ -281,7 +281,12 @@ def main():
     row.update(from_snapshots(run_dir))
 
     if args.project_path:
-        row.update(git_loc(args.project_path, args.branch or run, args.base_branch))
+        # PROJECT branches are flat and live across every build, so the run id alone
+        # (<model>-<focus>-<n>) collides between builds. Default to <run>-<cr_sha>:
+        # the cr_sha makes it unique per prompt version and ties the branch to this
+        # run's build dir. (Same-commit re-runs in a new build dir still need a
+        # bumped <n> — see the playbook's naming rule.)
+        row.update(git_loc(args.project_path, args.branch or f"{run}-{sha}", args.base_branch))
 
     if row.get("input_tokens") != "" and row.get("output_tokens") != "":
         row["cost_usd"] = round(

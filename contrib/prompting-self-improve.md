@@ -157,7 +157,9 @@ nothing eval-related is left in `PROJECT`.
    change. (This is also why the orchestrator must stage explicit paths, never
    `git add -A`, when committing the fix.)
 8. **Save the transcript** to `$RUN/chat.md` (see "Saving the chat"), commit the code
-   change to branch `<MODEL>-<FOCUS>-<N>` in `PROJECT`, return to `main`.
+   change to branch `<MODEL>-<FOCUS>-<N>-<CR_SHA>` in `PROJECT` (the `-<CR_SHA>` suffix
+   keeps it unique across builds — see [Artifacts](#artifacts-layout--naming)), return
+   to `main`.
 9. **Measure.** Append one row to `prompt-eval/metrics.csv` with the collector —
    don't hand-compute it (see [Metrics](#metrics-metricscsv) → Collecting a row):
 
@@ -197,8 +199,16 @@ Layout (one build → one `<timestamp>_<CR_SHA>` folder → one subfolder per ru
       └─ haiku-cycle-2/                 dir            same shape
 ```
 
-- folder/run id = `<model>-<focus>-<n>`, identical to the PROJECT branch holding
-  that run's code change — so evidence ↔ code line up by name.
+- folder/run id = `<model>-<focus>-<n>`; the PROJECT **branch** for that run is
+  `<model>-<focus>-<n>-<CR_SHA>`. The run folder already sits under a
+  `<ts>_<CR_SHA>` build dir, so the id alone is unique *there*; but PROJECT branches
+  are flat and live across **every** build, so the same run id recurs and would
+  collide. The `-<CR_SHA>` suffix makes the branch unique **per prompt version** and
+  ties it back to this run's build dir — evidence ↔ code still line up, now by
+  `(run id, CR_SHA)`. (If you re-run the *same* commit in a fresh build dir, that
+  branch already exists — bump `<n>` until free; `<n>` is the iteration counter
+  anyway.) The collector defaults `--branch` to `<run>-<CR_SHA>`, so loc/files come
+  from the right branch without passing it.
 - the code-ranker version/commit is also embedded *inside* each report (from S2), so
   a file stays self-describing even if moved out of its folder.
 - HTML reports are large (self-contained, WASM inlined); JSON snapshots scale with

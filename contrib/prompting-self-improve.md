@@ -72,6 +72,15 @@ of these and rebuild (see Setup) — all are baked into the binary:
 
 Change the **smallest** lever that fixes the observed failure.
 
+**Respect the base / per-language boundary.** Language-specific content (Rust
+`pub(in …)`, a Python import idiom, …) belongs ONLY in `languages/<lang>/` (its
+`<FOCUS>.md` doc) or the per-language `config.toml` prompt override — **never** in the
+language-neutral `languages/base/AI.md` or the neutral `defaults.toml` prompt. When a
+cheaper tier fails for want of a language-specific remedy, the base lever stays generic
+("read `--doc <principle>` — it has the cause and smallest fix for *your* language") and
+the specifics live in the per-language doc it points at. Putting a Rust example in
+`base/` leaks into every other language's output.
+
 ## Setup (once per prompt version)
 
 - **S1 — fresh build on PATH.** Release-build and install locally so the

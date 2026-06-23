@@ -126,6 +126,29 @@ fn doc_summary(md: &str) -> Option<String> {
     para_from(h1)
 }
 
+/// A doc or prompt printed to stdout must end in exactly one trailing newline so
+/// the shell prompt resumes on its own line. Returns `md` with a newline ensured.
+/// Shared by the `ai` and `report --doc` stdout paths so the rule lives in one
+/// (unit-testable) place rather than being re-implemented at each call site.
+pub(crate) fn with_trailing_newline(mut md: String) -> String {
+    if !md.ends_with('\n') {
+        md.push('\n');
+    }
+    md
+}
+
+/// One catalog entry: a `### <title>` heading + a `--doc <stem>` pointer, plus the
+/// doc's one-paragraph summary when it has one. Split out from [`tldr_index`] so the
+/// no-summary arm is exercised by a unit test without needing a summary-less doc in
+/// the real corpus.
+fn catalog_entry(title: &str, stem: &str, summary: Option<&str>) -> String {
+    let head = format!("### {title}\n\nFull doc: `code-ranker report --doc {stem}`");
+    match summary {
+        Some(s) => format!("{head}\n\n{s}"),
+        None => head,
+    }
+}
+
 /// Build the catalog the `<!-- doc:tldr-index -->` marker expands to: every
 /// `base/<ID>.md` (except `AI.md` itself), alphabetical, each as a `### <title>`
 /// heading + a `--doc <ID>` pointer to the full doc + its one-paragraph summary.
@@ -142,11 +165,7 @@ fn tldr_index() -> String {
                 .find_map(|l| l.strip_prefix("# "))
                 .unwrap_or(stem)
                 .trim();
-            let head = format!("### {title}\n\nFull doc: `code-ranker report --doc {stem}`");
-            let entry = match doc_summary(contents) {
-                Some(s) => format!("{head}\n\n{s}"),
-                None => head,
-            };
+            let entry = catalog_entry(title, stem, doc_summary(contents).as_deref());
             Some((stem.to_ascii_lowercase(), entry))
         })
         .collect();

@@ -804,6 +804,43 @@ fn rust_sample_prompt_flag_targets_named_principle() {
     );
 }
 
+/// `--output.prompt --focus <metric>` frames the auto-targeted prompt through the
+/// metric lens (a synthesized metric-principle), titled by the metric rather than a
+/// SOLID principle — the `Focus::Metric` arm of the `--output.prompt` builder.
+#[test]
+fn rust_sample_output_prompt_focus_metric_uses_metric_lens() {
+    let (ok, stdout, stderr) = run_report_capture(
+        "rust",
+        &["--output.prompt.path=stdout", "--focus", "HK", "--top", "1"],
+    );
+    assert!(ok, "focus-metric prompt failed: {stderr}");
+    assert!(
+        stdout.starts_with("# HK — Henry–Kafura"),
+        "metric-lens prompt titled by the metric: {stdout}"
+    );
+}
+
+/// `--output.prompt --focus <principle>` targets that named principle instead of
+/// the auto-worst — the `Focus::Principle` arm of the `--output.prompt` builder.
+#[test]
+fn rust_sample_output_prompt_focus_principle_targets_it() {
+    let (ok, stdout, stderr) = run_report_capture(
+        "rust",
+        &[
+            "--output.prompt.path=stdout",
+            "--focus",
+            "SRP",
+            "--top",
+            "1",
+        ],
+    );
+    assert!(ok, "focus-principle prompt failed: {stderr}");
+    assert!(
+        stdout.starts_with("# SRP — Single Responsibility Principle"),
+        "principle-focused prompt, not the auto-worst: {stdout}"
+    );
+}
+
 /// `report --doc <ID>` prints the embedded corpus Markdown for a principle/metric
 /// directly. `HK` is a metric (its doc lives in `base/`, reached via the metric's
 /// remediation URL), exercising the metric-doc resolution path.

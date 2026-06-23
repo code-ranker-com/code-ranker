@@ -26,10 +26,7 @@ pub(crate) fn run(input: &Path, plugin_arg: Option<&str>, config_entries: &[Stri
         Err(reason) => fill_select(&templates::ai_doc_intro()?, &reason.to_string()),
     };
 
-    print!("{md}");
-    if !md.ends_with('\n') {
-        println!();
-    }
+    print!("{}", templates::with_trailing_newline(md));
     Ok(())
 }
 

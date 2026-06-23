@@ -238,10 +238,7 @@ fn run_direct(args: &AnalyzeArgs, reco: &ReportReco) -> Result<()> {
     // `--doc <ID>`: the resolved corpus Markdown (with any `[templates.…]` override).
     if let Some(id) = &reco.doc_id {
         let md = crate::templates::resolve_doc(snap, &a.templates, id)?;
-        print!("{md}");
-        if !md.ends_with('\n') {
-            println!();
-        }
+        print!("{}", crate::templates::with_trailing_newline(md));
         return Ok(());
     }
 

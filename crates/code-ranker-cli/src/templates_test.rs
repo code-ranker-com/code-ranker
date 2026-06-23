@@ -360,3 +360,38 @@ fn doc_summary_prefers_tldr_then_first_paragraph() {
         Some("First prose paragraph. still it.")
     );
 }
+
+#[test]
+fn catalog_entry_includes_summary_when_present_and_omits_when_absent() {
+    let with = catalog_entry("Henry–Kafura", "HK", Some("A coupling metric."));
+    assert!(
+        with.starts_with("### Henry–Kafura"),
+        "heading first: {with}"
+    );
+    assert!(
+        with.contains("Full doc: `code-ranker report --doc HK`"),
+        "carries the --doc pointer: {with}"
+    );
+    assert!(
+        with.ends_with("A coupling metric."),
+        "summary appended: {with}"
+    );
+
+    // No summary → heading + pointer only, no trailing paragraph (the `None` arm).
+    let without = catalog_entry("Edge Case", "EC", None);
+    assert_eq!(
+        without,
+        "### Edge Case\n\nFull doc: `code-ranker report --doc EC`"
+    );
+}
+
+#[test]
+fn with_trailing_newline_appends_only_when_missing() {
+    assert_eq!(with_trailing_newline("x".to_string()), "x\n");
+    assert_eq!(
+        with_trailing_newline("x\n".to_string()),
+        "x\n",
+        "already terminated → unchanged, no double newline"
+    );
+    assert_eq!(with_trailing_newline(String::new()), "\n");
+}

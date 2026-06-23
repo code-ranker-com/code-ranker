@@ -12,3 +12,9 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+
+# BEGIN Constructor Studio
+# Generated Constructor Studio runtime and agent integration files.
+# Files matched here are owned by Constructor Studio and may be overwritten.
+.cf-studio/
+# END Constructor Studio

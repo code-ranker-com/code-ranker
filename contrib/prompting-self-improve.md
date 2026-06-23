@@ -431,6 +431,21 @@ project: a change should help the failure **class**, not memorise the repo.
 Stop a tier after **3 iterations** even if not perfect — record the residual gap (the
 row stays in `metrics.csv`) so it's a decision on record, not a silent failure.
 
+**Distinguish a prompt gap from a capability ceiling.** A lever can only fix what the
+model *would have done with the right instruction*. If the agent **reads the lever**
+(the doc/section it targets shows in the transcript) and **still doesn't perform the
+named step** — and a stronger model on the *same* prompt does — then the gap is the
+model's diagnostic ability, not the prompt. Signs: the targeted column doesn't move (or
+worsens) across two iterations, and the agent substitutes a plausible-but-wrong move it
+*can* do (e.g. on HK, splitting a hub by its internal seams instead of running the
+audiences analysis to find the wrong-audience import). When you see this, **revert the
+lever** (it failed its hypothesis — keeping it is lever-creep), record the residual as a
+**capability ceiling for that tier on that problem class**, and stop — don't spend the
+3rd iteration refining a prompt the model isn't acting on. (Observed: cyberfabric-core
+`gear.rs` HK — opus/sonnet ran the audiences check and dissolved the hub to ~0; haiku,
+under two successive HK levers it demonstrably read, twice did sloc-shaving splits that
+left `fan_in` untouched and the hub still #1.)
+
 ## The meta-loop — improving this playbook
 
 The prompts are levers; so is this file. After a sweep — and the **moment the user has

@@ -57,12 +57,12 @@ pub struct Config {
     /// / card / JSON stats. Raw table; parsed by `list_override::report_override_section`.
     #[serde(default)]
     pub report: toml::Table,
-    /// Project-defined Prompt-Generator presets (`[presets.<ID>]`), keyed by the
-    /// preset id. Appended to the active plugin's catalog (a same-id project preset
+    /// Project-defined Prompt-Generator principles (`[principles.<ID>]`), keyed by the
+    /// principle id. Appended to the active plugin's catalog (a same-id project principle
     /// overrides the plugin's), so a project can recommend/scorecard on its own
     /// custom metric. Empty by default — absent → no change to output.
     #[serde(default)]
-    pub presets: BTreeMap<String, PresetDef>,
+    pub principles: BTreeMap<String, PrincipleDef>,
     /// Per-file doc-corpus overrides (`[templates.languages.<lang>.<ID>]`): use a
     /// file from disk in place of the embedded `languages/<lang>/<ID>.md`. Empty by
     /// default — absent → the embedded corpus is used unchanged.
@@ -97,12 +97,12 @@ impl Default for Config {
     }
 }
 
-/// A project-config preset (`[presets.<ID>]`) — the table key is the id. Mirrors
-/// the plugin [`Preset`](code_ranker_plugin_api::Preset) but with sane
+/// A project-config principle (`[principles.<ID>]`) — the table key is the id. Mirrors
+/// the plugin [`Principle`](code_ranker_plugin_api::Principle) but with sane
 /// defaults so a project entry needs only `sort_metric` (+ usually `title`).
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(default, deny_unknown_fields)]
-pub struct PresetDef {
+pub struct PrincipleDef {
     /// Button label; defaults to the id.
     pub label: Option<String>,
     /// Principle title (first heading of the generated prompt); defaults to the id.
@@ -112,17 +112,17 @@ pub struct PresetDef {
     /// Link to a principle doc, if any.
     pub doc_url: Option<String>,
     /// The metric the recommended-node list sorts by (an attribute key, or the
-    /// pseudo-metric `"cycle"`). Required in practice — the lens the preset is.
+    /// pseudo-metric `"cycle"`). Required in practice — the lens the principle is.
     pub sort_metric: String,
-    /// Connection sets the preset pre-selects: any of `"in"` / `"out"` / `"common"`.
+    /// Connection sets the principle pre-selects: any of `"in"` / `"out"` / `"common"`.
     pub connections: Vec<String>,
 }
 
-impl PresetDef {
-    /// Build the runtime [`Preset`](code_ranker_plugin_api::Preset) for
+impl PrincipleDef {
+    /// Build the runtime [`Principle`](code_ranker_plugin_api::Principle) for
     /// this entry, defaulting `label` / `title` to the id.
-    pub fn to_preset(&self, id: &str) -> code_ranker_plugin_api::Preset {
-        code_ranker_plugin_api::Preset {
+    pub fn to_principle(&self, id: &str) -> code_ranker_plugin_api::Principle {
+        code_ranker_plugin_api::Principle {
             id: id.to_string(),
             label: self.label.clone().unwrap_or_else(|| id.to_string()),
             title: self.title.clone().unwrap_or_else(|| id.to_string()),

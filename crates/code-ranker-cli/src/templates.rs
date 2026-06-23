@@ -19,24 +19,50 @@ fn corpus_doc(rel: &str) -> Option<&'static str> {
 }
 
 /// The corpus path a doc id resolves to, as `<lang>/<ID>.md` — read from the
-/// already-resolved `doc_url` of a matching preset (principle docs) or the
+/// already-resolved `doc_url` of a matching principle (principle docs) or the
 /// `remediation` URL of a matching metric (coupling/complexity docs). Both encode
 /// the post-fallback corpus location (own `<lang>/` or the shared `base/`), so the
 /// override key namespace lines up with where the doc actually lives.
 fn doc_rel_path(snap: &Snapshot, id: &str) -> Option<String> {
-    // Principle preset (case-insensitive id, e.g. `SRP`, `adp`).
-    if let Some(p) = snap.presets.iter().find(|p| p.id.eq_ignore_ascii_case(id))
+    // `cycle` is the ADP principle's metric lens (not a real node attribute), so
+    // its doc IS the ADP doc — resolve it through the ADP principle below.
+    let id = if id.eq_ignore_ascii_case("cycle") {
+        "ADP"
+    } else {
+        id
+    };
+    // Principle (case-insensitive id, e.g. `SRP`, `adp`).
+    if let Some(p) = snap
+        .principles
+        .iter()
+        .find(|p| p.id.eq_ignore_ascii_case(id))
         && let Some(url) = &p.doc_url
         && let Some(rel) = url_tail(url)
     {
         return Some(rel);
     }
-    // Metric doc (attribute key is lowercase, e.g. `hk`, `cyclomatic`).
+    // Metric doc: the attribute is found by its (lowercase) key, but the canonical
+    // doc filename comes from the `--doc <ID>` token in its `remediation` (e.g. key
+    // `fan_in` → doc `Fan-in.md`). Metric docs live in the neutral `base/` corpus.
     let key = id.to_ascii_lowercase();
-    let files = snap.graphs.get("files")?;
-    let spec = files.node_attributes.get(&key)?;
-    let rem = spec.remediation.as_ref()?;
-    url_tail(rem)
+    if let Some(rel) = snap
+        .graphs
+        .get("files")
+        .and_then(|f| f.node_attributes.get(&key))
+        .and_then(|spec| spec.remediation.as_deref())
+        .and_then(crate::recommend::doc_ref)
+        .map(|doc| format!("base/{doc}.md"))
+    {
+        return Some(rel);
+    }
+    // Fallback: any base corpus doc addressable by its filename stem
+    // (case-insensitive) — covers docs that are neither a principle nor a metric:
+    // `Fan-in` / `Fan-out` (key is `fan_in`, not the hyphenated filename), the
+    // `metrics` reference, and the `AI` overview index.
+    CORPUS.iter().find_map(|(rel, _)| {
+        let stem = rel.strip_prefix("base/")?.strip_suffix(".md")?;
+        stem.eq_ignore_ascii_case(id).then(|| (*rel).to_string())
+    })
 }
 
 /// Extract the `<lang>/<ID>.md` tail of a corpus URL (`…/languages/base/HK.md`
@@ -55,6 +81,93 @@ fn is_manifest(md: &str) -> bool {
     md.contains("<!-- doc:base")
 }
 
+/// Marker placed in `base/AI.md`; expands to a one-paragraph summary of every
+/// other base doc (its `**TL;DR**` paragraph, or the first prose paragraph when a
+/// doc has none), so the AI overview always lists the current catalog.
+const TLDR_INDEX_MARKER: &str = "<!-- doc:tldr-index -->";
+
+/// A base doc's one-paragraph summary for the index: its `**TL;DR**` paragraph
+/// (lines from the `**TL;DR**` line to the next blank line, joined into one), or
+/// the first prose paragraph after the H1 when there is no explicit TL;DR.
+fn doc_summary(md: &str) -> Option<String> {
+    let lines: Vec<&str> = md.lines().collect();
+    let para_from = |start: usize| -> Option<String> {
+        let mut buf = Vec::new();
+        for l in &lines[start..] {
+            let t = l.trim();
+            if t.is_empty() || t.starts_with('#') {
+                if buf.is_empty() {
+                    continue;
+                }
+                break;
+            }
+            buf.push(t);
+        }
+        (!buf.is_empty()).then(|| buf.join(" "))
+    };
+    if let Some(i) = lines
+        .iter()
+        .position(|l| l.trim_start().starts_with("**TL;DR**"))
+    {
+        return para_from(i);
+    }
+    let h1 = lines
+        .iter()
+        .position(|l| l.starts_with("# "))
+        .map_or(0, |i| i + 1);
+    para_from(h1)
+}
+
+/// Build the catalog the `<!-- doc:tldr-index -->` marker expands to: every
+/// `base/<ID>.md` (except `AI.md` itself), alphabetical, each as a `### <title>`
+/// heading + a `--doc <ID>` pointer to the full doc + its one-paragraph summary.
+fn tldr_index() -> String {
+    let mut entries: Vec<(String, String)> = CORPUS
+        .iter()
+        .filter_map(|(rel, contents)| {
+            let stem = rel.strip_prefix("base/")?.strip_suffix(".md")?;
+            if stem.eq_ignore_ascii_case("AI") {
+                return None;
+            }
+            let title = contents
+                .lines()
+                .find_map(|l| l.strip_prefix("# "))
+                .unwrap_or(stem)
+                .trim();
+            let head = format!("### {title}\n\nFull doc: `code-ranker report --doc {stem}`");
+            let entry = match doc_summary(contents) {
+                Some(s) => format!("{head}\n\n{s}"),
+                None => head,
+            };
+            Some((stem.to_ascii_lowercase(), entry))
+        })
+        .collect();
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+    entries
+        .into_iter()
+        .map(|(_, e)| e)
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+/// Replace a `<!-- doc:tldr-index -->` marker with the generated catalog; a no-op
+/// for docs that don't carry it.
+fn expand_tldr_index(md: &str) -> String {
+    if md.contains(TLDR_INDEX_MARKER) {
+        md.replace(TLDR_INDEX_MARKER, &tldr_index())
+    } else {
+        md.to_string()
+    }
+}
+
+pub(crate) fn resolve_doc(
+    snap: &Snapshot,
+    templates: &TemplatesConfig,
+    id: &str,
+) -> Result<String> {
+    Ok(expand_tldr_index(&resolve_doc_raw(snap, templates, id)?))
+}
+
 /// Resolve the Markdown for doc `id` against the active snapshot. In order:
 /// 1. a `[templates.languages.<lang>.<ID>]` override → that file verbatim (the
 ///    user supplies the final doc, "as if it were `languages/<lang>/<ID>.md`");
@@ -63,14 +176,10 @@ fn is_manifest(md: &str) -> bool {
 /// 3. the embedded `<lang>/<ID>.md` (a full standalone doc); else the `base/<ID>.md`
 ///    fallback.
 ///
-/// `id` is a preset id (`SRP`) or a metric key (`hk`).
-pub(crate) fn resolve_doc(
-    snap: &Snapshot,
-    templates: &TemplatesConfig,
-    id: &str,
-) -> Result<String> {
+/// `id` is a principle id (`SRP`) or a metric key (`hk`).
+fn resolve_doc_raw(snap: &Snapshot, templates: &TemplatesConfig, id: &str) -> Result<String> {
     let rel = doc_rel_path(snap, id).with_context(|| {
-        let known: Vec<&str> = snap.presets.iter().map(|p| p.id.as_str()).collect();
+        let known: Vec<&str> = snap.principles.iter().map(|p| p.id.as_str()).collect();
         format!(
             "no principle or metric doc for {id:?}. Known principles: {}",
             known.join(", ")
@@ -129,8 +238,10 @@ pub(crate) fn build_corpus(out_dir: &std::path::Path) -> Result<usize> {
                 .with_context(|| format!("manifest {rel} has no base/{stem}.md"))?;
             crate::compose::compose(contents, base, lang_display(lang))?
         } else {
-            // `base/*` and full language docs are published verbatim.
-            contents.to_string()
+            // `base/*` and full language docs are published verbatim (the AI index's
+            // `<!-- doc:tldr-index -->` marker is expanded so Pages ships the catalog,
+            // not the raw marker).
+            expand_tldr_index(contents)
         };
 
         let dest = out_dir.join(rel);

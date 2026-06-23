@@ -1,12 +1,12 @@
 # Worked example for docs/customization/README.md — a TLOC/SLOC ratio metric, an
 # aggregate over only the large files (loc > 300), a `check` threshold on the
-# custom metric, and a project-defined Prompt-Generator preset. Run from the repo
+# custom metric, and a project-defined Prompt-Generator principle. Run from the repo
 # root (artifacts land in the git-ignored .code-ranker/ by default):
 #
 #   code-ranker report . --config docs/customization/custom-field-example.toml --output.json --output.html
 #   code-ranker check  . --config docs/customization/custom-field-example.toml
 #   code-ranker report . --config docs/customization/custom-field-example.toml \
-#     --output.scorecard --focus-rule tsr --severity warning --top 1
+#     --output.scorecard --focus tsr --severity warning --top 1
 
 # Per-file test-to-source ratio (guarded against divide-by-zero). Every spec field
 # below is optional, but they drive the UI: `name` is the tooltip title, `short`
@@ -72,10 +72,10 @@ stats   = { add = ["tsr_big_avg"] }
 size    = { add = ["tsr"] }
 filter  = { add = ["tsr_big"] }
 
-# A project-defined Prompt-Generator preset (a refactoring lens over the custom
-# metric). Makes `--focus-rule tsr` / the scorecard rank files by `tsr`. The id is the
+# A project-defined Prompt-Generator principle (ranks files by the custom
+# metric). Makes `--focus tsr` / the scorecard rank files by `tsr`. The id is the
 # table key; `label` / `title` default to it.
-[presets.TSR]
+[principles.TSR]
 title       = "TSR — Trim inline test bulk"
 sort_metric = "tsr"
 prompt      = """

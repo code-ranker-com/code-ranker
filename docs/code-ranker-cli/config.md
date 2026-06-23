@@ -64,7 +64,7 @@ The shared **metric catalog** (built-in derived metrics, aggregates, the default
 `[report]` columns/card/size/filter) is layered under the language `[report]`:
 [`crates/code-ranker-graph/metrics/builtin.toml`](https://github.com/ffedoroff/code-ranker/blob/main/crates/code-ranker-graph/metrics/builtin.toml).
 
-**2. Project stack** — `[rules]`, `[metrics]`, `[presets]`, `[ignore]`,
+**2. Project stack** — `[rules]`, `[metrics]`, `[principles]`, `[ignore]`,
 `[levels]`, output, and a project `[report]` patch. This is what `--config` and
 `code-ranker.toml` set:
 
@@ -252,16 +252,16 @@ A node-scope metric is computed for every file (and function, when that level is
 on) and is usable as a `[rules.thresholds.file]` limit like any built-in (the key
 is validated at load — a typo, or a metric you never defined, is a hard error).
 
-### `[presets.<ID>]` — project Prompt-Generator presets
+### `[principles.<ID>]` — project Prompt-Generator principles
 
-A preset is a refactoring lens: it ranks files by one metric and ships a
+A principle ranks files by one metric and ships a
 ready-to-paste AI prompt, surfaced by the `scorecard` / `prompt` outputs and the
-viewer's Prompt-Generator buttons. The plugin catalog ships the SOLID/complexity presets;
+viewer's Prompt-Generator buttons. The plugin catalog ships the SOLID/complexity principles;
 a project adds its own (e.g. over a custom metric) here. The table key is the id;
-a same-id project preset overrides the plugin's, a new id appends.
+a same-id project principle overrides the plugin's, a new id appends.
 
 ```toml
-[presets.TSR]
+[principles.TSR]
 title       = "TSR — Trim inline test bulk"  # prompt heading (defaults to id)
 sort_metric = "tsr"                          # the metric the worst-first list ranks by
 prompt      = "Move inline test modules into sibling test files…"
@@ -269,7 +269,7 @@ prompt      = "Move inline test modules into sibling test files…"
 ```
 
 Only `sort_metric` is essential. See the worked example in
-[`docs/customization/`](../customization/README.md#17-prompt-generator-presets--presetsid).
+[`docs/customization/`](../customization/README.md#17-prompt-generator-principles--principlesid).
 
 ### `[output.json]` / `[output.html]` / `[output.sarif]` / `[output.codequality]` — report artifacts
 
@@ -343,7 +343,7 @@ code-ranker check . --config ci/strict.toml
 
 A `report` flag: instead of analyzing, write the **full effective configuration**
 to `PATH` and exit. The file has two sections — `[project]` (built-in defaults ⊕
-your `--config`) and `[plugin]` (the `--plugin` language's merged config: presets,
+your `--config`) and `[plugin]` (the `--plugin` language's merged config: principles,
 thresholds, vocab). A diagnostic view of every value you can override.
 
 ```bash

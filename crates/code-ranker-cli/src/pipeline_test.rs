@@ -2,9 +2,9 @@ use super::*;
 use std::fs;
 
 #[test]
-fn project_presets_override_then_append() {
-    use code_ranker_plugin_api::Preset;
-    let catalog = vec![Preset {
+fn project_principles_override_then_append() {
+    use code_ranker_plugin_api::Principle;
+    let catalog = vec![Principle {
         id: "CPX".into(),
         label: "CPX".into(),
         title: "Complexity".into(),
@@ -17,7 +17,7 @@ fn project_presets_override_then_append() {
     // Same id → replaces the catalog entry in place.
     project.insert(
         "CPX".to_string(),
-        config::model::PresetDef {
+        config::model::PrincipleDef {
             prompt: "new".into(),
             sort_metric: "cyclomatic".into(),
             ..Default::default()
@@ -26,12 +26,12 @@ fn project_presets_override_then_append() {
     // New id → appended.
     project.insert(
         "TSR".to_string(),
-        config::model::PresetDef {
+        config::model::PrincipleDef {
             sort_metric: "tsr".into(),
             ..Default::default()
         },
     );
-    let merged = merge_project_presets(catalog, &project);
+    let merged = merge_project_principles(catalog, &project);
     assert_eq!(merged.len(), 2);
     let cpx = merged.iter().find(|p| p.id == "CPX").unwrap();
     assert_eq!(cpx.sort_metric, "cyclomatic", "same id replaced in place");

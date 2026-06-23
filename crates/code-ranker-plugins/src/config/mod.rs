@@ -3,7 +3,7 @@
 //! Every language ships a `<lang>.toml` that **inherits** the common
 //! `defaults.toml` (see [`DEFAULTS`]). [`load`] deep-merges the two into one
 //! [`toml::Table`] from which a plugin drives its `levels()` spec overrides,
-//! `presets()` and the metric-engine node-kind tables — so the
+//! `principles()` and the metric-engine node-kind tables — so the
 //! per-language Rust stays thin (wiring only) and everything that *can* be data
 //! lives in TOML.
 //!
@@ -15,7 +15,7 @@
 //! - [`parse`] — TOML parsing + the `defaults.toml` ⊕ `<lang>.toml` deep-merge.
 //! - [`views`] — level-descriptor views (`edge_kinds` / `node_kinds` /
 //!   `node_attributes` / `edge_attributes`, `edge_kind_id` / `attr_key`).
-//! - [`specs`] — preset catalog, `[specs]` description overrides.
+//! - [`specs`] — principle catalog, `[specs]` description overrides.
 //! - [`lookup`] — generic data-list lookups (`units` / `string_list` /
 //!   `string_table`).
 
@@ -27,7 +27,8 @@ mod views;
 pub use lookup::{IgnoreCfg, string_list, string_table, units};
 pub use parse::{DEFAULTS, load, load_chain};
 pub use specs::{
-    PresetCfg, SpecOverride, apply_spec_overrides, presets, resolved_presets, spec_overrides,
+    PrincipleCfg, SpecOverride, apply_spec_overrides, principles, resolved_principles,
+    spec_overrides,
 };
 pub use views::{attr_key, edge_attributes, edge_kind_id, edge_kinds, node_attributes, node_kinds};
 

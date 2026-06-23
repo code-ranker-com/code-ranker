@@ -59,29 +59,29 @@
                        background: #eef2f7; border: 1px solid #e0e6ee; border-radius: 3px;
                        padding: 1px 4px; color: #b3801f; }
 .exp-md-preview strong { color: #15324f; }
-.exp-presets { padding: 8px 18px; border-top: 1px solid #edf1f5; }
-.exp-presets-label { font-size: 11px; color: #888; text-transform: uppercase;
+.exp-principles { padding: 8px 18px; border-top: 1px solid #edf1f5; }
+.exp-principles-label { font-size: 11px; color: #888; text-transform: uppercase;
                      letter-spacing: .05em; margin-bottom: 6px; }
-/* Equal-width preset buttons in a grid; cells stretch to equal height so a
+/* Equal-width principle buttons in a grid; cells stretch to equal height so a
    button with a count badge is the same size as one without. */
-.exp-preset-btns { display: grid; grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)); gap: 5px; }
-.exp-preset-btn { padding: 3px 6px; font-size: 11px; font-family: inherit; border-radius: 4px;
+.exp-principle-btns { display: grid; grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)); gap: 5px; }
+.exp-principle-btn { padding: 3px 6px; font-size: 11px; font-family: inherit; border-radius: 4px;
                   border: 1px solid #c8d4e0; background: #f8fafc; color: #2c3e50; cursor: pointer;
                   display: flex; flex-direction: row; align-items: center; gap: 4px; text-align: left; }
-.exp-preset-btn:hover { background: #dbe9f4; border-color: #4d6f9c; }
-/* Low-sensitivity UI: presets get no button-level emphasis (border/colour) for
+.exp-principle-btn:hover { background: #dbe9f4; border-color: #4d6f9c; }
+/* Low-sensitivity UI: principles get no button-level emphasis (border/colour) for
    info or warning — only the count badge differs. */
-.exp-preset-btn--active { background: #2c6fad; border-color: #2c6fad; color: #fff; }
-.exp-preset-btn--active:hover { background: #2259a0; border-color: #2259a0; }
+.exp-principle-btn--active { background: #2c6fad; border-color: #2c6fad; color: #fff; }
+.exp-principle-btn--active:hover { background: #2259a0; border-color: #2259a0; }
 /* Recommendation count badge. `--warn`: a filled pill in the text colour (a calm
    label/background, not red) with a light digit. `--info`: a plain right-aligned
    number — no pill, no highlight. Collapses to nothing when there is no count. */
-.exp-preset-count { font-size: 10px; font-weight: 700; line-height: 16px; color: #fff;
+.exp-principle-count { font-size: 10px; font-weight: 700; line-height: 16px; color: #fff;
                     display: inline-block; min-width: 16px; height: 16px; padding: 0 4px;
                     border-radius: 999px; text-align: center; margin-left: auto; }
-.exp-preset-count:empty { display: none; }
-.exp-preset-count--warn { background: #2c3e50; }
-.exp-preset-count--info { background: none; color: inherit; min-width: 0; height: auto;
+.exp-principle-count:empty { display: none; }
+.exp-principle-count--warn { background: #2c3e50; }
+.exp-principle-count--info { background: none; color: inherit; min-width: 0; height: auto;
                           padding: 0; line-height: inherit; border-radius: 0; }
 .exp-copy-btn { position: absolute; bottom: 10px; right: 10px;
                 width: 150px; height: 36px; padding: 0;

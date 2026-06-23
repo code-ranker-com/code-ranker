@@ -32,7 +32,7 @@ pub(crate) fn run_check(
     cycle_rules: &[String],
     thresholds: &[String],
     focus_path: &[String],
-    focus_rule: &[String],
+    focus: &[String],
     baseline: Option<&Path>,
     output_format: OutputFormat,
     top: Option<usize>,
@@ -76,7 +76,7 @@ pub(crate) fn run_check(
     };
 
     // Scope the gate. `--focus-path` keeps violations under the given files/folders;
-    // `--focus-rule` keeps violations of the given rule ids or concern groups. The
+    // `--focus` keeps violations of the given rule ids or concern groups. The
     // whole project is still analyzed, but a violation outside an active focus is
     // dropped — neither reported nor counted toward the exit code. With both set, a
     // violation must satisfy both (path AND rule). A locationless violation can't be
@@ -86,10 +86,10 @@ pub(crate) fn run_check(
             violation_rel_path(&v.location).is_some_and(|rel| path_matches(rel, focus_path))
         });
     }
-    if !focus_rule.is_empty() {
-        findings.retain(|v| rule_matches(v, focus_rule));
+    if !focus.is_empty() {
+        findings.retain(|v| rule_matches(v, focus));
     }
-    let scope_note = focus_scope_note(focus_path, focus_rule);
+    let scope_note = focus_scope_note(focus_path, focus);
 
     let total = findings.len();
     // Rank worst-first by breach magnitude; `--top` limits only what is
@@ -293,10 +293,10 @@ fn path_matches(rel: &str, focus: &[String]) -> bool {
     })
 }
 
-/// Whether a violation matches one of the `--focus-rule` entries. An entry matches
+/// Whether a violation matches one of the `--focus` entries. An entry matches
 /// the full rule id (`threshold.file.hk`, `check.inline_tests_too_large`), the bare
 /// id after the last dot (`inline_tests_too_large`), or the concern group (`TST`,
-/// `CPL`) — so `--focus-rule TST` and `--focus-rule inline_tests_too_large` both work.
+/// `CPL`) — so `--focus TST` and `--focus inline_tests_too_large` both work.
 fn rule_matches(v: &config::Violation, focus: &[String]) -> bool {
     focus
         .iter()
@@ -304,14 +304,14 @@ fn rule_matches(v: &config::Violation, focus: &[String]) -> bool {
 }
 
 /// The trailing "(focused on …)" note for the human header, covering whichever of
-/// `--focus-path` / `--focus-rule` are active (empty when neither is).
-fn focus_scope_note(focus_path: &[String], focus_rule: &[String]) -> String {
+/// `--focus-path` / `--focus` are active (empty when neither is).
+fn focus_scope_note(focus_path: &[String], focus: &[String]) -> String {
     let mut parts = Vec::new();
     if !focus_path.is_empty() {
         parts.push(format!("path {}", focus_path.join(", ")));
     }
-    if !focus_rule.is_empty() {
-        parts.push(format!("rule {}", focus_rule.join(", ")));
+    if !focus.is_empty() {
+        parts.push(format!("rule {}", focus.join(", ")));
     }
     if parts.is_empty() {
         String::new()

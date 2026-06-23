@@ -1,5 +1,5 @@
 //! The console triage scorecard behind the `scorecard` report format — a
-//! per-principle table mirroring the viewer's per-preset badges, plus the worst
+//! per-principle table mirroring the viewer's per-principle badges, plus the worst
 //! modules overall.
 
 use super::{
@@ -8,7 +8,7 @@ use super::{
 };
 use anyhow::Result;
 use code_ranker_graph::level_graph::LevelGraph;
-use code_ranker_plugin_api::{Preset, node::Node};
+use code_ranker_plugin_api::{Principle, node::Node};
 
 /// One metric (or cycle) breach on a node, with its tier.
 struct Breach {
@@ -92,7 +92,7 @@ fn node_breaches(
 pub fn render_scorecard(
     plugin: &str,
     level: &LevelGraph,
-    presets: &[Preset],
+    principles: &[Principle],
     severities: &[Severity],
     top: Option<usize>,
     focus: Option<&super::Focus>,
@@ -107,17 +107,17 @@ pub fn render_scorecard(
 
     // `--focus` picks the lens. A metric frames the scorecard by that metric alone
     // (no principle rows — the worst-modules list carries the ranking); a principle
-    // shows just that preset's row; without it, the full per-principle triage. The
+    // shows just that principle's row; without it, the full per-principle triage. The
     // metric the worst-modules list ranks by is the focused metric, the focused
     // principle's `sort_metric`, or none (a breach-ranked list).
-    let (shown_presets, narrow): (Vec<&Preset>, Option<&str>) = match focus {
+    let (shown_principles, narrow): (Vec<&Principle>, Option<&str>) = match focus {
         Some(super::Focus::Metric(m)) => (Vec::new(), Some(m.as_str())),
         Some(super::Focus::Principle(id)) => {
-            let p: Vec<&Preset> = presets.iter().filter(|p| &p.id == id).collect();
+            let p: Vec<&Principle> = principles.iter().filter(|p| &p.id == id).collect();
             let m = p.first().map(|p| p.sort_metric.as_str());
             (p, m)
         }
-        None => (presets.iter().collect(), None),
+        None => (principles.iter().collect(), None),
     };
 
     let mut out = String::new();
@@ -131,7 +131,7 @@ pub fn render_scorecard(
     }
 
     // ── Per-principle table ──────────────────────────────────────────────────
-    let mut rows = principle_rows(level, &shown_presets, narrow, want_warning, want_info);
+    let mut rows = principle_rows(level, &shown_principles, narrow, want_warning, want_info);
     rows.sort_by(|a, b| b.warn.cmp(&a.warn).then(b.info.cmp(&a.info)));
 
     if rows.is_empty() && focus.is_none() {
@@ -184,18 +184,18 @@ fn metric_focus_label(level: &LevelGraph, m: &str) -> String {
     }
 }
 
-/// Build the per-principle table rows from the shown presets.
+/// Build the per-principle table rows from the shown principles.
 fn principle_rows(
     level: &LevelGraph,
-    shown_presets: &[&Preset],
+    shown_principles: &[&Principle],
     narrow: Option<&str>,
     want_warning: bool,
     want_info: bool,
 ) -> Vec<Row> {
     let mut rows: Vec<Row> = Vec::new();
-    for p in shown_presets {
+    for p in shown_principles {
         let reco = reco_for(level, &p.sort_metric);
-        // Skip presets with nothing in the selected tiers (unless narrowed).
+        // Skip principles with nothing in the selected tiers (unless narrowed).
         let in_scope =
             (want_warning && reco.warning_count > 0) || (want_info && reco.info_count > 0);
         if narrow.is_none() && !in_scope {
@@ -220,8 +220,8 @@ fn principle_rows(
 }
 
 /// The "top module" cell for a principle row: the worst-ranked module under the
-/// preset's metric, annotated with the metric value (or `(cycle)` / a bare path).
-fn principle_top_module(level: &LevelGraph, p: &Preset, reco: &super::Reco) -> String {
+/// principle's metric, annotated with the metric value (or `(cycle)` / a bare path).
+fn principle_top_module(level: &LevelGraph, p: &Principle, reco: &super::Reco) -> String {
     match reco.sorted.first() {
         Some(n) if p.sort_metric == "cycle" => format!("{} (cycle)", clean_path(&n.id)),
         Some(n) => match num(n, &p.sort_metric) {

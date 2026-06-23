@@ -501,11 +501,11 @@ fn rust_sample_check_focus_path_scopes_gate() {
     );
 }
 
-/// `check --focus-rule` scopes the gate to a rule id: focusing `cycle.mutual` keeps
+/// `check --focus` scopes the gate to a rule id: focusing `cycle.mutual` keeps
 /// the `a ⇄ b` mutual cycle and drops the chain cycle.
 #[test]
-fn rust_sample_check_focus_rule_scopes_gate() {
-    let (_ok, stdout, stderr) = run_check_capture("rust", &["--focus-rule", "cycle.mutual"]);
+fn rust_sample_check_focus_scopes_gate() {
+    let (_ok, stdout, stderr) = run_check_capture("rust", &["--focus", "cycle.mutual"]);
     assert!(
         stdout.contains("1 violation(s)") && stdout.contains("focused on rule cycle.mutual"),
         "gate scoped to the focused rule: {stdout}{stderr}"
@@ -537,7 +537,7 @@ fn rust_sample_check_top_limits_reported_not_exit() {
 }
 
 /// `report --prompt <metric>` composes the prompt through the metric lens (a
-/// synthesized metric "preset"), not a SOLID principle — exercising the metric
+/// synthesized metric "principle"), not a SOLID principle — exercising the metric
 /// arm of the standalone `--prompt` path.
 #[test]
 fn rust_sample_prompt_flag_targets_metric_lens() {
@@ -686,7 +686,7 @@ fn rust_sample_scorecard_triage() {
     );
 }
 
-/// With no `--preset`, the prompt auto-picks the worst-violating principle (ADP
+/// With no `--principle`, the prompt auto-picks the worst-violating principle (ADP
 /// here) and lists the worst cycle's members + their connections — the same
 /// Markdown the HTML viewer's Prompt Generator emits. The 3-node `chain` SCC
 /// outranks the 2-node `a ⇄ b` mutual, so it is the cycle shown.
@@ -715,7 +715,7 @@ fn rust_sample_prompt_auto_picks_worst_principle() {
     );
     assert!(
         stdout.contains(".code-ranker/<YYYYMMDD-HHMMSS>-ADP.md"),
-        "save-report instruction carries the preset id: {stdout}"
+        "save-report instruction carries the principle id: {stdout}"
     );
 }
 
@@ -755,12 +755,12 @@ fn rust_sample_doc_flag_prints_embedded_markdown() {
     );
 }
 
-/// `--focus-rule <metric>` frames the scorecard by that metric. `--focus-rule cycle`
+/// `--focus <metric>` frames the scorecard by that metric. `--focus cycle`
 /// shows the dependency-cycle members (the ADP view) without the principle table.
 #[test]
 fn rust_sample_scorecard_focus_metric() {
     let (ok, stdout, stderr) =
-        run_report_capture("rust", &["--output.scorecard", "--focus-rule", "cycle"]);
+        run_report_capture("rust", &["--output.scorecard", "--focus", "cycle"]);
     assert!(ok, "focused scorecard run failed: {stderr}");
     assert!(
         stdout.contains("scorecard  (rust, 25 files)"),
@@ -772,14 +772,14 @@ fn rust_sample_scorecard_focus_metric() {
     );
 }
 
-/// `--focus-rule HK` (a metric, by value) frames the output by the metric itself —
-/// no SOLID principle (the Liskov row the hk-ranking preset would otherwise show).
+/// `--focus HK` (a metric, by value) frames the output by the metric itself —
+/// no SOLID principle (the Liskov row the hk-ranking principle would otherwise show).
 /// Also accepts the full threshold rule id `threshold.file.hk`.
 #[test]
 fn rust_sample_scorecard_focus_metric_hides_principle() {
     for rule in ["HK", "threshold.file.hk"] {
         let (ok, stdout, stderr) =
-            run_report_capture("rust", &["--output.scorecard", "--focus-rule", rule]);
+            run_report_capture("rust", &["--output.scorecard", "--focus", rule]);
         assert!(ok, "metric-lens scorecard failed for {rule}: {stderr}");
         assert!(
             stdout.contains("focus: HK"),
@@ -800,7 +800,7 @@ fn rust_sample_scorecard_focus_path_scopes_modules() {
         "rust",
         &[
             "--output.scorecard",
-            "--focus-rule",
+            "--focus",
             "hk",
             "--focus-path",
             "src/chain",
@@ -817,14 +817,14 @@ fn rust_sample_scorecard_focus_path_scopes_modules() {
     );
 }
 
-/// An unknown `--focus-rule` name is a hard error naming both namespaces.
+/// An unknown `--focus` name is a hard error naming both namespaces.
 #[test]
 fn rust_sample_scorecard_unknown_focus() {
     let (ok, _stdout, stderr) =
-        run_report_capture("rust", &["--output.scorecard", "--focus-rule", "nope"]);
+        run_report_capture("rust", &["--output.scorecard", "--focus", "nope"]);
     assert!(!ok, "unknown focus must fail");
     assert!(
-        stderr.contains("unknown --focus-rule 'nope'"),
+        stderr.contains("unknown --focus 'nope'"),
         "actionable error: {stderr}"
     );
 }
@@ -877,11 +877,8 @@ fn rust_sample_report_rejects_index() {
 /// The recommendation knobs only apply with a `prompt` / `scorecard` format.
 #[test]
 fn rust_sample_report_rejects_stray_reco_flags() {
-    let (ok, _stdout, stderr) = run_report_capture("rust", &["--focus-rule", "hk"]);
-    assert!(
-        !ok,
-        "--focus-rule without a prompt/scorecard format must fail"
-    );
+    let (ok, _stdout, stderr) = run_report_capture("rust", &["--focus", "hk"]);
+    assert!(!ok, "--focus without a prompt/scorecard format must fail");
     assert!(
         stderr.contains("apply only with --output.prompt or --output.scorecard"),
         "actionable error: {stderr}"

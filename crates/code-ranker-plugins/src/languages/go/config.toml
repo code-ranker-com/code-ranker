@@ -2,7 +2,7 @@
 #
 # Everything language-specific for Go that *can* be data lives here, so `mod.rs`
 # stays thin (wiring only) and the metric engine is parameterised by the node-kind
-# tables below. Go adds NO presets/thresholds/spec-overrides of its own beyond the
+# tables below. Go adds NO principles/thresholds/spec-overrides of its own beyond the
 # Halstead token descriptions; it inherits the common catalog from `defaults.toml`.
 
 # No own principle corpus yet: with no `doc_overrides`, every `doc_url` inherits

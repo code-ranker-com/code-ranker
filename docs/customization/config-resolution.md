@@ -9,12 +9,12 @@ There are two independent resolution chains:
 - **Project config** — the `code-ranker.toml` that tunes *your* run (thresholds,
   cycles, custom metrics, checks, report views, output paths). Resolved at runtime.
 - **Language config** — the `<lang>.toml` that defines a *plugin's* vocabulary and
-  presets. Resolved at compile time, inside the binary.
+  principles. Resolved at compile time, inside the binary.
 
 Both layer with the **same deep-merge primitive**
 ([`code_ranker_plugin_api::toml_merge::deep_merge`](../../crates/code-ranker-plugin-api/src/toml_merge.rs)),
 so the per-key rules below are identical for both. For the merge mechanics
-(table-vs-table recursion, `[[presets]]`-by-`id`, the list-op DSL) see
+(table-vs-table recursion, `[[principles]]`-by-`id`, the list-op DSL) see
 [the merge semantics](#merge-semantics) section. For *what each key means*, see
 the [customization guide](README.md).
 
@@ -130,7 +130,7 @@ Every CLI flag below overrides the corresponding TOML key for the current run.
 | `--git.branch` / `--git.commit` / `--git.dirty-files` / `--git.origin` | *(snapshot metadata — no TOML key)* | CI escape hatch; replaces what `git` would report |
 
 Flags with **no TOML equivalent** (they shape this run's output, not the config):
-`--baseline`, `--focus-path`, `--focus-rule`, `--output-format`, `--top`,
+`--baseline`, `--focus-path`, `--focus`, `--output-format`, `--top`,
 `--exit-zero`, `--suggest-config`, `--severity`, `--export-full-config`.
 
 Full flag reference: [CLI.md](../code-ranker-cli/CLI.md).
@@ -184,7 +184,7 @@ TOML, deep-merged in this order (later overrides earlier), in
 
 - **`defaults.toml`** —
   [`crates/code-ranker-plugins/src/defaults.toml`](../../crates/code-ranker-plugins/src/defaults.toml).
-  The language-neutral base: the common `[[presets]]` catalog, `doc_base`, the
+  The language-neutral base: the common `[[principles]]` catalog, `doc_base`, the
   field-omission `[defaults]`, and the one-value-each `[ids]` / `[visibility]` /
   `[edges]` vocab every language shares.
 - **Family base (optional)** — a language in a family inherits one extra layer:
@@ -192,15 +192,15 @@ TOML, deep-merged in this order (later overrides earlier), in
   `cfamily/config.toml`. So `js/config.toml` carries only what differs from the
   shared engine vocab.
 - **`<lang>.toml`** — the language's own node-kind tables (`[kinds]`, `[halstead]`,
-  `[loc]`), its `doc_lang` / `doc_overrides`, and any preset additions/overrides.
+  `[loc]`), its `doc_lang` / `doc_overrides`, and any principle additions/overrides.
 
 A standalone language passes `&[lang_toml]`; a family member passes
-`&[base_lang_toml, lang_toml]`. The `[[presets]]` array merges **by `id`** (a
-language preset replaces a same-`id` base preset, a new `id` appends) — see below.
+`&[base_lang_toml, lang_toml]`. The `[[principles]]` array merges **by `id`** (a
+language principle replaces a same-`id` base principle, a new `id` appends) — see below.
 
 ### Principle-doc resolution — the `base/` corpus fallback
 
-A preset's `doc_url` inherits from a shared corpus the same way config inherits
+A principle's `doc_url` inherits from a shared corpus the same way config inherits
 `defaults.toml`. It resolves (in [`specs.rs`](../../crates/code-ranker-plugins/src/config/specs.rs))
 to `{doc_base}/{doc_lang}/{id}.md` for the ids a language **overrides**, and to
 `{doc_base}/base/{id}.md` otherwise — `base/` is the language-neutral fallback
@@ -230,7 +230,7 @@ Both chains use the same `deep_merge(base, overlay)`. For each key of `overlay`:
 | Case | Result |
 |---|---|
 | table vs table | **recurse** — per-key deep merge |
-| `[[presets]]` arrays | merge **by `id`**: same `id` replaces in place, new `id` appends |
+| `[[principles]]` arrays | merge **by `id`**: same `id` replaces in place, new `id` appends |
 | array + op-table `{add,remove,replace,clear,prepend}` | inherited list **patched in place** (the [list-op DSL](README.md#21-the-list-override-dsl)) |
 | array + plain array | overlay **replaces** wholesale |
 | any scalar / type mismatch | overlay **replaces** the base value |
@@ -239,7 +239,7 @@ Both chains use the same `deep_merge(base, overlay)`. For each key of `overlay`:
 So the default for a list is **replace**; opt into patching with an op-table.
 This is what lets a project's `--config strict.toml` add to a list set by
 `base.toml`, and a `<lang>.toml` extend (rather than restate) the inherited
-preset catalog or edge-kind vocab.
+principle catalog or edge-kind vocab.
 
 ---
 

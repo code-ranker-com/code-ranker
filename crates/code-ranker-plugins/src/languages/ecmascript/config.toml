@@ -4,7 +4,7 @@
 # (and the `else_if_via_else_clause` behavior flag) and reuse the generic engine
 # (`crate::engine`) via `ecmascript/dialect.rs`. The node-kind strings are
 # identical for both dialects; each is resolved against its own grammar.
-# ECMAScript carries NO presets / thresholds / spec overrides — its only
+# ECMAScript carries NO principles / thresholds / spec overrides — its only
 # language-specific data is the tree-sitter node-kind tables the engine keys on:
 #
 #   [roles] / [halstead] / [loc]  tree-sitter node-kind ROLE tables for the

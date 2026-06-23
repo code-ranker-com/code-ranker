@@ -12,7 +12,7 @@ use code_ranker_plugin_api::{
     metrics::MetricInputs,
     node::Node,
     plugin::{LanguagePlugin, PluginInput},
-    preset::Preset,
+    principle::Principle,
 };
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -116,11 +116,11 @@ pub fn report_overrides(name: &str) -> code_ranker_plugin_api::report::ReportOve
         .unwrap_or_default()
 }
 
-/// The matching plugin's Prompt-Generator presets (the common catalog plus any
-/// language-specific presets), built from its own config.
-pub fn presets(name: &str, input: &PluginInput) -> Vec<Preset> {
+/// The matching plugin's Prompt-Generator principles (the common catalog plus any
+/// language-specific principles), built from its own config.
+pub fn principles(name: &str, input: &PluginInput) -> Vec<Principle> {
     match registry().iter().find(|p| p.name() == name) {
-        Some(p) => p.presets(input),
+        Some(p) => p.principles(input),
         None => Vec::new(),
     }
 }

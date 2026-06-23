@@ -5,7 +5,7 @@ parsed into `PromptTemplate` by `prompt_template()` and carried in the snapshot 
 the CLI `prompt` format and the HTML viewer render the same text from one source.
 Each `## <field>` section maps to a `PromptTemplate` field; `## task` is a list
 (one entry per bullet, kept verbatim — the leading `- ` is part of the rendered
-line). `{id}` in a `task` or `doc_note` line is substituted with the active preset
+line). `{id}` in a `task` or `doc_note` line is substituted with the active principle
 id at render time (e.g. `--doc {id}` → `--doc HK`). This is internal template prose,
 not a published corpus doc — it lives next to `builtin.toml`, not under `languages/`.
 

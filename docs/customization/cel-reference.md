@@ -367,4 +367,4 @@ group   = "SRP"
 
 See [`README.md`](./README.md) for the full customization guide and
 [`custom-field-example.toml`](./custom-field-example.toml) for a runnable
-metrics/threshold/preset example.
+metrics/threshold/principle example.

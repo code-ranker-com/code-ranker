@@ -2,8 +2,8 @@
 #
 # `code-ranker-plugins/src/config.rs` parses this file and a language's
 # `<lang>.toml`, then DEEP-MERGES them: per section, per key the language value
-# overrides the base; the `[[presets]]` array is merged by `id` (a language
-# preset replaces a same-`id` base preset, a new one appends). See that module's
+# overrides the base; the `[[principles]]` array is merged by `id` (a language
+# principle replaces a same-`id` base principle, a new one appends). See that module's
 # docs for the exact rules.
 #
 # This base holds the language-neutral defaults. A language inherits everything
@@ -12,13 +12,13 @@
 #   doc_base / doc_lang  the principle-doc URL pieces. `doc_base` (the host/repo
 #                        prefix) is COMMON and lives here; each `<lang>.toml`
 #                        supplies `doc_lang` (its principle-corpus language, e.g.
-#                        `rust`, `python`, `typescript`). A preset's `doc_url` is
+#                        `rust`, `python`, `typescript`). A principle's `doc_url` is
 #                        resolved as `{doc_base}/{doc_lang}/{id}.md` (the `id` is
 #                        the filename — there is no separate `slug`).
-#   [[presets]]          design-principle recommendation presets (id, title,
+#   [[principles]]          design-principle recommendation principles (id, title,
 #                        sort_metric, connections, prompt). The COMMON,
 #                        language-neutral catalog lives here ONCE; every language
-#                        inherits it. A language may append its own presets (or
+#                        inherits it. A language may append its own principles (or
 #                        override one by `id`) in its `<lang>.toml`. Merged by id.
 #   [specs.<key>]        per-language tweaks to a metric's display (e.g.
 #                        description), applied over the central builtin specs.
@@ -27,7 +27,7 @@
 #                        (these are inherently grammar-specific, so the base
 #                        leaves them to each language).
 
-# The principle-doc URL prefix shared by every language. A preset's `doc_url`
+# The principle-doc URL prefix shared by every language. A principle's `doc_url`
 # resolves to `{doc_base}/{doc_lang}/{id}.md` for the ids a language overrides
 # (its `doc_overrides`), and to `{doc_base}/base/{id}.md` otherwise — `base/` is
 # the shared fallback corpus a language inherits when it has no own doc, mirroring
@@ -137,14 +137,14 @@ value_type = "bool"
 label = "External"
 
 # ──────────────────────────────────────────────────────────────────────────────
-# The COMMON, language-neutral metric-lens preset catalog (the recommendation
+# The COMMON, language-neutral metric-lens principle catalog (the recommendation
 # lenses). Defined ONCE here; every language inherits it. A `<lang>.toml` may
-# append language-specific presets or override an entry by `id`. The long prompt
+# append language-specific principles or override an entry by `id`. The long prompt
 # bodies are TOML multiline strings (the trailing `\` keeps them newline-free at
 # the end, matching the rendered output exactly).
 # ──────────────────────────────────────────────────────────────────────────────
 
-[[presets]]
+[[principles]]
 id = "CPX"
 title = "CPX — Reduce Complexity"
 sort_metric = "cognitive"
@@ -156,7 +156,7 @@ extracting repeated patterns into shared helpers, flattening deeply nested
 control flow, and breaking large functions into focused helpers.\
 """
 
-[[presets]]
+[[principles]]
 id = "ADP"
 title = "ADP — Acyclic Dependencies Principle"
 sort_metric = "cycle"
@@ -176,7 +176,7 @@ When splitting a module to break a cycle, the new structure should:
 - Not introduce new dependency cycles\
 """
 
-[[presets]]
+[[principles]]
 id = "SRP"
 title = "SRP — Single Responsibility Principle"
 sort_metric = "sloc"
@@ -190,7 +190,7 @@ Propose how to split responsibilities so each module changes for only one reason
 and specify the new module boundaries.\
 """
 
-[[presets]]
+[[principles]]
 id = "OCP"
 title = "OCP — Open/Closed Principle"
 sort_metric = "cyclomatic"
@@ -205,7 +205,7 @@ mechanism (polymorphism, strategy, plug-in registration) so new cases can be add
 without modifying these modules.\
 """
 
-[[presets]]
+[[principles]]
 id = "LSP"
 title = "LSP — Liskov Substitution Principle"
 sort_metric = "hk"
@@ -221,7 +221,7 @@ replace any other implementation of the same interface without breaking callers.
 Flag violations and propose fixes.\
 """
 
-[[presets]]
+[[principles]]
 id = "ISP"
 title = "ISP — Interface Segregation Principle"
 sort_metric = "items"
@@ -235,7 +235,7 @@ Propose how to split them into narrower interfaces so each consumer depends only
 what it actually uses.\
 """
 
-[[presets]]
+[[principles]]
 id = "DIP"
 title = "DIP — Dependency Inversion Principle"
 sort_metric = "fan_out"
@@ -249,7 +249,7 @@ concrete low-level type. Propose an abstraction (interface) to invert each such
 dependency, and specify where the concrete implementation should be wired in.\
 """
 
-[[presets]]
+[[principles]]
 id = "DRY"
 title = "DRY — Don't Repeat Yourself"
 sort_metric = "sloc"
@@ -263,7 +263,7 @@ below. For each duplication, propose a canonical location and the refactoring
 needed to consolidate it.\
 """
 
-[[presets]]
+[[principles]]
 id = "KISS"
 title = "KISS — Keep It Simple"
 sort_metric = "cognitive"
@@ -276,7 +276,7 @@ Identify over-engineered or needlessly complex constructs in the modules below.
 For each, describe the simpler alternative and estimate the risk of simplifying.\
 """
 
-[[presets]]
+[[principles]]
 id = "LoD"
 title = "Law of Demeter — Principle of Least Knowledge"
 sort_metric = "fan_out"
@@ -291,7 +291,7 @@ violate LoD. For each, propose a narrow accessor or a facade that exposes only
 what the caller needs, reducing coupling.\
 """
 
-[[presets]]
+[[principles]]
 id = "MISU"
 title = "MISU — Make Invalid States Unrepresentable"
 sort_metric = "cyclomatic"
@@ -306,7 +306,7 @@ states are representable at runtime. For each, propose a type-level encoding
 by construction.\
 """
 
-[[presets]]
+[[principles]]
 id = "CoI"
 title = "CoI — Composition Over Inheritance"
 sort_metric = "items"
@@ -320,7 +320,7 @@ decompose them into smaller composable parts, and show how consumers would assem
 the behaviour they need.\
 """
 
-[[presets]]
+[[principles]]
 id = "YAGNI"
 title = "YAGNI — You Aren't Gonna Need It"
 sort_metric = "sloc"

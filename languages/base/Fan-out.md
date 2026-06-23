@@ -55,8 +55,8 @@ For each high-fan-out module:
 
 ## How code-ranker surfaces it
 
-`fan_out` is a first-class node metric, a sort option, and the `FANOUT` preset
-in the Prompt Generator. The preset ranks modules by fan-out worst-first and
+`fan_out` is a first-class node metric, a sort option, and the `FANOUT` principle
+in the Prompt Generator. The principle ranks modules by fan-out worst-first and
 pre-selects **outgoing** connections, so the prompt shows exactly what each
 module pulls in.
 

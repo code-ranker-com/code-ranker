@@ -58,7 +58,7 @@ enabled = false
 # overview defaulting to the stdout stream. Both stay OFF unless requested via
 # `--output.prompt` / `--output.scorecard`; these just supply the default path.
 [output.prompt]
-path = ".code-ranker/{ts}-{git-hash-3}-{preset}.md"
+path = ".code-ranker/{ts}-{git-hash-3}-{principle}.md"
 
 [output.scorecard]
 path = "stdout"

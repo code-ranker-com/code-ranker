@@ -1,6 +1,6 @@
 use anyhow::Result;
 use code_ranker_plugin_api::{
-    Preset, default_cycle_kinds, default_node_kinds,
+    Principle, default_cycle_kinds, default_node_kinds,
     graph::Graph,
     level::{AttributeSpec, Level, NodeKindSpec},
     metrics::MetricInputs,
@@ -15,7 +15,7 @@ mod dialect;
 mod structure;
 
 /// The Python config: `python.toml` deep-merged over the shared `defaults.toml`,
-/// used to build the preset list (the common catalog + Python's `doc_lang`).
+/// used to build the principle list (the common catalog + Python's `doc_lang`).
 static CONFIG: LazyLock<toml::Table> =
     LazyLock::new(|| crate::config::load(include_str!("config.toml")));
 
@@ -98,10 +98,10 @@ impl LanguagePlugin for PythonPlugin {
         function_nodes(graph)
     }
 
-    fn presets(&self, _input: &PluginInput) -> Vec<Preset> {
+    fn principles(&self, _input: &PluginInput) -> Vec<Principle> {
         // The common catalog from `defaults.toml`, with `doc_url` resolved to
-        // `{doc_base}/python/<slug>.md` (Python adds no presets of its own).
-        crate::config::resolved_presets(&CONFIG)
+        // `{doc_base}/python/<slug>.md` (Python adds no principles of its own).
+        crate::config::resolved_principles(&CONFIG)
     }
 
     fn report_overrides(&self) -> code_ranker_plugin_api::report::ReportOverride {

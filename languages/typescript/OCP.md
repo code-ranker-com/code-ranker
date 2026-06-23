@@ -191,7 +191,7 @@ for (const mod of plugins) {
 The host knows only the plugin interface. New plugins ship as
 separate packages and are discovered via configuration (or via
 `package.json` `keywords` registries scanned at install time, the
-pattern used by ESLint plugins, Babel presets, and the Backstage
+pattern used by ESLint plugins, Babel principles, and the Backstage
 plugin system). The host is closed; the ecosystem is open.
 
 ## The Rust tension, in TS terms

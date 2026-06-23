@@ -324,7 +324,7 @@ Top-level fields:
   `edges`, `cycles`, `stats`, and a computed `ui` block (column/sort/size order
   and an optional `grouping` telling the viewer how to cluster nodes — e.g.
   `{ "key": "crate" }`)
-- `presets` — the Prompt-Generator principle catalog (`id` / `title` / `prompt` /
+- `principles` — the Prompt-Generator principle catalog (`id` / `title` / `prompt` /
   `sort_metric` / `connections` / …), language-adapted; omitted when empty
 - `prompt` — the language-neutral Prompt-Generator **scaffolding** (`intro` /
   `doc_note` / `task` / `focus` / `cycle_note`), so the CLI `prompt` format and
@@ -452,7 +452,7 @@ workspaces. The plugin MUST:
   and counted in `fan_out_external` instead. The advisory scorecard / viewer /
   prompt tiers are derived from the project's own `[rules.thresholds.file]` gate
   (not language-calibrated), so the report shows exactly what fails `check`.
-  The recommendation catalog is the shared 13 design-principle presets (from
+  The recommendation catalog is the shared 13 design principles (from
   `defaults.toml`); each coupling/complexity **metric** carries its own
   fix-prompt doc under `languages/base/` (`HK`, `Fan-in`, `Fan-out`, `Cognitive`,
   `Cyclomatic`; the cycle metric reuses `ADP`), referenced from the metric's `remediation`
@@ -751,7 +751,7 @@ can render any language/metric set without hardcoding names.
       "nodes": [...], "edges": [...], "cycles": [...], "stats": { ... }
     }
   },
-  "presets": [ { "id": "ADP", "label": "ADP", "title": "…", "prompt": "…",
+  "principles": [ { "id": "ADP", "label": "ADP", "title": "…", "prompt": "…",
                  "doc_url": "…", "sort_metric": "cycle", "connections": ["common","out"] } ]
 }
 ```
@@ -761,7 +761,7 @@ The dictionaries are pruned to the keys/kinds/groups actually present at that
 level, and the `ui` block is computed by the orchestrator from the present
 attributes. Every metric's label / name / formula / live-`calc` / direction /
 threshold lives in `node_attributes`, and the Prompt-Generator principles live in
-top-level `presets`, so the **viewer hardcodes no metric, kind, threshold or
+top-level `principles`, so the **viewer hardcodes no metric, kind, threshold or
 prompt by name** — it renders entirely from this data (see DESIGN §3.2 HTML
 assets). Optional `AttributeSpec` fields are omitted when absent.
 
@@ -773,7 +773,7 @@ graph-scope `agg(…)` aggregates emitted into `stats`) with no code change; onl
 tier-1 counting and the graph algorithms (`fan_in`/`fan_out`/`cycle`) are in Rust.
 A project config can also surface those metrics in the report (`[report]` column /
 card / stats list-overrides), gate `check` on them (`[rules.thresholds.file]`,
-custom metrics included), and add Prompt-Generator lenses (`[presets.<ID>]`) — all
+custom metrics included), and add Prompt-Generator lenses (`[principles.<ID>]`) — all
 data, no code. See `docs/code-ranker-cli/config.md` and `docs/customization/`.
 
 **Node shape** — `id`, `kind`, `name`, optional `parent`, plus flat attributes:

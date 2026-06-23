@@ -103,7 +103,7 @@ fn reco_for_cycle_uses_cycle_members() {
 }
 
 #[test]
-fn worst_preset_picks_most_violations() {
+fn worst_principle_picks_most_violations() {
     let level = level_with(vec![file_node(
         "{target}/a.rs",
         &[
@@ -112,8 +112,8 @@ fn worst_preset_picks_most_violations() {
             ("cycle", AttrValue::Str("mutual".into())),
         ],
     )]);
-    let presets = vec![
-        Preset {
+    let principles = vec![
+        Principle {
             id: "SRP".into(),
             label: "SRP".into(),
             title: "SRP — x".into(),
@@ -122,7 +122,7 @@ fn worst_preset_picks_most_violations() {
             sort_metric: "sloc".into(),
             connections: vec![],
         },
-        Preset {
+        Principle {
             id: "ADP".into(),
             label: "ADP".into(),
             title: "ADP — x".into(),
@@ -133,7 +133,7 @@ fn worst_preset_picks_most_violations() {
         },
     ];
     // SRP: sloc 10 → 0 breaches; ADP: cycle → 1. ADP wins.
-    assert_eq!(worst_preset(&level, &presets).as_deref(), Some("ADP"));
+    assert_eq!(worst_principle(&level, &principles).as_deref(), Some("ADP"));
 }
 
 #[test]
@@ -167,7 +167,7 @@ fn compose_prompt_cycle_lists_modules_and_connections() {
         line: None,
         attrs: Default::default(),
     });
-    let presets = vec![Preset {
+    let principles = vec![Principle {
         id: "ADP".into(),
         label: "ADP".into(),
         title: "ADP — Acyclic".into(),
@@ -178,7 +178,7 @@ fn compose_prompt_cycle_lists_modules_and_connections() {
     }];
     let md = compose_prompt(
         &level,
-        &presets,
+        &principles,
         &code_ranker_graph::prompt_template(),
         "ADP",
         Severity::Auto,
@@ -208,7 +208,7 @@ fn compose_prompt_cycle_lists_modules_and_connections() {
     assert!(md.contains("`a.rs` → `b.rs` (uses)"), "edge line");
     assert!(
         md.contains("191019-ADP.md") || md.contains("-ADP.md"),
-        "save-report name carries preset id"
+        "save-report name carries principle id"
     );
 }
 
@@ -262,7 +262,7 @@ fn compose_prompt_metric_orders_and_respects_top() {
             ],
         ),
     ]);
-    let presets = vec![Preset {
+    let principles = vec![Principle {
         id: "SRP".into(),
         label: "SRP".into(),
         title: "SRP — Single".into(),
@@ -273,7 +273,7 @@ fn compose_prompt_metric_orders_and_respects_top() {
     }];
     let md = compose_prompt(
         &level,
-        &presets,
+        &principles,
         &code_ranker_graph::prompt_template(),
         "SRP",
         Severity::Warning,
@@ -296,9 +296,9 @@ fn compose_prompt_metric_orders_and_respects_top() {
 }
 
 #[test]
-fn compose_prompt_unknown_preset_errors() {
+fn compose_prompt_unknown_principle_errors() {
     let level = level_with(vec![]);
-    let presets = vec![Preset {
+    let principles = vec![Principle {
         id: "ADP".into(),
         label: "ADP".into(),
         title: "t".into(),
@@ -309,7 +309,7 @@ fn compose_prompt_unknown_preset_errors() {
     }];
     let err = compose_prompt(
         &level,
-        &presets,
+        &principles,
         &code_ranker_graph::prompt_template(),
         "NOPE",
         Severity::Auto,
@@ -317,7 +317,7 @@ fn compose_prompt_unknown_preset_errors() {
         &[],
     )
     .unwrap_err();
-    assert!(format!("{err}").contains("unknown preset 'NOPE'"));
+    assert!(format!("{err}").contains("unknown principle 'NOPE'"));
 }
 
 #[test]
@@ -338,8 +338,8 @@ fn scorecard_shows_principle_and_worst_modules() {
             ],
         ),
     ]);
-    let presets = vec![
-        Preset {
+    let principles = vec![
+        Principle {
             id: "ADP".into(),
             label: "ADP".into(),
             title: "ADP — Acyclic Dependencies".into(),
@@ -348,7 +348,7 @@ fn scorecard_shows_principle_and_worst_modules() {
             sort_metric: "cycle".into(),
             connections: vec![],
         },
-        Preset {
+        Principle {
             id: "SRP".into(),
             label: "SRP".into(),
             title: "SRP — Single Responsibility".into(),
@@ -361,7 +361,7 @@ fn scorecard_shows_principle_and_worst_modules() {
     let sc = render_scorecard(
         "rust",
         &level,
-        &presets,
+        &principles,
         &[Severity::Warning, Severity::Info],
         None,
         None,
@@ -388,9 +388,9 @@ fn scorecard_shows_principle_and_worst_modules() {
     );
 }
 
-/// A cycle preset for the narrowed-scorecard tests.
-fn adp_preset() -> Preset {
-    Preset {
+/// A cycle principle for the narrowed-scorecard tests.
+fn adp_principle() -> Principle {
+    Principle {
         id: "ADP".into(),
         label: "ADP".into(),
         title: "ADP — Acyclic Dependencies".into(),
@@ -401,8 +401,8 @@ fn adp_preset() -> Preset {
     }
 }
 
-fn srp_preset() -> Preset {
-    Preset {
+fn srp_principle() -> Principle {
+    Principle {
         id: "SRP".into(),
         label: "SRP".into(),
         title: "SRP — Single Responsibility".into(),
@@ -413,7 +413,7 @@ fn srp_preset() -> Preset {
     }
 }
 
-/// Narrowing on a metric preset lists that metric's ranked modules under
+/// Narrowing on a metric focus lists that metric's ranked modules under
 /// WORST MODULES (the `narrow.is_some()` non-cycle branch).
 #[test]
 fn scorecard_narrowed_metric_lists_ranked_modules() {
@@ -424,7 +424,7 @@ fn scorecard_narrowed_metric_lists_ranked_modules() {
     let sc = render_scorecard(
         "rust",
         &level,
-        &[srp_preset()],
+        &[srp_principle()],
         &[Severity::Warning],
         Some(2),
         Some(&Focus::Metric("sloc".into())),
@@ -443,7 +443,7 @@ fn scorecard_narrowed_metric_lists_ranked_modules() {
     );
 }
 
-/// Narrowing on the cycle (ADP) preset lists every member of the top cycle
+/// Narrowing on the cycle (ADP) principle lists every member of the top cycle
 /// (the `narrow.is_some()` cycle branch), with the "one cycle" header.
 #[test]
 fn scorecard_narrowed_cycle_lists_all_members() {
@@ -470,7 +470,7 @@ fn scorecard_narrowed_cycle_lists_all_members() {
     let sc = render_scorecard(
         "rust",
         &level,
-        &[adp_preset()],
+        &[adp_principle()],
         &[Severity::Warning],
         None,
         Some(&Focus::Metric("cycle".into())),
@@ -491,11 +491,11 @@ fn scorecard_narrowed_cycle_lists_all_members() {
 #[test]
 fn resolve_focus_unknown_name_errors() {
     let level = level_with(vec![file_node("{target}/a.rs", &[])]);
-    let err = resolve_focus(&level, &[srp_preset()], "zzz")
+    let err = resolve_focus(&level, &[srp_principle()], "zzz")
         .unwrap_err()
         .to_string();
     assert!(
-        err.contains("unknown --focus-rule 'zzz'"),
+        err.contains("unknown --focus 'zzz'"),
         "names bad focus: {err}"
     );
     assert!(
@@ -509,19 +509,19 @@ fn resolve_focus_unknown_name_errors() {
 #[test]
 fn resolve_focus_picks_metric_or_principle() {
     let level = level_with(vec![file_node("{target}/a.rs", &[])]);
-    let presets = [srp_preset()];
+    let principles = [srp_principle()];
     assert_eq!(
-        resolve_focus(&level, &presets, "HK").unwrap(),
+        resolve_focus(&level, &principles, "HK").unwrap(),
         Focus::Metric("hk".into()),
         "metric key matched case-insensitively"
     );
     assert_eq!(
-        resolve_focus(&level, &presets, "SRP").unwrap(),
+        resolve_focus(&level, &principles, "SRP").unwrap(),
         Focus::Principle("SRP".into()),
         "principle id matched"
     );
     assert_eq!(
-        resolve_focus(&level, &presets, "threshold.file.hk").unwrap(),
+        resolve_focus(&level, &principles, "threshold.file.hk").unwrap(),
         Focus::Metric("hk".into()),
         "full threshold rule id maps to its metric"
     );
@@ -547,7 +547,7 @@ fn scorecard_info_tier_and_cycle_in_rest() {
     let sc = render_scorecard(
         "rust",
         &level,
-        &[srp_preset()],
+        &[srp_principle()],
         &[Severity::Warning, Severity::Info],
         None,
         None,
@@ -574,7 +574,7 @@ fn scorecard_reports_no_breaches_when_clean() {
     let sc = render_scorecard(
         "rust",
         &level,
-        &[srp_preset()],
+        &[srp_principle()],
         &[Severity::Warning],
         None,
         None,
@@ -588,7 +588,7 @@ fn scorecard_reports_no_breaches_when_clean() {
 }
 
 /// A two-cycle level: builds nodes + two `CycleGroup`s, returned ready for the
-/// ADP (cycle) preset.
+/// ADP (cycle) principle.
 fn two_cycle_level() -> LevelGraph {
     let mut level = level_with(vec![
         file_node(
@@ -636,7 +636,7 @@ fn compose_prompt_lists_multiple_cycles() {
     let level = two_cycle_level();
     let md = compose_prompt(
         &level,
-        &[adp_preset()],
+        &[adp_principle()],
         &code_ranker_graph::prompt_template(),
         "ADP",
         Severity::Auto,
@@ -662,7 +662,7 @@ fn scorecard_narrowed_cycle_top_n_header() {
     let sc = render_scorecard(
         "rust",
         &level,
-        &[adp_preset()],
+        &[adp_principle()],
         &[Severity::Warning],
         Some(2),
         Some(&Focus::Metric("cycle".into())),
@@ -682,7 +682,7 @@ fn scorecard_narrowed_cycle_with_none_says_none() {
     let sc = render_scorecard(
         "rust",
         &level,
-        &[adp_preset()],
+        &[adp_principle()],
         &[Severity::Warning],
         None,
         Some(&Focus::Metric("cycle".into())),
@@ -699,7 +699,7 @@ fn scorecard_clips_long_principle_name() {
         "{target}/a.rs",
         &[("hk", AttrValue::Float(2000.0))],
     )]);
-    let preset = Preset {
+    let principle = Principle {
         id: "LONG".into(),
         label: "LONG".into(),
         title: "LONG — A Very Long Principle Name That Exceeds The Column".into(),
@@ -711,7 +711,7 @@ fn scorecard_clips_long_principle_name() {
     let sc = render_scorecard(
         "rust",
         &level,
-        &[preset],
+        &[principle],
         &[Severity::Warning],
         None,
         None,
@@ -727,17 +727,17 @@ fn parse_severity_rejects_garbage() {
     assert!(parse_severity("nope").is_err());
 }
 
-/// `synth_metric_preset` frames a metric as its own "principle": title from
+/// `synth_metric_principle` frames a metric as its own "principle": title from
 /// label+name, summary from description, `doc_url` extracted from the remediation
 /// URL, and in/out/common connections for a coupling metric (none otherwise).
 #[test]
-fn synth_metric_preset_frames_metric() {
+fn synth_metric_principle_frames_metric() {
     let mut hk = AttributeSpec::new(ValueType::Float, "HK");
     hk.short = Some("HK".into());
     hk.name = Some("Henry–Kafura".into());
     hk.description = Some("coupling × size".into());
     hk.group = Some("coupling".into());
-    hk.remediation = Some("Download and follow https://x/HK.md please".into());
+    hk.remediation = Some("Run `code-ranker report --doc HK` and follow its instructions.".into());
     let mut sloc = AttributeSpec::new(ValueType::Int, "SLOC");
     sloc.description = Some("source lines".into());
     let mut na: BTreeMap<String, AttributeSpec> = BTreeMap::new();
@@ -748,15 +748,15 @@ fn synth_metric_preset_frames_metric() {
         ..Default::default()
     };
 
-    let p = synth_metric_preset(&level, "hk");
+    let p = synth_metric_principle(&level, &[], "hk");
     assert_eq!(p.id, "hk");
     assert_eq!(p.sort_metric, "hk");
     assert_eq!(p.title, "HK — Henry–Kafura");
     assert_eq!(p.prompt, "coupling × size");
     assert_eq!(
         p.doc_url.as_deref(),
-        Some("https://x/HK.md"),
-        "url from remediation"
+        Some("HK"),
+        "doc id from the remediation's --doc reference"
     );
     assert_eq!(
         p.connections,
@@ -764,14 +764,43 @@ fn synth_metric_preset_frames_metric() {
         "coupling → connections"
     );
 
-    let q = synth_metric_preset(&level, "sloc");
+    let q = synth_metric_principle(&level, &[], "sloc");
     assert_eq!(q.title, "SLOC", "no `name` → title is the label");
     assert!(q.connections.is_empty(), "non-coupling → no connections");
     assert!(q.doc_url.is_none(), "no remediation URL → no doc link");
 }
 
+/// `synth_metric_principle("cycle", …)` borrows the ADP principle (the one whose
+/// `sort_metric` is `cycle`) so the metric-lens prompt reads like ADP; with no such
+/// principle present it falls through to generic metric framing.
+#[test]
+fn synth_metric_principle_cycle_borrows_adp() {
+    let adp = Principle {
+        id: "ADP".into(),
+        label: "ADP".into(),
+        title: "ADP — Acyclic Dependencies Principle".into(),
+        prompt: "Break the cycles.".into(),
+        doc_url: Some("https://x/ADP.md".into()),
+        sort_metric: "cycle".into(),
+        connections: vec!["common".into()],
+    };
+    let level = LevelGraph::default();
+
+    let p = synth_metric_principle(&level, std::slice::from_ref(&adp), "cycle");
+    assert_eq!(p.id, "cycle");
+    assert_eq!(p.sort_metric, "cycle");
+    assert_eq!(p.title, adp.title, "borrows ADP's title");
+    assert_eq!(p.prompt, adp.prompt, "borrows ADP's prompt body");
+    assert_eq!(p.connections, adp.connections, "borrows ADP's connections");
+    assert_eq!(p.doc_url, adp.doc_url, "borrows ADP's doc");
+
+    // No ADP-like principle present → generic metric framing (label is the key).
+    let g = synth_metric_principle(&level, &[], "cycle");
+    assert_eq!(g.title, "cycle");
+}
+
 /// The metric lens must not print the metric description twice — once is the
-/// Summary (the synth preset's `prompt`), so the modules section drops it.
+/// Summary (the synth principle's `prompt`), so the modules section drops it.
 #[test]
 fn compose_prompt_metric_lens_omits_duplicate_description() {
     let desc = "coupling and size, quadratic in fan";
@@ -786,10 +815,10 @@ fn compose_prompt_metric_lens_omits_duplicate_description() {
         nodes: vec![file_node("{target}/a.rs", &[("hk", AttrValue::Float(9.0))])],
         ..Default::default()
     };
-    let preset = synth_metric_preset(&level, "hk"); // preset.prompt == desc
+    let principle = synth_metric_principle(&level, &[], "hk"); // principle.prompt == desc
     let md = compose_prompt(
         &level,
-        &[preset],
+        &[principle],
         &code_ranker_graph::prompt_template(),
         "hk",
         Severity::Auto,
@@ -827,10 +856,10 @@ fn in_focus_matches_file_and_folder() {
     assert!(!in_focus(&n, &["crates/b".to_string()]), "outside the path");
 }
 
-/// A principle focus shows only that preset's row (others hidden) and ranks the
+/// A principle focus shows only that principle's row (others hidden) and ranks the
 /// worst modules by its `sort_metric`.
 #[test]
-fn scorecard_focus_principle_shows_only_that_preset() {
+fn scorecard_focus_principle_shows_only_that_principle() {
     let level = level_with(vec![file_node(
         "{target}/big.rs",
         &[
@@ -838,11 +867,11 @@ fn scorecard_focus_principle_shows_only_that_preset() {
             ("sloc", AttrValue::Int(300)),
         ],
     )]);
-    let presets = [srp_preset(), adp_preset()];
+    let principles = [srp_principle(), adp_principle()];
     let sc = render_scorecard(
         "rust",
         &level,
-        &presets,
+        &principles,
         &[Severity::Warning, Severity::Info],
         None,
         Some(&Focus::Principle("SRP".into())),
@@ -885,7 +914,7 @@ fn compose_prompt_single_focus_abbreviates_in_and_out_edges() {
         line: Some(3),
         attrs: Default::default(),
     });
-    let preset = Preset {
+    let principle = Principle {
         id: "HK".into(),
         label: "HK".into(),
         title: "HK — Hotspot".into(),
@@ -896,7 +925,7 @@ fn compose_prompt_single_focus_abbreviates_in_and_out_edges() {
     };
     let md = compose_prompt(
         &level,
-        &[preset],
+        &[principle],
         &code_ranker_graph::prompt_template(),
         "HK",
         Severity::Auto,

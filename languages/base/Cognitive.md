@@ -68,7 +68,7 @@ applies verbatim here.
 code-ranker check <path/to/project> --threshold file.cognitive=110 --top 1
 
 # Triage worst-first by cognitive — ranked offenders, no snapshot to parse:
-code-ranker report <path/to/project> --output.scorecard --focus-rule cognitive
+code-ranker report <path/to/project> --output.scorecard --focus cognitive
 
 # After flattening / splitting — confirm it dropped and no new cycle appeared:
 code-ranker check <path/to/project> --threshold file.cognitive=110

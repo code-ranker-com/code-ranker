@@ -7,7 +7,7 @@
 //!
 //! For each key of `overlay` applied onto `base`:
 //! - **table vs table** → recurse (per-key deep merge).
-//! - **`[[presets]]` array of tables** → merge **by `id`**: an overlay preset with
+//! - **`[[principles]]` array of tables** → merge **by `id`**: an overlay principle with
 //!   an `id` already present in the base replaces that entry in place; a new `id`
 //!   is appended.
 //! - **array patched by an op-table** (`{add,remove,replace,clear,prepend,…}`) →
@@ -33,9 +33,9 @@ pub fn deep_merge(mut base: Table, overlay: Table) -> Table {
                     base.insert(key, other);
                 }
             },
-            Some(Value::Array(ba)) if key == "presets" => {
+            Some(Value::Array(ba)) if key == "principles" => {
                 if let Value::Array(oa) = ov {
-                    base.insert(key, Value::Array(merge_presets(ba, oa)));
+                    base.insert(key, Value::Array(merge_principles(ba, oa)));
                 } else {
                     base.insert(key, ov);
                 }
@@ -60,13 +60,13 @@ pub fn deep_merge(mut base: Table, overlay: Table) -> Table {
     base
 }
 
-/// Merge two `[[presets]]` arrays by the `id` field: an overlay preset whose
+/// Merge two `[[principles]]` arrays by the `id` field: an overlay principle whose
 /// `id` matches a base entry replaces it in place; a new `id` is appended.
 /// Entries without a string `id` are appended verbatim.
-pub fn merge_presets(mut base: Vec<Value>, overlay: Vec<Value>) -> Vec<Value> {
+pub fn merge_principles(mut base: Vec<Value>, overlay: Vec<Value>) -> Vec<Value> {
     for ov in overlay {
-        let ov_id = preset_id(&ov);
-        match ov_id.and_then(|id| base.iter().position(|b| preset_id(b) == Some(id))) {
+        let ov_id = principle_id(&ov);
+        match ov_id.and_then(|id| base.iter().position(|b| principle_id(b) == Some(id))) {
             Some(pos) => base[pos] = ov,
             None => base.push(ov),
         }
@@ -74,6 +74,6 @@ pub fn merge_presets(mut base: Vec<Value>, overlay: Vec<Value>) -> Vec<Value> {
     base
 }
 
-fn preset_id(v: &Value) -> Option<&str> {
+fn principle_id(v: &Value) -> Option<&str> {
     v.as_table()?.get("id")?.as_str()
 }

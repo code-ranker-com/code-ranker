@@ -1,6 +1,6 @@
 use super::*;
 use code_ranker_plugin_api::list_override::report_override;
-use code_ranker_plugin_api::toml_merge::{deep_merge, merge_presets};
+use code_ranker_plugin_api::toml_merge::{deep_merge, merge_principles};
 use toml::{Table, Value};
 
 /// Deep-merge recurses into tables and lets the overlay win per key.
@@ -34,32 +34,32 @@ fn deep_merge_replaces_table_with_scalar() {
     assert_eq!(merged["a"].as_integer(), Some(5));
 }
 
-/// `[[presets]]` arrays merge by `id`: a same-id overlay preset replaces the
+/// `[[principles]]` arrays merge by `id`: a same-id overlay principle replaces the
 /// base entry in place; a new id appends.
 #[test]
-fn presets_merge_by_id() {
+fn principles_merge_by_id() {
     let base: Table = r#"
-[[presets]]
+[[principles]]
 id = "A"
 title = "base A"
-[[presets]]
+[[principles]]
 id = "B"
 title = "base B"
 "#
     .parse()
     .unwrap();
     let overlay: Table = r#"
-[[presets]]
+[[principles]]
 id = "B"
 title = "overlay B"
-[[presets]]
+[[principles]]
 id = "C"
 title = "overlay C"
 "#
     .parse()
     .unwrap();
     let merged = deep_merge(base, overlay);
-    let arr = merged["presets"].as_array().unwrap();
+    let arr = merged["principles"].as_array().unwrap();
     let ids: Vec<&str> = arr.iter().map(|p| p["id"].as_str().unwrap()).collect();
     assert_eq!(ids, ["A", "B", "C"], "B replaced in place, C appended");
     // B took the overlay's title.
@@ -67,30 +67,30 @@ title = "overlay C"
     assert_eq!(b["title"].as_str(), Some("overlay B"));
 }
 
-/// A preset without a string `id` is appended verbatim rather than matched.
+/// A principle without a string `id` is appended verbatim rather than matched.
 #[test]
-fn presets_without_id_are_appended() {
+fn principles_without_id_are_appended() {
     let base = vec![toml::Value::Table({
         let mut t = Table::new();
         t.insert("id".into(), "A".into());
         t
     })];
     let overlay = vec![toml::Value::Table(Table::new())];
-    let merged = merge_presets(base, overlay);
+    let merged = merge_principles(base, overlay);
     assert_eq!(merged.len(), 2);
 }
 
 /// The shared loader merges `defaults.toml` under `rust.toml` and exposes the
-/// Rust presets / spec overrides.
+/// Rust principles / spec overrides.
 #[test]
 fn load_rust_exposes_sections() {
     let cfg = load(include_str!("../languages/rust/config.toml"));
 
-    let ps = presets(&cfg);
+    let ps = principles(&cfg);
     let ids: Vec<&str> = ps.iter().map(|p| p.id.as_str()).collect();
     // The full catalog is inherited from `defaults.toml`: 13 design principles.
-    // The metric-lens presets (HK/SLOC/FANIN/FANOUT) were removed — each metric
-    // now carries its own prompt doc. Rust adds no own presets.
+    // The metric-lens principles (HK/SLOC/FANIN/FANOUT) were removed — each metric
+    // now carries its own prompt doc. Rust adds no own principles.
     assert_eq!(
         ids,
         [
@@ -311,18 +311,18 @@ fn string_list_reads_data_lists_verbatim() {
 }
 
 /// The common catalog lives in `defaults.toml` and is inherited by every
-/// language; `resolved_presets` returns it (catalog first, language presets
+/// language; `resolved_principles` returns it (catalog first, language principles
 /// appended) with `label = id`. Each `doc_url` resolves to its own
 /// `{doc_base}/{doc_lang}/{id}.md` for a language that overrides the id
 /// (`doc_overrides`), and to the shared `{doc_base}/base/{id}.md` fallback
 /// otherwise.
 #[test]
-fn resolved_presets_inherit_catalog_and_resolve_doc_urls() {
-    let rust = resolved_presets(&load(include_str!("../languages/rust/config.toml")));
+fn resolved_principles_inherit_catalog_and_resolve_doc_urls() {
+    let rust = resolved_principles(&load(include_str!("../languages/rust/config.toml")));
     let ids: Vec<&str> = rust.iter().map(|p| p.id.as_str()).collect();
     // The full catalog in `defaults.toml` order: 13 design principles. All come
-    // from `defaults.toml` (inherited by every language); Rust adds no own presets.
-    // (The metric-lens presets were removed — metrics carry their own docs now.)
+    // from `defaults.toml` (inherited by every language); Rust adds no own principles.
+    // (The metric-lens principles were removed — metrics carry their own docs now.)
     assert_eq!(
         ids,
         [
@@ -339,18 +339,18 @@ fn resolved_presets_inherit_catalog_and_resolve_doc_urls() {
         Some("https://github.com/ffedoroff/code-ranker/blob/main/languages/rust/CPX.md")
     );
 
-    // Languages with no own presets inherit the full 13-entry catalog, and JS
+    // Languages with no own principles inherit the full 13-entry catalog, and JS
     // shares the TypeScript corpus.
-    let py = resolved_presets(&load(include_str!("../languages/python/config.toml")));
+    let py = resolved_principles(&load(include_str!("../languages/python/config.toml")));
     assert_eq!(py.len(), 13);
     assert!(py[0].doc_url.as_deref().unwrap().contains("/python/"));
-    let js = resolved_presets(&load(include_str!("../languages/javascript/config.toml")));
+    let js = resolved_principles(&load(include_str!("../languages/javascript/config.toml")));
     assert_eq!(js.len(), 13);
     assert!(js[0].doc_url.as_deref().unwrap().contains("/typescript/"));
 
     // A language with no own corpus (no `doc_overrides`) inherits every doc from
     // the shared `base/` fallback — fixing what used to be a dead `/go/` link.
-    let go = resolved_presets(&load(include_str!("../languages/go/config.toml")));
+    let go = resolved_principles(&load(include_str!("../languages/go/config.toml")));
     assert_eq!(go.len(), 13);
     assert_eq!(
         go[0].doc_url.as_deref(),
@@ -366,11 +366,11 @@ fn resolved_presets_inherit_catalog_and_resolve_doc_urls() {
 /// The selective `doc_overrides = ["SRP", …]` form: only the listed ids resolve
 /// to the language's own folder; every other principle falls back to `base/`.
 #[test]
-fn resolved_presets_partial_doc_overrides_route_only_listed_ids() {
+fn resolved_principles_partial_doc_overrides_route_only_listed_ids() {
     let cfg = load("doc_lang = \"mylang\"\ndoc_overrides = [\"SRP\", \"DIP\"]\n");
-    let presets = resolved_presets(&cfg);
+    let principles = resolved_principles(&cfg);
     let url = |id: &str| {
-        presets
+        principles
             .iter()
             .find(|p| p.id == id)
             .and_then(|p| p.doc_url.clone())
@@ -410,13 +410,13 @@ fn deep_merge_patches_inherited_lists_via_op_table() {
     assert_eq!(strs(&merged["ys"]), ["replaced"], "plain array replaces");
 }
 
-/// `presets` merges by id only array-vs-array; a non-array overlay replaces it.
+/// `principles` merges by id only array-vs-array; a non-array overlay replaces it.
 #[test]
-fn presets_replaced_by_non_array_overlay() {
-    let base: Table = "presets = [{ id = \"a\" }]\n".parse().unwrap();
-    let overlay: Table = "presets = \"none\"\n".parse().unwrap();
+fn principles_replaced_by_non_array_overlay() {
+    let base: Table = "principles = [{ id = \"a\" }]\n".parse().unwrap();
+    let overlay: Table = "principles = \"none\"\n".parse().unwrap();
     let merged = deep_merge(base, overlay);
-    assert_eq!(merged["presets"].as_str(), Some("none"));
+    assert_eq!(merged["principles"].as_str(), Some("none"));
 }
 
 /// Integration: the real Rust config carries the demo `[report]` override — five

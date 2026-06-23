@@ -12,7 +12,7 @@ use crate::languages::ecmascript::{
 };
 use anyhow::Result;
 use code_ranker_plugin_api::{
-    Preset, detect_with_marker,
+    Principle, detect_with_marker,
     graph::Graph,
     level::{AttributeSpec, Level},
     metrics::MetricInputs,
@@ -100,10 +100,10 @@ impl LanguagePlugin for JavascriptPlugin {
         })
     }
 
-    fn presets(&self, _input: &PluginInput) -> Vec<Preset> {
+    fn principles(&self, _input: &PluginInput) -> Vec<Principle> {
         // The common catalog from `defaults.toml`, with `doc_url` resolved to
         // `{doc_base}/typescript/<slug>.md` (JS shares the TS principle corpus).
-        crate::config::resolved_presets(&CONFIG)
+        crate::config::resolved_principles(&CONFIG)
     }
 
     fn report_overrides(&self) -> code_ranker_plugin_api::report::ReportOverride {

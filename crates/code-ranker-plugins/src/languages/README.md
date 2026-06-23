@@ -11,7 +11,7 @@ others.
 ```
 src/
   lib.rs               ← declares `languages` + re-exports the Plugin structs at the crate root
-  config.rs            ← the config loader (defaults.toml merge + preset resolution)
+  config.rs            ← the config loader (defaults.toml merge + principle resolution)
   defaults.toml        ← the COMMON base config every language inherits
   engine/              ← the GENERIC tree-sitter metric engine (shared by all langs)
     mod.rs             ← compute / compute_functions driver + measure()
@@ -97,8 +97,8 @@ overrides only what differs**. A language config carries:
   (operators/operands, branches, exits, statements, comments, spaces, …). The
   walk logic stays in `engine/`; *which kinds it counts* is data. (Reference: the
   `[roles]` / `[halstead]` / `[loc]` sections of `languages/rust/config.toml`.)
-- **metric presets** — the recommendation lenses (e.g. `HK`), including the long
-  prompt text (use TOML multiline strings).
+- **principles** — the recommendation `[[principles]]` (e.g. `ADP`), including the
+  long prompt text (use TOML multiline strings).
 - **spec overrides** — language-specific tweaks to a metric's display (e.g. the
   Rust `tloc`/`sloc` description mentioning `#[cfg(test)]`).
 - **thresholds** — language-calibrated `info`/`warning` limits per metric.
@@ -231,7 +231,7 @@ display spec) belongs. When you add a metric:
 
 1. `src/languages/foo/mod.rs` — `pub struct FooPlugin;` + thin `impl LanguagePlugin`.
 2. `src/languages/foo/config.toml` — inherit `defaults.toml`; add node-kind tables,
-   presets, thresholds, spec overrides (only the diffs).
+   principles, thresholds, spec overrides (only the diffs).
 3. Imperative submodules — the AST walk / structure builder (or reuse a shared
    module like `languages/ecmascript/`).
 4. `src/languages/foo/tests/<source>.rs` for each source file;

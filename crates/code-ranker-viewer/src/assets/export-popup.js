@@ -29,15 +29,15 @@ window.isPromptPopupOpen = isPromptPopupOpen;
 
 // ── Prompt-Generator state in the URL ────────────────────────────────────────
 // The popup persists its full state in the query string so a refresh restores it
-// exactly (open state, preset, source, count, sort metric, connection toggles,
+// exactly (open state, principle, source, count, sort metric, connection toggles,
 // and the selected node ids). `epsel` is repeated once per selected id.
-const EP_KEYS = ['ep', 'eppreset', 'epsrc', 'epn', 'epsort', 'epconn', 'epsel'];
+const EP_KEYS = ['ep', 'epprinciple', 'epsrc', 'epn', 'epsort', 'epconn', 'epsel'];
 
 function epWriteUrlState(s) {
   const p = new URLSearchParams(location.search);
   EP_KEYS.forEach(k => p.delete(k));
   p.set('ep', s.level);
-  if (s.preset) p.set('eppreset', s.preset);
+  if (s.principle) p.set('epprinciple', s.principle);
   p.set('epsrc', s.src === 'selected' ? 'sel' : 'rec');
   if (s.n != null && s.n !== '') p.set('epn', String(s.n));
   if (s.sort) p.set('epsort', s.sort);
@@ -51,7 +51,7 @@ function epReadUrl() {
   if (!p.has('ep')) return null;
   return {
     level:  p.get('ep'),
-    preset: p.get('eppreset') || null,
+    principle: p.get('epprinciple') || null,
     src:    p.get('epsrc') || null,
     n:      p.get('epn'),
     sort:   p.get('epsort') || null,
@@ -91,7 +91,7 @@ function openExportPopup(level, restore) {
   // ── popup DOM (created once) ──────────────────────────────────────────
   let overlay = document.getElementById('export-popup-overlay');
   if (!overlay) {
-    const presets     = snapshotPresets();
+    const principles     = snapshotPrinciples();
     const ui          = levelUi(level);
     const sortMetrics = ui.sort || ['hk'];
 
@@ -100,8 +100,8 @@ function openExportPopup(level, restore) {
       return `<option value="${m}">${label}</option>`;
     }).join('');
 
-    const presetBtns = presets.map(p =>
-      `<button class="exp-preset-btn" data-preset="${p.id}">${p.label}<span class="exp-preset-count"></span></button>`
+    const principleBtns = principles.map(p =>
+      `<button class="exp-principle-btn" data-principle="${p.id}">${p.label}<span class="exp-principle-count"></span></button>`
     ).join('');
 
     overlay = document.createElement('div');
@@ -131,9 +131,9 @@ function openExportPopup(level, restore) {
           '<textarea id="export-textarea" readonly></textarea>' +
           '<button class="exp-copy-btn">Copy markdown <span class="exp-copy-icon">⎘</span></button>' +
         '</div>' +
-        '<div class="exp-presets">' +
-          '<div class="exp-presets-label">Presets</div>' +
-          `<div class="exp-preset-btns">${presetBtns}</div>` +
+        '<div class="exp-principles">' +
+          '<div class="exp-principles-label">Principles</div>' +
+          `<div class="exp-principle-btns">${principleBtns}</div>` +
         '</div>' +
       '</div>';
     document.body.appendChild(overlay);
@@ -153,15 +153,15 @@ function openExportPopup(level, restore) {
     });
   }
 
-  // Wrap a preset's title + prompt into the full instruction the AI receives:
+  // Wrap a principle's title + prompt into the full instruction the AI receives:
   // intent, the summary, how to read the full principle (the offline
   // `code-ranker report --doc <id>` command — no network URL), and a
   // research/report protocol (report violations in the modules below, save the
   // report to `.code-ranker/<timestamp>-<id>.md`).
   const composePrompt = id => {
-    const preset = snapshotPresets().find(p => p.id === id);
-    if (!preset) return '';
-    const { title, prompt: summary, doc_url: url } = preset;
+    const principle = snapshotPrinciples().find(p => p.id === id);
+    if (!principle) return '';
+    const { title, prompt: summary, doc_url: url } = principle;
     // Scaffolding prose is DATA from the snapshot's `prompt` template — the same
     // source the CLI `prompt` format reads, so the two render identical text.
     const t = snapshotPrompt();
@@ -188,7 +188,7 @@ function openExportPopup(level, restore) {
 
   // Rebind handlers each open (closures capture fresh selNodes/edges)
   const ta = document.getElementById('export-textarea');
-  let activePresetKey = null;
+  let activePrincipleKey = null;
 
   const internalNodes = () => allNodes.filter(n => !isExternalNode(n, level) && n.status !== 'removed');
 
@@ -227,7 +227,7 @@ function openExportPopup(level, restore) {
   // opening the popup on one side would drop the other side's selections on reload.
   const epWriteUrl = () => epWriteUrlState({
     level,
-    preset: activePresetKey,
+    principle: activePrincipleKey,
     src:    overlay.querySelector('input[name="exp-source"]:checked')?.value,
     n:      recCount.value,
     sort:   sortSel.value,
@@ -254,35 +254,35 @@ function openExportPopup(level, restore) {
     if (c > 0 && c <= r.warningCount) recCount.classList.add('exp-rec-warn');
   };
 
-  // Selecting a preset points the sort dropdown at its metric and sets the count
-  // to that preset's headline recommendation (warning count if any, else info).
+  // Selecting a principle points the sort dropdown at its metric and sets the count
+  // to that principle's headline recommendation (warning count if any, else info).
   const updateRecoUI = id => {
-    const preset  = id ? snapshotPresets().find(p => p.id === id) : null;
-    const metric  = preset?.sort_metric || levelUi(level).default_sort || sortSel.options[0]?.value;
+    const principle  = id ? snapshotPrinciples().find(p => p.id === id) : null;
+    const metric  = principle?.sort_metric || levelUi(level).default_sort || sortSel.options[0]?.value;
     if (metric) sortSel.value = metric;
     const r = recoFor(sortSel.value);
     recCount.value = String(r.warningCount > 0 ? r.warningCount : r.infoCount);
     colorCount();
   };
 
-  // Per-preset badge: warning-level count as a calm text-colour pill (a label);
+  // Per-principle badge: warning-level count as a calm text-colour pill (a label);
   // info-level count as a plain number (no pill, no emphasis); else nothing.
-  const updatePresetBadges = () => {
-    overlay.querySelectorAll('.exp-preset-btn').forEach(btn => {
-      const badge = btn.querySelector('.exp-preset-count');
+  const updatePrincipleBadges = () => {
+    overlay.querySelectorAll('.exp-principle-btn').forEach(btn => {
+      const badge = btn.querySelector('.exp-principle-count');
       if (!badge) return;
-      const preset = snapshotPresets().find(p => p.id === btn.dataset.preset);
-      const metric = preset?.sort_metric || levelUi(level).default_sort || sortSel.options[0]?.value;
+      const principle = snapshotPrinciples().find(p => p.id === btn.dataset.principle);
+      const metric = principle?.sort_metric || levelUi(level).default_sort || sortSel.options[0]?.value;
       const r = recoFor(metric);
       if (r.warningCount > 0) {
         badge.textContent = String(r.warningCount);
-        badge.className = 'exp-preset-count exp-preset-count--warn';
+        badge.className = 'exp-principle-count exp-principle-count--warn';
       } else if (r.infoCount > 0) {
         badge.textContent = String(r.infoCount);
-        badge.className = 'exp-preset-count exp-preset-count--info';
+        badge.className = 'exp-principle-count exp-principle-count--info';
       } else {
         badge.textContent = '';
-        badge.className = 'exp-preset-count';
+        badge.className = 'exp-principle-count';
       }
     });
   };
@@ -308,8 +308,8 @@ function openExportPopup(level, restore) {
 
     const on = id => { const c = cbs.find(c => c.dataset.mode === id); return !!(c && !c.disabled && c.checked); };
     const parts = [];
-    if (activePresetKey) {
-      const p = composePrompt(activePresetKey);
+    if (activePrincipleKey) {
+      const p = composePrompt(activePrincipleKey);
       if (p) parts.push(p);
     }
     // Node paths are always included (the modules the prompt is about). In
@@ -334,9 +334,9 @@ function openExportPopup(level, restore) {
           // dropped (it lives in `--doc <id>`); the description is skipped when it
           // already appears verbatim as the Summary above (the metric lens).
           const heading = activeNodes.length === 1 ? `## Target module (${label})` : `## Modules ordered by ${label}`;
-          const presetPrompt = snapshotPresets().find(p => p.id === activePresetKey)?.prompt;
+          const principlePrompt = snapshotPrinciples().find(p => p.id === activePrincipleKey)?.prompt;
           const desc = attrDesc(level, m);
-          const intro = (desc && desc !== presetPrompt) ? desc : '';
+          const intro = (desc && desc !== principlePrompt) ? desc : '';
           parts.push([heading, intro, lines].filter(Boolean).join('\n\n'));
         }
       } else {
@@ -390,33 +390,33 @@ function openExportPopup(level, restore) {
     buildContent();
   };
 
-  const applyPresetChecks = id => {
-    const preset = id ? snapshotPresets().find(p => p.id === id) : null;
+  const applyPrincipleChecks = id => {
+    const principle = id ? snapshotPrinciples().find(p => p.id === id) : null;
     // connections values in the snapshot: "in" / "out" / "common" → map to data-mode
     const connMap = { in: 'conn-in', out: 'conn-out', common: 'conn-common' };
-    const active = (preset?.connections || []).map(c => connMap[c]).filter(Boolean);
+    const active = (principle?.connections || []).map(c => connMap[c]).filter(Boolean);
     overlay.querySelectorAll('.exp-mode-cb input').forEach(cb => {
       cb.checked = active.includes(cb.dataset.mode);
     });
   };
 
-  overlay.querySelectorAll('.exp-preset-btn').forEach(btn => {
+  overlay.querySelectorAll('.exp-principle-btn').forEach(btn => {
     btn.onclick = () => {
-      const key = btn.dataset.preset;
-      if (activePresetKey === key) {
-        activePresetKey = null;
-        btn.classList.remove('exp-preset-btn--active');
-        applyPresetChecks(null);
+      const key = btn.dataset.principle;
+      if (activePrincipleKey === key) {
+        activePrincipleKey = null;
+        btn.classList.remove('exp-principle-btn--active');
+        applyPrincipleChecks(null);
       } else {
-        activePresetKey = key;
-        overlay.querySelectorAll('.exp-preset-btn').forEach(b => b.classList.remove('exp-preset-btn--active'));
-        btn.classList.add('exp-preset-btn--active');
-        applyPresetChecks(key);
-        // Switch to Recommended and size the count to this preset's recommendation.
+        activePrincipleKey = key;
+        overlay.querySelectorAll('.exp-principle-btn').forEach(b => b.classList.remove('exp-principle-btn--active'));
+        btn.classList.add('exp-principle-btn--active');
+        applyPrincipleChecks(key);
+        // Switch to Recommended and size the count to this principle's recommendation.
         const rec = overlay.querySelector('input[name="exp-source"][value="recommended"]');
         if (rec) rec.checked = true;
       }
-      updateRecoUI(activePresetKey);
+      updateRecoUI(activePrincipleKey);
       buildContent();
     };
   });
@@ -436,19 +436,19 @@ function openExportPopup(level, restore) {
   if (selCountEl) selCountEl.textContent = String(selNodes.length);
 
   if (restore) {
-    // Restore from the URL: preset, source, count, sort metric, connection toggles.
-    activePresetKey = restore.preset || null;
-    overlay.querySelectorAll('.exp-preset-btn').forEach(b =>
-      b.classList.toggle('exp-preset-btn--active', b.dataset.preset === activePresetKey));
+    // Restore from the URL: principle, source, count, sort metric, connection toggles.
+    activePrincipleKey = restore.principle || null;
+    overlay.querySelectorAll('.exp-principle-btn').forEach(b =>
+      b.classList.toggle('exp-principle-btn--active', b.dataset.principle === activePrincipleKey));
     const srcVal = restore.src === 'sel' ? 'selected' : 'recommended';
     overlay.querySelectorAll('input[name="exp-source"]').forEach(r => { r.checked = r.value === srcVal; });
     if (restore.sort) sortSel.value = restore.sort;
     recCount.value = (restore.n != null && restore.n !== '') ? restore.n : '1';
     overlay.querySelectorAll('.exp-mode-cb input').forEach(c => { c.checked = restore.conn.includes(c.dataset.mode); });
   } else {
-    // Fresh open: only paths, no active preset; seed the criterion from default.
-    activePresetKey = null;
-    overlay.querySelectorAll('.exp-preset-btn').forEach(b => b.classList.remove('exp-preset-btn--active'));
+    // Fresh open: only paths, no active principle; seed the criterion from default.
+    activePrincipleKey = null;
+    overlay.querySelectorAll('.exp-principle-btn').forEach(b => b.classList.remove('exp-principle-btn--active'));
     overlay.querySelectorAll('.exp-mode-cb input').forEach(c => { c.checked = false; });
     overlay.querySelectorAll('input[name="exp-source"]').forEach(r => {
       r.checked = noSel ? r.value === 'recommended' : r.value === 'selected';
@@ -459,7 +459,7 @@ function openExportPopup(level, restore) {
     recCount.value = '1';   // default: recommend 1 row
   }
   colorCount();
-  updatePresetBadges(); // count badges on each preset button
+  updatePrincipleBadges(); // count badges on each principle button
   buildContent();       // also mirrors state into the URL
   // Reflect the active side in the title: Prompt Generator / … Baseline / … Current.
   const titleEl = document.getElementById('export-popup-title');

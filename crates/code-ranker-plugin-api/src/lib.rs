@@ -42,7 +42,7 @@ pub mod log;
 pub mod metrics;
 pub mod node;
 pub mod plugin;
-pub mod preset;
+pub mod principle;
 pub mod report;
 pub mod toml_merge;
 
@@ -57,7 +57,7 @@ pub use level::{
 pub use metrics::{FunctionUnit, MetricInputs};
 pub use node::{Node, NodeId};
 pub use plugin::{LanguagePlugin, PluginInput, PluginRegistration, registry};
-pub use preset::{Preset, PromptTemplate};
+pub use principle::{Principle, PromptTemplate};
 pub use report::{ListPatch, ReportOverride};
 
 use std::collections::BTreeMap;

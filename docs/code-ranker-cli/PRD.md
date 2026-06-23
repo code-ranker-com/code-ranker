@@ -77,7 +77,7 @@ named (`sarif` default `{ts}-{git-hash-3}.sarif`, `codequality` default
 listed formats are written. The `.path` value is a file path (or a name
 template, or `stdout`/`-` to stream the artifact); it supports placeholders
 `{project-dir}` (slugified workspace name), `{ts}`, `{git-hash}` (the
-12-char short commit), `{git-hash-N}` (its first N chars), and `{preset}` (the
+12-char short commit), `{git-hash-N}` (its first N chars), and `{principle}` (the
 active principle id, `prompt` / `scorecard` only). The
 destination resolves as **`--output.<fmt>.path` flag › `[output.<fmt>]
 path` in `code-ranker.toml` › built-in default**, so a project can pin its
@@ -85,7 +85,7 @@ own naming while a flag still wins for named states (e.g., `pr.json`). With
 `--baseline`, the HTML default gains a `-diff` marker
 (`{ts}-{git-hash-3}-diff.html`); the JSON artifact is always the current
 snapshot, never a diff. The `scorecard` default is `stdout` and the `prompt`
-default is `.code-ranker/{ts}-{git-hash-3}-{preset}.md`. No additional registry
+default is `.code-ranker/{ts}-{git-hash-3}-{principle}.md`. No additional registry
 is created.
 
 Each snapshot is a **single self-contained `.json` file** combining
@@ -347,7 +347,7 @@ code-ranker check  [input] [--plugin <name|auto>] [--threshold ...] [--cycle-rul
 
 # Steps 1+2 — analyze (or read) the input and write a snapshot and/or HTML viewer
 # (also the AI prompt / console scorecard via --output.prompt / --output.scorecard)
-code-ranker report [input] [--plugin <name|auto>] [--output.<fmt>.path <path>] [--baseline <snapshot>] [--focus-rule <NAME>] [--focus-path <PATH>] [--severity <tier>] [--top <N>]
+code-ranker report [input] [--plugin <name|auto>] [--output.<fmt>.path <path>] [--baseline <snapshot>] [--focus <NAME>] [--focus-path <PATH>] [--severity <tier>] [--top <N>]
 ```
 
 The positional `[input]` (default `.`) is polymorphic: a directory is

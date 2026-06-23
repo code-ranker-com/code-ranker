@@ -29,7 +29,7 @@ pub(crate) struct ReportOutputs {
 pub(crate) struct ReportReco {
     /// Focus the `scorecard` / `prompt` on one axis — a metric / rule id (`hk`,
     /// `threshold.file.hk`) or a principle id (`LSP`). Resolved against both.
-    pub(crate) focus_rule: Option<String>,
+    pub(crate) focus: Option<String>,
     /// Restrict the ranked modules to these repo-relative paths (folder = subtree).
     pub(crate) focus_path: Vec<String>,
     pub(crate) severity: Vec<String>,
@@ -78,13 +78,13 @@ pub(crate) fn run_report(
     }
     if !want_prompt
         && !want_scorecard
-        && (reco.focus_rule.is_some()
+        && (reco.focus.is_some()
             || !reco.focus_path.is_empty()
             || !reco.severity.is_empty()
             || reco.top.is_some())
     {
         anyhow::bail!(
-            "--focus-rule/--focus-path/--severity/--top apply only with --output.prompt or --output.scorecard"
+            "--focus/--focus-path/--severity/--top apply only with --output.prompt or --output.scorecard"
         );
     }
     // `--severity` steers the scorecard only (tiers are a triage concern).
@@ -252,20 +252,24 @@ fn run_direct(args: &AnalyzeArgs, reco: &ReportReco) -> Result<()> {
         .graphs
         .get("files")
         .context("snapshot has no `files` level to build a prompt from")?;
-    let focus = recommend::resolve_focus(level, &snap.presets, id)?;
-    let synth; // holds the metric-lens preset for the borrow below
-    let (presets_for_prompt, preset_id): (&[recommend::Preset], String) = match &focus {
+    let focus = recommend::resolve_focus(level, &snap.principles, id)?;
+    let synth; // holds the metric-lens principle for the borrow below
+    let (principles_for_prompt, principle_id): (&[recommend::Principle], String) = match &focus {
         recommend::Focus::Metric(m) => {
-            synth = [recommend::synth_metric_preset(level, m)];
+            synth = [recommend::synth_metric_principle(
+                level,
+                &snap.principles,
+                m,
+            )];
             (&synth, m.clone())
         }
-        recommend::Focus::Principle(pid) => (&snap.presets, pid.clone()),
+        recommend::Focus::Principle(pid) => (&snap.principles, pid.clone()),
     };
     let md = recommend::compose_prompt(
         level,
-        presets_for_prompt,
+        principles_for_prompt,
         &snap.prompt,
-        &preset_id,
+        &principle_id,
         recommend::Severity::Auto,
         reco.top,
         &reco.focus_path,
@@ -296,43 +300,48 @@ fn write_recommendations(
         .get("files")
         .context("snapshot has no `files` level to build recommendations from")?;
 
-    // Resolve `--focus-rule` once against both namespaces (metric / rule id /
+    // Resolve `--focus` once against both namespaces (metric / rule id /
     // principle id). `--focus-path` then narrows the ranked modules to a subtree.
     let focus = reco
-        .focus_rule
+        .focus
         .as_deref()
-        .map(|n| recommend::resolve_focus(level, &snap.presets, n))
+        .map(|n| recommend::resolve_focus(level, &snap.principles, n))
         .transpose()?;
 
     if want_prompt {
-        // Metric focus frames the prompt by a synthesized metric "preset" (no SOLID
-        // principle); a principle focus targets that preset; no focus auto-targets
+        // Metric focus frames the prompt by a synthesized metric "principle" (no SOLID
+        // principle); a principle focus targets that principle; no focus auto-targets
         // the worst-violating principle. `--top 1` is validated up front, so `Auto`
         // tier is irrelevant.
-        let synth; // holds the metric-lens preset, if any, for the borrow below
-        let (presets_for_prompt, preset_id): (&[recommend::Preset], String) = match &focus {
+        let synth; // holds the metric-lens principle, if any, for the borrow below
+        let (principles_for_prompt, principle_id): (&[recommend::Principle], String) = match &focus
+        {
             Some(recommend::Focus::Metric(m)) => {
-                synth = [recommend::synth_metric_preset(level, m)];
+                synth = [recommend::synth_metric_principle(
+                    level,
+                    &snap.principles,
+                    m,
+                )];
                 (&synth, m.clone())
             }
-            Some(recommend::Focus::Principle(id)) => (&snap.presets, id.clone()),
+            Some(recommend::Focus::Principle(id)) => (&snap.principles, id.clone()),
             None => (
-                &snap.presets,
-                recommend::worst_preset(level, &snap.presets)
-                    .context("no presets in the snapshot to recommend from")?,
+                &snap.principles,
+                recommend::worst_principle(level, &snap.principles)
+                    .context("no principles in the snapshot to recommend from")?,
             ),
         };
         let md = recommend::compose_prompt(
             level,
-            presets_for_prompt,
+            principles_for_prompt,
             &snap.prompt,
-            &preset_id,
+            &principle_id,
             recommend::Severity::Auto,
             reco.top,
             &reco.focus_path,
         )?;
-        let dest =
-            render_name(prompt_tpl, target, commit, generated_at).replace("{preset}", &preset_id);
+        let dest = render_name(prompt_tpl, target, commit, generated_at)
+            .replace("{principle}", &principle_id);
         write_artifact(&dest, &md, "prompt")?;
     }
 
@@ -348,7 +357,7 @@ fn write_recommendations(
         let txt = recommend::render_scorecard(
             &snap.plugin,
             level,
-            &snap.presets,
+            &snap.principles,
             &severities,
             reco.top,
             focus.as_ref(),

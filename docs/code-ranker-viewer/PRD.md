@@ -136,13 +136,13 @@ output formats, so the guidance is reachable without opening the HTML
   Markdown the HTML Prompt Generator produces (intent, summary, principle-doc
   link, a task checklist, the ranked offending modules, and the principle's
   connection lists). Defaults to a per-principle file
-  `.code-ranker/{ts}-{git-hash-3}-{preset}.md` (or `stdout`).
+  `.code-ranker/{ts}-{git-hash-3}-{principle}.md` (or `stdout`).
 - `--output.scorecard[.path]` — a console **triage** overview (a per-principle
   table of `warning` / `info` counts + the worst module, then the worst modules
   overall, then a hint to the prompt for the worst principle). Defaults to
   `stdout`.
 
-The `scorecard` is narrowed by `--focus-rule <NAME>` (one ranking axis: `hk`, `cycle`,
+The `scorecard` is narrowed by `--focus <NAME>` (one ranking metric or principle: `hk`, `cycle`,
 `sloc`, `cognitive`, …; without it the table spans all principles) and `--severity
 <info|warning|auto>` (the tier; repeatable; `auto` = warning-if-any-else-info), and
 capped by `--top <N>`. The `prompt` is **auto-targeted at the single worst module**

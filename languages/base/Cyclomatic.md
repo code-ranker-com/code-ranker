@@ -142,7 +142,7 @@ and move that shared item to a leaf.
 code-ranker check <path/to/project> --threshold file.cyclomatic=110 --top 1
 
 # Triage worst-first by cyclomatic — ranked offenders, no snapshot to parse:
-code-ranker report <path/to/project> --output.scorecard --focus-rule cyclomatic
+code-ranker report <path/to/project> --output.scorecard --focus cyclomatic
 ```
 
 To read how a file's total splits across its functions (which picks the lever),

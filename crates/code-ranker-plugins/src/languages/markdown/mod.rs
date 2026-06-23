@@ -7,7 +7,7 @@
 
 use anyhow::Result;
 use code_ranker_plugin_api::{
-    Preset, default_cycle_kinds, default_node_kinds,
+    Principle, default_cycle_kinds, default_node_kinds,
     graph::Graph,
     level::Level,
     plugin::{LanguagePlugin, PluginInput},
@@ -63,7 +63,7 @@ impl LanguagePlugin for MarkdownPlugin {
     // No `metrics` / `function_units`: Markdown emits only the structural `loc`
     // (set in `analyze`) plus the orchestrator-derived coupling over the links.
 
-    fn presets(&self, _input: &PluginInput) -> Vec<Preset> {
+    fn principles(&self, _input: &PluginInput) -> Vec<Principle> {
         // The common catalog is a set of code-refactoring lenses — not meaningful
         // for prose — so Markdown ships none.
         Vec::new()

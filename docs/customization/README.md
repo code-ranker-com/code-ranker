@@ -13,8 +13,8 @@ There are two places config lives — know which one you want:
 
 | Layer | File | Who edits it | What it controls |
 |---|---|---|---|
-| **Project** | `code-ranker.toml` (in your repo) | you, per project | custom `[metrics]`, `[rules]` thresholds/cycles/**checks**, `[report]` views, `[presets]`, `[ignore]`, `[levels]`, plugin/output |
-| **Language** | `<lang>.toml` (shipped in the binary) | a language plugin author | the node-kind vocabulary, presets, and the **report list overrides** (`[report]`) |
+| **Project** | `code-ranker.toml` (in your repo) | you, per project | custom `[metrics]`, `[rules]` thresholds/cycles/**checks**, `[report]` views, `[principles]`, `[ignore]`, `[levels]`, plugin/output |
+| **Language** | `<lang>.toml` (shipped in the binary) | a language plugin author | the node-kind vocabulary, principles, and the **report list overrides** (`[report]`) |
 
 Custom metrics and thresholds are **project** config (runtime). The report
 list-override DSL is **language** config (compiled into the plugin). Both are
@@ -160,7 +160,7 @@ card    = { add = ["tsr"] }
 
 The full [`custom-field-example.toml`](./custom-field-example.toml) next to this doc also adds the
 tooltip / `formula_pretty` fields (§1.1), a `check` threshold on `tsr` (§1.4), and a
-`TSR` Prompt-Generator preset (§1.7) — so the one file demonstrates every feature
+`TSR` Prompt-Generator principle (§1.7) — so the one file demonstrates every feature
 in this guide.
 
 Run it. With no `--output.*.path`, artifacts land in the default `.code-ranker/`
@@ -175,7 +175,7 @@ code-ranker check . --config docs/customization/custom-field-example.toml
 
 # triage scorecard ranked by the custom `tsr` metric (warning tier, worst file):
 code-ranker report . --config docs/customization/custom-field-example.toml \
-  --output.scorecard --focus-rule tsr --severity warning --top 1
+  --output.scorecard --focus tsr --severity warning --top 1
 
 # or send the JSON to an explicit path / stdout:
 code-ranker report . --config docs/customization/custom-field-example.toml --output.json.path=-
@@ -275,16 +275,16 @@ filter  = { add = ["tsr_big"] }                    # SVG node filter (§3)
 Only keys that actually exist on a node survive (the orchestrator prunes the
 patched list), so listing a metric the current language doesn't emit is harmless.
 
-### 1.7 Prompt-Generator presets — `[presets.<ID>]`
+### 1.7 Prompt-Generator principles — `[principles.<ID>]`
 
-A **preset** is a refactoring lens: it ranks files by one metric and ships a
+A **principle** ranks files by one metric and ships a
 ready-to-paste AI prompt. The plugin catalog has the usual SOLID / complexity
-presets; add your own (over a custom metric) with `[presets.<ID>]` — the table key
-is the preset id. It feeds the `scorecard` (narrow to it with `--focus-rule`), the `prompt`, and the
+principles; add your own (over a custom metric) with `[principles.<ID>]` — the table key
+is the principle id. It feeds the `scorecard` (narrow to it with `--focus`), the `prompt`, and the
 viewer's Prompt-Generator buttons:
 
 ```toml
-[presets.TSR]
+[principles.TSR]
 title       = "TSR — Trim inline test bulk"  # heading of the generated prompt
 sort_metric = "tsr"                          # the metric the worst-first list ranks by
 prompt      = """
@@ -294,13 +294,13 @@ modules into sibling test files, keeping coverage identical.
 # optional: label (button text, defaults to id), doc_url, connections = ["in","out","common"]
 ```
 
-Only `sort_metric` is essential (the lens the preset *is*); `label` / `title`
-default to the id. A project preset with the **same id** as a plugin preset
+Only `sort_metric` is essential (the metric the principle ranks by); `label` / `title`
+default to the id. A project principle with the **same id** as a plugin principle
 overrides it; a new id appends. Run it:
 
 ```sh
 # scorecard narrowed to the metric, warning tier, worst file:
-code-ranker report . --config code-ranker.toml --output.scorecard --focus-rule tsr --severity warning --top 1
+code-ranker report . --config code-ranker.toml --output.scorecard --focus tsr --severity warning --top 1
 
 # or generate the auto-targeted refactoring prompt (single worst module):
 code-ranker report . --config code-ranker.toml --output.prompt --top 1
@@ -402,7 +402,7 @@ copy-pasteable into a project `code-ranker.toml` as-is.
 ## 2. Language config (`<lang>.toml`) — for plugin authors
 
 A language's `<lang>.toml` **inherits** the common `defaults.toml` and overrides
-only the diffs (node-kind vocabulary, presets, default thresholds, …). A language
+only the diffs (node-kind vocabulary, principles, default thresholds, …). A language
 that belongs to a **family** inherits an extra base layer in between — the chain is
 `defaults.toml ⊕ [base].toml ⊕ <lang>.toml` (via `config::load_chain`): JavaScript
 and TypeScript inherit `ecmascript/config.toml` (the shared engine vocab); C and C++
@@ -538,5 +538,5 @@ list patch      key = { clear=true, remove=[..], replace={old="new"},
                         after={anchor=[..]}, before={anchor=[..]}, prepend=[..], add=[..] }
 report views    [report] columns|card|stats = <list patch>   (works in <lang>.toml AND code-ranker.toml)
 map controls    [report] size|filter = <list patch>   (SVG circle-size modes / node filters; built-ins sloc,hk / cycle)
-preset          [presets.ID] sort_metric="k" title="…" prompt="…"   (scorecard --focus-rule k / prompt)
+principle          [principles.ID] sort_metric="k" title="…" prompt="…"   (scorecard --focus k / prompt)
 ```

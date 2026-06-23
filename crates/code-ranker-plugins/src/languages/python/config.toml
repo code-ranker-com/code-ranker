@@ -2,7 +2,7 @@
 #
 # Everything language-specific for Python that *can* be data lives here, so
 # `mod.rs` and `python_ts.rs` stay thin (wiring / walk logic only). Python adds
-# NO metric-lens presets of its own (it inherits the common catalog from
+# NO metric-lens principles of its own (it inherits the common catalog from
 # `defaults.toml`), no language-calibrated thresholds, and no spec overrides —
 # its only language-specific data is `doc_lang` plus the tree-sitter node-kind
 # tables the metric engine keys on:

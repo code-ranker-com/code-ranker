@@ -7,7 +7,7 @@
 //!
 //! Diagnostic: it shows EVERY effective parameter so a user can see what they may
 //! override. The two sections use different schemas (and the project / plugin
-//! `presets` shapes collide), so the file is a human-facing dump, not directly
+//! `principles` shapes collide), so the file is a human-facing dump, not directly
 //! reusable as a single `--config`.
 
 use crate::cli::AnalyzeArgs;
@@ -121,9 +121,9 @@ mod tests {
         assert_eq!(project["ignore"]["tests"].as_bool(), Some(false));
         assert_eq!(project["ignore"]["gitignore"].as_bool(), Some(true));
         assert!(project["output"]["json"]["path"].as_str().is_some());
-        // [plugin]: the resolved python language config (its presets catalog).
+        // [plugin]: the resolved python language config (its principles catalog).
         assert_eq!(plugin["doc_lang"].as_str(), Some("python"));
-        assert!(!plugin["presets"].as_array().unwrap().is_empty());
+        assert!(!plugin["principles"].as_array().unwrap().is_empty());
     }
 
     #[test]

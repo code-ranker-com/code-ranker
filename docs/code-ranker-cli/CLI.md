@@ -153,7 +153,7 @@ code-ranker check [input] [options]
 | `--cycle-rule <KIND=on\|off\|N>` | Configure a cycle check. KIND: `mutual`, `chain`. Value: `on` (any cycle fails), `off` (ignored), or `N` (allow up to N cycles of that kind — e.g. `chain=7` forbids an 8th). Defaults: `mutual`/`chain` on. |
 | `--baseline <snapshot>` | Compare `[input]` (current) against this baseline snapshot (`.json` or `.html`) and switch to a **relative gate**: fail only on *new* violations vs the baseline; pre-existing ones are tolerated. See [`--baseline`](#--baseline-comparison). |
 | `--focus-path <path>` | Restrict the gate to these files/folders. The whole project is still analyzed (the dependency graph needs it), but a violation outside the focused paths is dropped — neither reported nor counted toward the exit code. A folder matches everything beneath it. Repeatable. See [`--focus`](#--focus-scoping). |
-| `--focus-rule <rule\|group>` | Restrict the gate to these rules / concern groups. Matches a full rule id (`threshold.file.hk`, `check.inline_tests_too_large`), the bare id (`inline_tests_too_large`), or a group (`TST`, `CPL`). Repeatable; combine with `--focus-path` to intersect (a violation must match both). See [`--focus`](#--focus-scoping). |
+| `--focus <rule\|group>` | Restrict the gate to these rules / concern groups. Matches a full rule id (`threshold.file.hk`, `check.inline_tests_too_large`), the bare id (`inline_tests_too_large`), or a group (`TST`, `CPL`). Repeatable; combine with `--focus-path` to intersect (a violation must match both). See [`--focus`](#--focus-scoping). |
 | `--output-format <fmt>` | Diagnostics format: `human` (default), `json`, `github`, `sarif`, `codequality`, `prompt`. Use `github` for GitHub PR annotations, `sarif` for GitHub code scanning / GitLab ≥18.11, `codequality` for the GitLab Code Quality MR widget, `json` for generic tooling, `prompt` for a Markdown AI fix-prompt built from the gate's own violations — one command both gates and (on failure) prints the prompt, tied exactly to what failed. |
 | `--top <N>` | Report only the `N` worst violations (ranked worst-first) and suppress the rest. A reporting limit only — it does **not** change the exit code. Default: all. |
 | `--exit-zero` | Return exit code 0 even when violations exist. Useful in non-blocking CI checks. |
@@ -182,7 +182,7 @@ violations.
   exactly or, treated as a folder, anything beneath it; a leading `./` and a trailing `/`
   are ignored. Locationless violations (e.g. a cycle whose breaking edge can't be placed)
   can't be attributed to a path and are dropped.
-- **`--focus-rule <rule|group>`** — keep violations of a rule or concern group. Matches a
+- **`--focus <rule|group>`** — keep violations of a rule or concern group. Matches a
   full rule id (`threshold.file.hk`, `check.inline_tests_too_large`), the bare id
   (`inline_tests_too_large`), or a group (`TST`, `CPL`).
 
@@ -194,11 +194,11 @@ Both are repeatable. With both set they **intersect** — a violation must match
 code-ranker check . --focus-path crates/code-ranker-plugin-api/src/plugin.rs
 
 # list only one custom linter's hits (rule id, bare id, or its group all work)
-code-ranker check . --focus-rule check.inline_tests_too_large
-code-ranker check . --focus-rule TST
+code-ranker check . --focus check.inline_tests_too_large
+code-ranker check . --focus TST
 
 # intersect: that rule, but only under one folder
-code-ranker check . --focus-path crates/code-ranker-graph --focus-rule TST
+code-ranker check . --focus-path crates/code-ranker-graph --focus TST
 ```
 
 ```sh
@@ -287,16 +287,16 @@ code-ranker report [input] [options]
 |---|---|---|
 | `--output.<fmt>.path <path>` | `json` + `html` in `.code-ranker/` | Which artifacts to emit and where. `<fmt>` is `json`, `html`, `prompt`, or `scorecard`. Repeatable, one per format. See [Output paths](#output-paths). |
 | `--baseline <snapshot>` | — | Baseline snapshot (`.json` or `.html`). Turns the HTML into a diff (baseline vs current) with a verdict, and names it `…-diff.html`. See [`--baseline`](#--baseline-comparison). |
-| `--focus-rule <NAME>` | auto (all principles) | Frame the output by a **metric** (`hk`, `cycle`, `sloc`, `cognitive`, `cyclomatic`, `fan_in`, `fan_out`, `items` — case-insensitive; also accepts the full threshold rule id `threshold.file.hk`, matched **by value** so it works whether or not the metric has a configured threshold) or a **principle** id (`LSP`, `ADP`, `SRP`, `OCP`, `DIP`, `ISP`, `DRY`, `KISS`, `LoD`, `MISU`, `CoI`, `YAGNI`, `CPX`). A metric narrows the `scorecard` to that axis and emits a metric-framed `prompt`; a principle emits a principle-framed `prompt`. Without it the scorecard spans every principle and the prompt auto-targets the worst. Applies to both `scorecard` and `prompt`. Unknown names error with both namespaces listed. See [Recommendations](#recommendations-scorecard--prompt). |
-| `--focus-path <PATH>` | all modules | Restrict the ranked modules to a subtree. The whole project is still analyzed (the dependency graph needs it), but only modules under one of these repo-relative paths are ranked/listed; a folder matches everything beneath it. Repeatable; combine with `--focus-rule` to intersect. A dependency cycle is a global unit, so `--focus-path` does **not** narrow cycle members — only the node-ranked metric/breach lists. See [Recommendations](#recommendations-scorecard--prompt). |
+| `--focus <NAME>` | auto (all principles) | Frame the output by a **metric** (`hk`, `cycle`, `sloc`, `cognitive`, `cyclomatic`, `fan_in`, `fan_out`, `items` — case-insensitive; also accepts the full threshold rule id `threshold.file.hk`, matched **by value** so it works whether or not the metric has a configured threshold) or a **principle** id (`LSP`, `ADP`, `SRP`, `OCP`, `DIP`, `ISP`, `DRY`, `KISS`, `LoD`, `MISU`, `CoI`, `YAGNI`, `CPX`). A metric narrows the `scorecard` to that metric and emits a metric-framed `prompt`; a principle emits a principle-framed `prompt`. Without it the scorecard spans every principle and the prompt auto-targets the worst. Applies to both `scorecard` and `prompt`. Unknown names error with both namespaces listed. See [Recommendations](#recommendations-scorecard--prompt). |
+| `--focus-path <PATH>` | all modules | Restrict the ranked modules to a subtree. The whole project is still analyzed (the dependency graph needs it), but only modules under one of these repo-relative paths are ranked/listed; a folder matches everything beneath it. Repeatable; combine with `--focus` to intersect. A dependency cycle is a global unit, so `--focus-path` does **not** narrow cycle members — only the node-ranked metric/breach lists. See [Recommendations](#recommendations-scorecard--prompt). |
 | `--severity <tier>` | all tiers | Threshold tier for the `scorecard`: `info`, `warning`, or `auto`. Repeatable to show several tiers. |
-| `--top <N>` | 15 (scorecard) | `scorecard`: how many rows; `--top 1` = the single worst module. With `--focus-rule cycle`, `--top 1` prints one entire cycle (biggest `chain` first) with **all** its members. `prompt`: **must be `--top 1`** — the prompt is auto-targeted at the single worst module. |
+| `--top <N>` | 15 (scorecard) | `scorecard`: how many rows; `--top 1` = the single worst module. With `--focus cycle`, `--top 1` prints one entire cycle (biggest `chain` first) with **all** its members. `prompt`: **must be `--top 1`** — the prompt is auto-targeted at the single worst module. |
 | `--export-full-config <PATH>` | — | Instead of analyzing, write the **full effective configuration** to `PATH` and exit. See [Inspecting the effective config](#inspecting-the-effective-config). |
 
-`--focus-rule`, `--focus-path`, `--severity`, and `--top` apply only when a `prompt` or
+`--focus`, `--focus-path`, `--severity`, and `--top` apply only when a `prompt` or
 `scorecard` format is selected; passing them otherwise is an error. `--output.prompt`
 additionally **requires `--top 1`** (it is auto-targeted at the single worst module);
-`--severity` is `scorecard`-only, while `--focus-rule` now drives **both** the `scorecard`
+`--severity` is `scorecard`-only, while `--focus` now drives **both** the `scorecard`
 and the `prompt`.
 
 ### Inspecting the effective config
@@ -309,7 +309,7 @@ no analysis runs — as one TOML document with two top-level sections:
   every effective `ignore` / `rules` / `output` / `levels` value, including the ones you
   did not set (inherited from the defaults).
 - `[plugin]` — the active plugin's fully-merged language config (its inheritance chain
-  `defaults.toml ⊕ [base] ⊕ <lang>.toml`): presets, node/edge
+  `defaults.toml ⊕ [base] ⊕ <lang>.toml`): principles, node/edge
   kinds, the metric-engine role tables, etc.
 
 It honours `--plugin` and `--config`, so you can preview any combination:
@@ -318,12 +318,12 @@ It honours `--plugin` and `--config`, so you can preview any combination:
 # what `report` would use here, with my overrides folded in
 code-ranker report . --config ci/strict.toml --export-full-config /tmp/full.toml
 
-# the full Python plugin config (presets, vocab)
+# the full Python plugin config (principles, vocab)
 code-ranker report . --plugin python --export-full-config /tmp/python.toml
 ```
 
 It is a **diagnostic view** of every parameter you can override — because the two
-sections use different schemas (and `presets` differs between the project and plugin
+sections use different schemas (and `principles` differs between the project and plugin
 shapes), the file is not meant to be fed back as a single `--config`.
 
 ```sh
@@ -342,8 +342,8 @@ code-ranker report . --baseline .code-ranker/main.json --output.html.path=diff.h
 # console triage overview — what to fix first
 code-ranker report . --output.scorecard
 
-# narrow the triage to one axis (coupling)
-code-ranker report . --output.scorecard --focus-rule hk --top 5
+# narrow the triage to one metric (coupling)
+code-ranker report . --output.scorecard --focus hk --top 5
 
 # AI fix-prompt for the single worst module (auto-targeted), to stdout
 code-ranker report . --output.prompt.path=stdout --top 1
@@ -399,7 +399,7 @@ When selected, `sarif` defaults to `.code-ranker/{ts}-{git-hash-3}.sarif` and
 
 The recommendation formats have their own per-format defaults: `scorecard` defaults to
 **`stdout`** (it is a console overview), and `prompt` defaults to the file
-`.code-ranker/{ts}-{git-hash-3}-{preset}.md`.
+`.code-ranker/{ts}-{git-hash-3}-{principle}.md`.
 
 To pin destinations project-wide instead of passing flags every time, set them in
 config:
@@ -428,7 +428,7 @@ path = "dist/{project-dir}-{ts}.codequality.json"
 | `{ts}` | The run's `generated_at` as a local timestamp, `YYYYMMDD-HHMMSS`. One value per run, shared by every artifact. | `20260526-114144` |
 | `{git-hash}` | The 12-char short commit hash (zeros if not a git repo). | `a3f9c21b4d5e` |
 | `{git-hash-N}` | The first `N` chars of the commit hash. | `{git-hash-3}` → `a3f` |
-| `{preset}` | The principle id of the auto-targeted prompt (`prompt` only). | `SRP` |
+| `{principle}` | The principle id of the auto-targeted prompt (`prompt` only). | `SRP` |
 
 So the default `{ts}-{git-hash-3}.json` yields `20260526-114144-a3f.json`. When `[input]`
 is a **snapshot**, `{git-hash}` / `{ts}` are read from the snapshot's embedded metadata —
@@ -446,9 +446,9 @@ refactoring guidance:
 - **`prompt`** — a ready-to-paste AI fix-prompt, **auto-targeted at the single worst
   module** (the same Markdown the HTML viewer's Prompt Generator produces).
 
-Both rank modules with the same engine. The `scorecard` is steered by `--focus-rule`
-(narrow to one axis), `--focus-path` (scope to a subtree), `--severity` (which tier), and
-`--top` (how many rows). The `prompt` also honours `--focus-rule` (frame it by a metric or
+Both rank modules with the same engine. The `scorecard` is steered by `--focus`
+(narrow to one metric or principle), `--focus-path` (scope to a subtree), `--severity` (which tier), and
+`--top` (how many rows). The `prompt` also honours `--focus` (frame it by a metric or
 a principle); without it the prompt auto-targets the single worst module. Both **require
 `--top 1`** for the `prompt`.
 
@@ -479,9 +479,9 @@ show several tiers at once; with none given it shows all tiers.
 Cycle-based principles (e.g. `ADP`) have **no numeric threshold** — every module in a
 dependency cycle counts, ranked by HK, and `--severity` is ignored for them.
 
-### Focus (`--focus-rule` / `--focus-path`)
+### Focus (`--focus` / `--focus-path`)
 
-`--focus-rule <NAME>` frames the output, resolving NAME (case-insensitive) against **two
+`--focus <NAME>` frames the output, resolving NAME (case-insensitive) against **two
 namespaces**:
 
 - a **metric** — the bare key `hk` (Henry-Kafura coupling), `cycle` (dependency cycles —
@@ -489,21 +489,21 @@ namespaces**:
   `fan_out` (coupling direction), `items` (interface size), **or** the full threshold rule
   id (`threshold.file.hk`). Matched **by value**, so it works whether or not the metric has
   a configured `[rules.thresholds.file]` threshold. This narrows the `scorecard`
-  to that axis and frames the `prompt` by the **metric itself** — its own name,
+  to that metric and frames the `prompt` by the **metric itself** — its own name,
   description, and `remediation` doc (e.g. `languages/base/HK.md`), with **no** SOLID
   design-principle wrapper.
 - a **principle** id — `LSP`, `ADP`, `SRP`, `OCP`, `DIP`, `ISP`, `DRY`, `KISS`, `LoD`,
   `MISU`, `CoI`, `YAGNI`, `CPX`. This frames the output by that **design principle** (the
   prior behaviour).
 
-An unknown name is a hard error that lists both namespaces (`unknown --focus-rule '<name>'.
+An unknown name is a hard error that lists both namespaces (`unknown --focus '<name>'.
 Metrics: …. Principles: …`).
 
-`--focus-rule` drives **both** outputs. `--focus-rule hk --output.prompt.path=stdout --top 1`
+`--focus` drives **both** outputs. `--focus hk --output.prompt.path=stdout --top 1`
 emits an **HK-framed** fix-prompt directly (titled "HK — Henry–Kafura", no Liskov wrapper);
-`--focus-rule LSP …` emits the **Liskov-framed** prompt. Without `--focus-rule` the scorecard
+`--focus LSP …` emits the **Liskov-framed** prompt. Without `--focus` the scorecard
 spans all principles (one row each) and the `prompt` auto-targets the single worst module's
-principle. The principle *catalog* lives in the snapshot's `presets` (shared with the HTML
+principle. The principle *catalog* lives in the snapshot's `principles` (shared with the HTML
 viewer's Prompt Generator and used for the prompt's prose). `cycle` has **no numeric
 threshold** — every module in a dependency cycle counts, ranked by HK, and `--severity` is
 ignored for it.
@@ -511,7 +511,7 @@ ignored for it.
 `--focus-path <PATH>` restricts the ranked modules to a subtree (repeatable). The whole
 project is still analyzed (the graph needs it), but only modules under one of these
 repo-relative paths are ranked/listed; a folder matches everything beneath it. Combine with
-`--focus-rule` to intersect. A dependency cycle is a global unit, so `--focus-path` does
+`--focus` to intersect. A dependency cycle is a global unit, so `--focus-path` does
 **not** narrow cycle members — only the node-ranked metric/breach lists.
 
 ### `scorecard` — triage overview
@@ -524,7 +524,7 @@ modules overall:
 code-ranker report . --output.scorecard                     # all tiers, ~15 rows
 code-ranker report . --output.scorecard --severity warning --top 20
 code-ranker report . --output.scorecard.path=triage.txt     # to a file instead
-code-ranker report . --output.scorecard --focus-rule sloc   # narrow to one axis
+code-ranker report . --output.scorecard --focus sloc   # narrow to one metric
 ```
 
 ```text
@@ -543,19 +543,19 @@ WORST MODULES
 → code-ranker report . --output.prompt.path=… --top 1
 ```
 
-`--top N` caps the worst-modules list (default ~15); `--focus-rule <NAME>` narrows the
-scorecard to a single ranking axis (or frames it by a principle); `--focus-path <PATH>`
+`--top N` caps the worst-modules list (default ~15); `--focus <NAME>` narrows the
+scorecard to a single ranking metric (or frames it by a principle); `--focus-path <PATH>`
 scopes the ranked modules to a subtree.
 
 ### `prompt` — AI fix-prompt for the worst module
 
-Defaults to the file `.code-ranker/{ts}-{git-hash-3}-{preset}.md` (use
+Defaults to the file `.code-ranker/{ts}-{git-hash-3}-{principle}.md` (use
 `--output.prompt.path=stdout` to pipe it). It is **auto-targeted**: it emits the Markdown
 fix-prompt for the **single worst module** — its principle's intent and summary, how to
 read the full principle (the offline `code-ranker report --doc <id>` command, no network),
 a task checklist, the offending module annotated with its metric value, and the relevant
 **flow** connection lists (`uses` — structural `contains`/`reexports` are excluded). The
-`{preset}` in the default filename is the auto-selected principle id.
+`{principle}` in the default filename is the auto-selected principle id.
 
 It **requires `--top 1`** (prompts are long, and the prompt always describes exactly one
 module). There is no principle selection and no `--index`.
@@ -577,9 +577,18 @@ resolved `languages/<lang>/<ID>.md`, with any `[templates.languages.…]` overri
 no network. Both accept a principle id (`SRP`, `ADP`) or a metric key (`hk`, `cyclomatic`),
 case-insensitive; they are mutually exclusive and write no artifacts.
 
+`--doc` resolves an id, in order: a principle id, a metric key (the canonical doc
+filename comes from the metric's `remediation`, e.g. key `fan_in` → `Fan-in.md`),
+then **any base doc by its filename stem** — so `--doc Fan-in`, `--doc metrics`
+(the LOC-counting reference) and `--doc AI` all work. `--doc cycle` resolves to the
+ADP doc (cycle is ADP's metric lens). **`--doc AI`** prints an AI-agent overview: a
+short playbook plus a catalog of every principle/metric with its one-paragraph
+TL;DR (auto-assembled from each base doc — see `templates.rs::tldr_index`).
+
 ```sh
 code-ranker report . --prompt HK --top 1   # HK fix-prompt for the worst module
 code-ranker report . --doc HK              # the full HK principle text, to stdout
+code-ranker report . --doc AI              # AI playbook + the principle/metric catalog
 ```
 
 ## `--baseline` (comparison)
@@ -641,7 +650,7 @@ when `[input]` is a directory):
 
 The HTML report is **self-contained**: the viewer app (Dagre graph layout, pan/zoom,
 a sortable node table for the single Files view, and the prompt-generator panel whose
-preset buttons are read from `snapshot.presets` — the 13 design principles ADP / SRP /
+principle buttons are read from `snapshot.principles` — the 13 design principles ADP / SRP /
 OCP / LSP / ISP / DIP / DRY / KISS / LoD / MISU / CoI / YAGNI / CPX) **and the snapshot
 data** are all embedded in
 the one file. External library nodes render in a distinct amber colour with dashed

@@ -1,10 +1,10 @@
 // schema.js — the ONLY place that knows the snapshot JSON shape.
 //
 // The viewer is a pure renderer: every metric label, description, formula,
-// threshold, colour, preset and prompt comes from the snapshot's per-level
+// threshold, colour, principle and prompt comes from the snapshot's per-level
 // dictionaries (node_attributes / edge_attributes / edge_kinds /
 // attribute_groups / node_kinds / cycle_kinds / ui) and the top-level
-// `presets`. No metric/kind is hardcoded by name anywhere in the frontend.
+// `principles`. No metric/kind is hardcoded by name anywhere in the frontend.
 
 // The level's dictionaries (specs) — read from the active snapshot, which is the
 // authority for how to render. Falls back to the other side so a single-snapshot
@@ -67,10 +67,10 @@ function edgeKindDesc(level, kind)  { return levelSpec(level).edge_kinds?.[kind]
 function cycleKindLabel(level, kind) { return levelSpec(level).cycle_kinds?.[kind]?.label || kind; }
 function cycleKindDesc(level, kind)  { return levelSpec(level).cycle_kinds?.[kind]?.description || ''; }
 
-// ── UI hints / groups / presets ────────────────────────────────────────────
+// ── UI hints / groups / principles ────────────────────────────────────────────
 function levelUi(level)        { return levelSpec(level).ui || {}; }
 function attributeGroups(level){ return levelSpec(level).attribute_groups || {}; }
-function snapshotPresets()     { return specSnap()?.presets || []; }
+function snapshotPrinciples()     { return specSnap()?.principles || []; }
 // Prompt-Generator scaffolding prose (intro / doc_note / task / focus / cycle_note),
 // carried in the snapshot so this matches the CLI `prompt` format from one source.
 function snapshotPrompt()      { return specSnap()?.prompt || {}; }

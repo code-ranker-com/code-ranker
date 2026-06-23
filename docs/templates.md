@@ -30,7 +30,7 @@ They are converging on **one composition engine** (§4) and one override mechani
 
 ### 2.1 Resolution & the `base/` fallback ✅
 
-A finding links its principle/metric doc via a preset's `doc_url`, resolved in
+A finding links its principle/metric doc via a principle's `doc_url`, resolved in
 [`specs.rs`](../crates/code-ranker-plugins/src/config/specs.rs):
 
 ```
@@ -199,7 +199,7 @@ code-ranker report . --prompt HK
 code-ranker report . --prompt HK --top 5 --focus-path src/engine
 ```
 
-- `<ID>` is a preset id (`HK`, `ADP`, `SRP`, …) or a metric key; unknown ids fail
+- `<ID>` is a principle id (`HK`, `ADP`, `SRP`, …) or a metric key; unknown ids fail
   with the known list (same validation as `compose_prompt`).
 - It runs the normal analysis (the prompt lists the offending modules ranked by the
   principle's `sort_metric`), composes via the shared engine, and prints. `--top` and
@@ -209,7 +209,7 @@ code-ranker report . --prompt HK --top 5 --focus-path src/engine
 
 **How it differs from the existing `--output.prompt`**: `--output.prompt`
 *auto-targets the single worst principle*, requires `--top 1`, and writes a
-`…-{preset}.md` file. `--prompt <ID>` is the explicit, name-it-yourself, print-to-
+`…-{principle}.md` file. `--prompt <ID>` is the explicit, name-it-yourself, print-to-
 stdout counterpart — the quick "show me HK" path — and (being a standalone dump)
 accepts any `--top N` to widen the ranked module list.
 
@@ -242,7 +242,7 @@ See the full flag reference in [code-ranker-cli/CLI.md](code-ranker-cli/CLI.md).
 The framing prose lives in [`metrics/prompt.md`](../crates/code-ranker-graph/metrics/prompt.md)
 as Markdown `## <field>` sections (parsed by `prompt_template()` in `builtin.rs`; a
 project may substitute its own via `prompt_template_from()`), and is carried in the
-snapshot as [`PromptTemplate`](../crates/code-ranker-plugin-api/src/preset.rs) so the
+snapshot as [`PromptTemplate`](../crates/code-ranker-plugin-api/src/principle.rs) so the
 CLI and the viewer render identical text from one source. Unlike the principle/metric
 corpus, `prompt.md` is **internal template prose**: it sits next to `builtin.toml`
 (not under `languages/`), is not a `<lang>/<ID>` doc, and is not published by
@@ -252,7 +252,7 @@ corpus, `prompt.md` is **internal template prose**: it sits next to `builtin.tom
 |---|---|
 | `intro` | one-line intent under the title |
 | `doc_note` | how to read the full principle — points at the offline `code-ranker report --doc <id>` command (`{id}` substituted), not a network URL |
-| `task` | the task-protocol bullets (`{id}` → active preset id) |
+| `task` | the task-protocol bullets (`{id}` → active principle id) |
 | `focus` | closing emphasis line |
 | `cycle_note` | note prepended to a single dependency-cycle's module list |
 

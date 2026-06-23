@@ -20,7 +20,7 @@
         "chain": {
           "description": "Three or more units form a strongly-connected component (A → B → C → A); the whole component must be loaded and changed together, defeating modular boundaries.",
           "label": "Chain",
-          "remediation": "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/languages/base/ADP.md"
+          "remediation": "Run `code-ranker report --doc ADP` and follow its instructions."
         }
       },
       "cycles": [
@@ -98,7 +98,7 @@
           "group": "coupling",
           "label": "Fan-in",
           "name": "Fan-in",
-          "remediation": "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/languages/base/Fan-in.md",
+          "remediation": "Run `code-ranker report --doc Fan-in` and follow its instructions.",
           "short": "Fan-in",
           "value_type": "int"
         },
@@ -107,7 +107,7 @@
           "group": "coupling",
           "label": "Fan-out",
           "name": "Fan-out",
-          "remediation": "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/languages/base/Fan-out.md",
+          "remediation": "Run `code-ranker report --doc Fan-out` and follow its instructions.",
           "short": "Fan-out",
           "value_type": "int"
         },

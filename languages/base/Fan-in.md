@@ -54,8 +54,8 @@ For each high-fan-in module:
 
 ## How code-ranker surfaces it
 
-`fan_in` is a first-class node metric, a sort option, and the `FANIN` preset
-in the Prompt Generator. The preset ranks modules by fan-in worst-first and
+`fan_in` is a first-class node metric, a sort option, and the `FANIN` principle
+in the Prompt Generator. The principle ranks modules by fan-in worst-first and
 pre-selects **incoming** connections, so the prompt shows who depends on each
 load-bearing module.
 

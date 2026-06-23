@@ -3,14 +3,14 @@
 use super::*;
 
 #[test]
-fn detects_by_md_presence_and_has_no_presets() {
+fn detects_by_md_presence_and_has_no_principles() {
     let d = tempfile::tempdir().unwrap();
     let p = MarkdownPlugin;
     assert!(!p.detect(d.path(), &PluginInput::default()));
     std::fs::write(d.path().join("README.md"), "# Hi\n").unwrap();
     assert!(p.detect(d.path(), &PluginInput::default()));
     assert_eq!(p.name(), "markdown");
-    assert!(p.presets(&PluginInput::default()).is_empty());
+    assert!(p.principles(&PluginInput::default()).is_empty());
 }
 
 #[test]

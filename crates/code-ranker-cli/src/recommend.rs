@@ -3,7 +3,7 @@
 //! It is the console counterpart of the HTML viewer's Prompt Generator: the same
 //! ranking (`reco_for` ≈ `recoFor` in `export-popup.js`) and the same Markdown
 //! prompt (`compose_prompt` ≈ `composePrompt` + `buildContent`), plus a console
-//! triage table (`render_scorecard`) that mirrors the viewer's per-preset badges.
+//! triage table (`render_scorecard`) that mirrors the viewer's per-principle badges.
 //!
 //! All of it is **advisory**, derived from the snapshot's gate-driven
 //! `node_attributes[*].thresholds` (the `info` / `warning` tiers) — never a gate.
@@ -14,7 +14,7 @@
 
 use anyhow::{Result, bail};
 use code_ranker_graph::level_graph::{CycleGroup, LevelGraph};
-pub use code_ranker_plugin_api::Preset;
+pub use code_ranker_plugin_api::Principle;
 use code_ranker_plugin_api::{
     attrs::{AttrValue, ValueType},
     level::Thresholds,
@@ -28,7 +28,7 @@ mod scorecard;
 pub use prompt::compose_prompt;
 pub use scorecard::render_scorecard;
 
-/// What `--focus <NAME>` resolves to: a SOLID-style design **principle** (a preset
+/// What `--focus <NAME>` resolves to: a SOLID-style design **principle** (a principle
 /// id, e.g. `LSP`) or a **metric** (an attribute key, e.g. `hk`). The two live in
 /// separate namespaces — principle ids are upper-case codes, metric keys are
 /// lower-case — so a name maps unambiguously to one lens.
@@ -38,14 +38,14 @@ pub enum Focus {
     Metric(String),
 }
 
-/// Resolve a `--focus-rule` name to a [`Focus`]. Accepts, in order: a preset id
+/// Resolve a `--focus` name to a [`Focus`]. Accepts, in order: a principle id
 /// (exact, e.g. `LSP`) → a principle; a metric — by its bare key or a full
 /// threshold rule id, case-insensitive (`HK`, `hk`, `threshold.file.hk` all →
 /// `hk`), matched against any attribute the level carries (by value, so it works
 /// whether or not the metric has a configured threshold) or the `cycle`
 /// pseudo-metric. Unknown names are fatal, listing both namespaces.
-pub fn resolve_focus(level: &LevelGraph, presets: &[Preset], name: &str) -> Result<Focus> {
-    if presets.iter().any(|p| p.id == name) {
+pub fn resolve_focus(level: &LevelGraph, principles: &[Principle], name: &str) -> Result<Focus> {
+    if principles.iter().any(|p| p.id == name) {
         return Ok(Focus::Principle(name.to_string()));
     }
     // A metric can be named bare (`hk`) or as a full rule id (`threshold.file.hk`);
@@ -65,21 +65,44 @@ pub fn resolve_focus(level: &LevelGraph, presets: &[Preset], name: &str) -> Resu
         .collect();
     metrics.push("cycle");
     metrics.sort_unstable();
-    let principles: Vec<&str> = presets.iter().map(|p| p.id.as_str()).collect();
+    let principles: Vec<&str> = principles.iter().map(|p| p.id.as_str()).collect();
     bail!(
-        "unknown --focus-rule '{name}'. Metrics: {}. Principles: {}",
+        "unknown --focus '{name}'. Metrics: {}. Principles: {}",
         metrics.join(", "),
         principles.join(", ")
     );
 }
 
-/// Build a throwaway [`Preset`] that frames a **metric** as its own principle, so
+/// Build a throwaway [`Principle`] that frames a **metric** as its own principle, so
 /// the metric-lens prompt reuses [`compose_prompt`] verbatim — the title is the
 /// metric (`HK — Henry–Kafura`), the summary its `description`, the `doc_url` the
 /// fix-prompt doc linked from its `remediation`, and the ranking axis the metric
 /// itself. No SOLID principle is involved. Coupling metrics also pull the in/out
 /// connection lists (the HK fix workflow needs the crossroads); others omit them.
-pub fn synth_metric_preset(level: &LevelGraph, metric: &str) -> Preset {
+pub fn synth_metric_principle(
+    level: &LevelGraph,
+    principles: &[Principle],
+    metric: &str,
+) -> Principle {
+    // The `cycle` pseudo-metric IS the ADP principle's ranking axis (ADP's
+    // `sort_metric` is literally `cycle`). Frame its prompt like ADP — borrow that
+    // principle's title, prompt body, connection set, and doc — so `--focus cycle`
+    // reads almost exactly like `--focus ADP`; the scorecard still keeps the
+    // metric lens (its header comes from `metric_focus_label`, not this principle, and
+    // it drops the principle table). Falls through to generic framing if absent.
+    if metric == "cycle"
+        && let Some(adp) = principles.iter().find(|p| p.sort_metric == "cycle")
+    {
+        return Principle {
+            id: metric.to_string(),
+            label: metric.to_string(),
+            title: adp.title.clone(),
+            prompt: adp.prompt.clone(),
+            doc_url: adp.doc_url.clone(),
+            sort_metric: metric.to_string(),
+            connections: adp.connections.clone(),
+        };
+    }
     let spec = level.node_attributes.get(metric);
     let label = spec
         .and_then(|s| s.short.as_deref().or(s.label.as_deref()))
@@ -92,13 +115,13 @@ pub fn synth_metric_preset(level: &LevelGraph, metric: &str) -> Preset {
     };
     let doc_url = spec
         .and_then(|s| s.remediation.as_deref())
-        .and_then(first_url);
+        .and_then(doc_ref);
     let connections = if spec.and_then(|s| s.group.as_deref()) == Some("coupling") {
         vec!["in".to_string(), "out".to_string(), "common".to_string()]
     } else {
         Vec::new()
     };
-    Preset {
+    Principle {
         id: metric.to_string(),
         label: label.to_string(),
         title,
@@ -109,15 +132,17 @@ pub fn synth_metric_preset(level: &LevelGraph, metric: &str) -> Preset {
     }
 }
 
-/// The first `http(s)` URL embedded in `s` (a metric's `remediation` text links
-/// its fix-prompt doc), up to the first whitespace; `None` if there is none.
-fn first_url(s: &str) -> Option<String> {
-    let start = s.find("http")?;
-    let url: String = s[start..]
+/// The doc id a `remediation` string points at: the `<ID>` token after `--doc `
+/// in "Run `code-ranker report --doc <ID>` and follow its instructions." (the
+/// `<ID>` is the canonical doc filename stem, e.g. `HK`, `Fan-in`, `ADP`). `None`
+/// when the remediation names no doc. Shared with `templates::doc_rel_path`.
+pub(crate) fn doc_ref(s: &str) -> Option<String> {
+    let after = s.split("--doc ").nth(1)?;
+    let id: String = after
         .chars()
-        .take_while(|c| !c.is_whitespace())
+        .take_while(|c| !c.is_whitespace() && *c != '`')
         .collect();
-    Some(url)
+    (!id.is_empty()).then_some(id)
 }
 
 /// Which threshold tier drives an output. `Auto` resolves to `Warning` when any
@@ -254,7 +279,7 @@ pub fn reco_for<'a>(level: &'a LevelGraph, metric: &str) -> Reco<'a> {
             .then(bi.total_cmp(&ai))
     });
     // No configured threshold → no breaches (the metric still ranks for display,
-    // but never claims violations and so never wins `worst_preset`).
+    // but never claims violations and so never wins `worst_principle`).
     let (warning_count, info_count) = match th {
         Some(th) => (
             sorted
@@ -275,7 +300,7 @@ pub fn reco_for<'a>(level: &'a LevelGraph, metric: &str) -> Reco<'a> {
     }
 }
 
-/// Cycle groups ranked worst-first for the ADP (cycle) preset: `chain` cycles
+/// Cycle groups ranked worst-first for the ADP (cycle) principle: `chain` cycles
 /// before `mutual`, larger SCCs before smaller, so `--top 1` surfaces the single
 /// biggest chain. Ties broken by the first node id for determinism.
 fn ranked_cycle_groups(level: &LevelGraph) -> Vec<&CycleGroup> {
@@ -292,7 +317,7 @@ fn ranked_cycle_groups(level: &LevelGraph) -> Vec<&CycleGroup> {
 
 /// The top-N cycle groups (see [`ranked_cycle_groups`]), each paired with its
 /// member nodes ordered by HK (worst first). A node id with no matching node is
-/// skipped. This is the unit the ADP preset recommends on: `--top` counts
+/// skipped. This is the unit the ADP principle recommends on: `--top` counts
 /// **cycles**, and every member of each selected cycle is listed.
 pub(super) fn top_cycle_groups(
     level: &LevelGraph,
@@ -334,13 +359,13 @@ pub(super) fn tier_count(reco: &Reco, sev: Severity) -> usize {
 }
 
 /// The principle with the most violations: highest `warning` count, tie-broken by
-/// `info` count, then by catalog order (the first preset wins on a tie). `None`
-/// only if there are no presets.
-pub fn worst_preset(level: &LevelGraph, presets: &[Preset]) -> Option<String> {
-    let mut best: Option<(&Preset, usize, usize)> = None;
-    for p in presets {
+/// `info` count, then by catalog order (the first principle wins on a tie). `None`
+/// only if there are no principles.
+pub fn worst_principle(level: &LevelGraph, principles: &[Principle]) -> Option<String> {
+    let mut best: Option<(&Principle, usize, usize)> = None;
+    for p in principles {
         let r = reco_for(level, &p.sort_metric);
-        // Strictly-greater so the FIRST preset wins on a tie (catalog order).
+        // Strictly-greater so the FIRST principle wins on a tie (catalog order).
         let better = match best {
             None => true,
             Some((_, bw, bi)) => (r.warning_count, r.info_count) > (bw, bi),
@@ -350,7 +375,7 @@ pub fn worst_preset(level: &LevelGraph, presets: &[Preset]) -> Option<String> {
         }
     }
     best.map(|(p, _, _)| p.id.clone())
-        .or_else(|| presets.first().map(|p| p.id.clone()))
+        .or_else(|| principles.first().map(|p| p.id.clone()))
 }
 
 /// Count of project source files in the level.

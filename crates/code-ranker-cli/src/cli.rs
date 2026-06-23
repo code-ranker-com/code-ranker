@@ -107,8 +107,8 @@ pub(crate) enum Command {
         /// full rule id (`threshold.file.hk`, `check.inline_tests_too_large`), the
         /// bare id (`inline_tests_too_large`), or a group (`TST`, `CPL`). Combine with
         /// `--focus-path` to intersect (a violation must match both).
-        #[arg(long = "focus-rule", value_name = "RULE|GROUP")]
-        focus_rule: Vec<String>,
+        #[arg(long = "focus", value_name = "RULE|GROUP")]
+        focus: Vec<String>,
 
         /// Baseline snapshot (`.json`/`.html`). Switches the gate to relative mode:
         /// fail only on regressions (new violations) against the baseline, not on
@@ -183,8 +183,8 @@ pub(crate) enum Command {
         output_codequality_path: Option<String>,
 
         /// Emit the AI fix-prompt, auto-targeted at the single worst module of the
-        /// worst-violating principle (requires `--top 1`; default to a `…-{preset}.md`
-        /// file, where {preset} is that principle).
+        /// worst-violating principle (requires `--top 1`; default to a `…-{principle}.md`
+        /// file, where {principle} is that principle).
         #[arg(long = "output.prompt")]
         output_prompt: bool,
 
@@ -193,7 +193,7 @@ pub(crate) enum Command {
         output_scorecard: bool,
 
         /// AI-prompt destination: a path or name template (extra placeholder
-        /// {preset}), or `stdout`/`-`. Selects the prompt format.
+        /// {principle}), or `stdout`/`-`. Selects the prompt format.
         #[arg(long = "output.prompt.path", value_name = "PATH")]
         output_prompt_path: Option<String>,
 
@@ -202,15 +202,15 @@ pub(crate) enum Command {
         #[arg(long = "output.scorecard.path", value_name = "PATH")]
         output_scorecard_path: Option<String>,
 
-        /// Focus the scorecard / prompt on one axis. Accepts a **metric**
-        /// (`hk`, `sloc`, … — case-insensitive, matched by value so it works with
-        /// or without a configured threshold), the full threshold rule id
-        /// (`threshold.file.hk`), or a **principle** id (`LSP`, `ADP`, …). A metric
+        /// Focus the scorecard / prompt on one **metric** (`hk`, `sloc`, … —
+        /// case-insensitive, matched by value so it works with or without a
+        /// configured threshold) or **principle** id (`LSP`, `ADP`, …). A metric
         /// frames the output by the metric itself (no SOLID wrapper); a principle by
         /// that design principle. Without it, the scorecard spans every principle and
-        /// the prompt auto-targets the worst. Mirrors `check`'s `--focus-rule`.
-        #[arg(long = "focus-rule", value_name = "METRIC | RULE | PRINCIPLE")]
-        focus_rule: Option<String>,
+        /// the prompt auto-targets the worst. (On `check`, `--focus` instead filters
+        /// the gate by rule/group — a different operation.)
+        #[arg(long = "focus", value_name = "METRIC | PRINCIPLE")]
+        focus: Option<String>,
 
         /// Restrict the scorecard / prompt to modules under these paths (repeatable).
         /// The whole project is still analyzed (the graph needs it), but only modules

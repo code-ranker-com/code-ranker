@@ -323,10 +323,11 @@ pub(crate) fn analyze_directory(
         versions.insert(k, v);
     }
 
-    // Plugin catalog presets, then the project's own (`[presets.<ID>]`): a
-    // same-id project preset overrides the plugin's, a new id appends. So a
+    // Plugin catalog principles, then the project's own (`[principles.<ID>]`): a
+    // same-id project principle overrides the plugin's, a new id appends. So a
     // project can recommend / scorecard on its custom metric.
-    let presets = merge_project_presets(plugin::presets(&plugin_name, &input), &cfg.presets);
+    let principles =
+        merge_project_principles(plugin::principles(&plugin_name, &input), &cfg.principles);
 
     // Prompt-Generator scaffolding: the built-in `metrics/prompt.md`, or a
     // `[templates] prompt = "<path>"` override read from disk (same `## <field>`
@@ -350,7 +351,7 @@ pub(crate) fn analyze_directory(
         git,
         timings,
         graphs,
-        presets,
+        principles,
         prompt,
     );
 
@@ -364,15 +365,15 @@ pub(crate) fn analyze_directory(
     })
 }
 
-/// Merge the project's `[presets.<ID>]` over the plugin catalog: a same-id project
-/// preset replaces the plugin's (in place, keeping catalog order), a new id is
+/// Merge the project's `[principles.<ID>]` over the plugin catalog: a same-id project
+/// principle replaces the plugin's (in place, keeping catalog order), a new id is
 /// appended. So a project can recommend / scorecard on its own custom metric.
-fn merge_project_presets(
-    mut catalog: Vec<code_ranker_plugin_api::Preset>,
-    project: &BTreeMap<String, config::model::PresetDef>,
-) -> Vec<code_ranker_plugin_api::Preset> {
+fn merge_project_principles(
+    mut catalog: Vec<code_ranker_plugin_api::Principle>,
+    project: &BTreeMap<String, config::model::PrincipleDef>,
+) -> Vec<code_ranker_plugin_api::Principle> {
     for (id, def) in project {
-        let p = def.to_preset(id);
+        let p = def.to_principle(id);
         match catalog.iter_mut().find(|e| e.id == p.id) {
             Some(existing) => *existing = p,
             None => catalog.push(p),

@@ -154,7 +154,7 @@ the snapshot's `graphs` map under `"files"`.
   to write to the stdout stream (`is_stream` / `write_artifact`). The JSON
   snapshot records `config_file` when a config was found. Names are templates
   (`render_name`) with placeholders `{project-dir}`, `{ts}`, `{git-hash}`
-  (12-char short commit) and `{git-hash-N}` (first N chars) — plus `{preset}`
+  (12-char short commit) and `{git-hash-N}` (first N chars) — plus `{principle}`
   for the recommendation formats. `{ts}` is the snapshot's `generated_at`
   formatted as a local timestamp — read once, not a fresh clock call per file,
   so every artifact of a run shares one stamp that matches the embedded
@@ -164,7 +164,7 @@ the snapshot's `graphs` map under `"files"`.
   (`DEFAULT_JSON_PATH` / `DEFAULT_HTML_PATH` / `DEFAULT_SARIF_PATH` /
   `DEFAULT_CODEQUALITY_PATH` =
   `.code-ranker/{ts}-{git-hash-3}.{json,html,sarif,codequality.json}`;
-  `DEFAULT_PROMPT_PATH` = `.code-ranker/{ts}-{git-hash-3}-{preset}.md`;
+  `DEFAULT_PROMPT_PATH` = `.code-ranker/{ts}-{git-hash-3}-{principle}.md`;
   `DEFAULT_SCORECARD_PATH` = `stdout`).
   The HTML viewer template and all assets (CSS, JS) are embedded in the binary
   via `include_str!` from `crates/code-ranker-viewer/src/assets/`, and the snapshot
@@ -182,7 +182,7 @@ the snapshot's `graphs` map under `"files"`.
   (`write_recommendations` → the `recommend` module, the console counterpart of
   the viewer's Prompt Generator): `prompt` emits the LLM Markdown for one
   principle, `scorecard` a console triage table. The `scorecard` is narrowed by
-  `--focus-rule` (one ranking axis, a full threshold rule id, or a principle),
+  `--focus` (one metric or principle),
   `--focus-path` (scope the ranked modules to a subtree) and `--severity` (`info` /
   `warning` / `auto`; repeatable) and capped by `--top`. The `prompt` is **auto-targeted at the single
   worst module** and requires `--top 1` — there is no CLI principle selector. These
@@ -201,27 +201,27 @@ dispatch, and artifact I/O routing.
 `crates/code-ranker-cli/src/recommend.rs` is the console counterpart of the HTML
 viewer's Prompt Generator (`export-popup.js`) — it derives refactoring guidance
 from the snapshot's gate-derived `node_attributes[*].thresholds`. It is pure
-(reads a `LevelGraph` + `presets`, no I/O) and language-agnostic (it hardcodes no
-metric — it reads each preset's `sort_metric` and the metric's thresholds from
+(reads a `LevelGraph` + `principles`, no I/O) and language-agnostic (it hardcodes no
+metric — it reads each principle's `sort_metric` and the metric's thresholds from
 the snapshot). Functions:
 
 - `reco_for(level, metric) -> Reco` — the file nodes ranked worst-first
   (tie-broken `sloc` → `items`) plus the `warning` / `info` breach counts;
   mirrors the viewer's `recoFor`. The pseudo-metric `"cycle"` ranks the cycle
   members (by HK) and both counts equal that set's size.
-- `worst_preset(level, presets)` — the principle with the most violations
+- `worst_principle(level, principles)` — the principle with the most violations
   (`warning` count, tie-broken by `info`, then catalog order), used to auto-target
   the `prompt` (which has no CLI principle selector) at the worst hotspot.
-- `compose_prompt(level, presets, preset_id, severity, top)` — the same Markdown
+- `compose_prompt(level, principles, principle_id, severity, top)` — the same Markdown
   the viewer emits (`composePrompt` + `buildContent`): intent + summary +
   principle-doc link + task checklist, then the ranked offending modules, then
-  the preset's connection lists (`common` / `in` / `out`, only those with edges).
-- `render_scorecard(plugin, level, presets, severities, top, narrow)` — the
+  the principle's connection lists (`common` / `in` / `out`, only those with edges).
+- `render_scorecard(plugin, level, principles, severities, top, narrow)` — the
   console triage: a per-principle table (`warning` / `info` counts + worst
   module) and the worst modules overall (`node_breaches` ranks by selected-tier
   breach count, then HK), with a next-step hint to the worst principle.
 
-`run_report`'s `write_recommendations` resolves the preset/severity/top, then
+`run_report`'s `write_recommendations` resolves the principle/severity/top, then
 calls these. All of it is **advisory** — it never affects an exit code (that is
 `check`'s job).
 

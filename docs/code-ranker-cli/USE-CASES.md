@@ -17,7 +17,7 @@ Two commands underlie everything:
 `[input]` is polymorphic: a directory is analyzed; a `.json`/`.html` snapshot is read back
 with no re-analysis.
 
-Ranking metrics used below (the `--focus-rule` axis that narrows the scorecard): `hk`
+Ranking metrics used below (the `--focus` metric or principle that narrows the scorecard): `hk`
 (Henry-Kafura coupling), `cycle` (dependency cycles — the ADP view), `sloc` (module size),
 `cognitive` / `cyclomatic` (complexity), `fan_in` / `fan_out` (coupling direction),
 `items` (interface size).
@@ -44,37 +44,37 @@ code-ranker report . --output.scorecard --top 5
 **Triage one metric — Henry-Kafura coupling.**
 
 ```sh
-code-ranker report . --output.scorecard --focus-rule hk
+code-ranker report . --output.scorecard --focus hk
 ```
 
 **Find the single worst HK module to fix first.**
 
 ```sh
-code-ranker report . --output.scorecard --focus-rule hk --top 1
+code-ranker report . --output.scorecard --focus hk --top 1
 ```
 
 **Find the single worst dependency cycle.**
 
 ```sh
-code-ranker report . --output.scorecard --focus-rule cycle --top 1
+code-ranker report . --output.scorecard --focus cycle --top 1
 ```
 
 **Triage the biggest files (module size).**
 
 ```sh
-code-ranker report . --output.scorecard --focus-rule sloc --top 5
+code-ranker report . --output.scorecard --focus sloc --top 5
 ```
 
 **Triage the most cognitively complex files.**
 
 ```sh
-code-ranker report . --output.scorecard --focus-rule cognitive --top 5
+code-ranker report . --output.scorecard --focus cognitive --top 5
 ```
 
 **Triage one subtree — scope the ranking to a folder.**
 
 ```sh
-code-ranker report . --output.scorecard --focus-rule hk --focus-path crates/code-ranker-cli/src/
+code-ranker report . --output.scorecard --focus hk --focus-path crates/code-ranker-cli/src/
 ```
 
 **Show only warning-tier breaches (hide info-tier noise).**
@@ -156,7 +156,7 @@ code-ranker check . --top 1
 ## 4. Focused checks — gate a subset of files or rules
 
 > The whole project is always analyzed (the dependency graph needs it); `--focus-path`
-> / `--focus-rule` only restrict what is reported and counted toward the exit code.
+> / `--focus` only restrict what is reported and counted toward the exit code.
 
 **Gate only the file you are refactoring.**
 
@@ -185,13 +185,13 @@ code-ranker check . $(git diff --name-only origin/main | sed 's/^/--focus-path /
 **List only one rule's / group's violations.**
 
 ```sh
-code-ranker check . --focus-rule check.inline_tests_too_large   # or: --focus-rule TST
+code-ranker check . --focus check.inline_tests_too_large   # or: --focus TST
 ```
 
 **Intersect a rule with a folder.**
 
 ```sh
-code-ranker check . --focus-path crates/code-ranker-graph --focus-rule TST
+code-ranker check . --focus-path crates/code-ranker-graph --focus TST
 ```
 
 **Combine a focused scope with a metric budget.**

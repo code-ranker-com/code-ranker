@@ -5,7 +5,7 @@
 
 use anyhow::Result;
 use code_ranker_plugin_api::{
-    Preset, default_cycle_kinds, default_node_kinds,
+    Principle, default_cycle_kinds, default_node_kinds,
     graph::Graph,
     level::{AttributeSpec, Level},
     metrics::MetricInputs,
@@ -85,8 +85,8 @@ impl LanguagePlugin for CsharpPlugin {
         function_nodes(graph)
     }
 
-    fn presets(&self, _input: &PluginInput) -> Vec<Preset> {
-        crate::config::resolved_presets(&CONFIG)
+    fn principles(&self, _input: &PluginInput) -> Vec<Principle> {
+        crate::config::resolved_principles(&CONFIG)
     }
 
     fn report_overrides(&self) -> code_ranker_plugin_api::report::ReportOverride {

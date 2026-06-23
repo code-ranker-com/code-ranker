@@ -1,17 +1,17 @@
-//! Preset catalog and the `[specs.<key>]` description overrides a plugin applies
+//! Principle catalog and the `[specs.<key>]` description overrides a plugin applies
 //! over the central `builtin.toml` attribute specs.
 
-use code_ranker_plugin_api::Preset;
+use code_ranker_plugin_api::Principle;
 use code_ranker_plugin_api::level::AttributeSpec;
 use serde::Deserialize;
 use std::collections::{BTreeMap, HashSet};
 use toml::{Table, Value};
 
-/// One `[[presets]]` entry as read from config. Mirrors the data shape of the
-/// CLI's generic preset catalog; the plugin turns it into a
-/// `code_ranker_plugin_api::Preset`, deriving `doc_url` from its `id`.
+/// One `[[principles]]` entry as read from config. Mirrors the data shape of the
+/// CLI's generic principle catalog; the plugin turns it into a
+/// `code_ranker_plugin_api::Principle`, deriving `doc_url` from its `id`.
 #[derive(Debug, Clone, Deserialize)]
-pub struct PresetCfg {
+pub struct PrincipleCfg {
     pub id: String,
     pub title: String,
     pub sort_metric: String,
@@ -29,11 +29,11 @@ pub struct SpecOverride {
     pub description: Option<String>,
 }
 
-/// Read the `[[presets]]` array from a merged config (empty if absent).
-pub fn presets(cfg: &Table) -> Vec<PresetCfg> {
-    cfg.get("presets")
+/// Read the `[[principles]]` array from a merged config (empty if absent).
+pub fn principles(cfg: &Table) -> Vec<PrincipleCfg> {
+    cfg.get("principles")
         .cloned()
-        .map(|v| v.try_into().expect("[[presets]] shape"))
+        .map(|v| v.try_into().expect("[[principles]] shape"))
         .unwrap_or_default()
 }
 
@@ -78,8 +78,8 @@ fn doc_overrides(cfg: &Table) -> DocOverrides {
     }
 }
 
-/// Build the fully-resolved [`Preset`] list from a merged config: the common
-/// catalog (from `defaults.toml`) plus any language-specific presets, in that
+/// Build the fully-resolved [`Principle`] list from a merged config: the common
+/// catalog (from `defaults.toml`) plus any language-specific principles, in that
 /// order (the merge-by-`id` already yields it). `label` is the `id`.
 ///
 /// `doc_url` inherits from a shared `base/` corpus the same way config inherits
@@ -89,13 +89,13 @@ fn doc_overrides(cfg: &Table) -> DocOverrides {
 /// link at `base/`, and a full-corpus language (`doc_overrides = "*"`) points
 /// every link at its own folder. `doc_base` (the host/repo prefix, common) lives
 /// in `defaults.toml`; if it is absent the `doc_url` is left `None`.
-pub fn resolved_presets(cfg: &Table) -> Vec<Preset> {
+pub fn resolved_principles(cfg: &Table) -> Vec<Principle> {
     let base = string_field(cfg, "doc_base");
     let lang = string_field(cfg, "doc_lang");
     let overrides = doc_overrides(cfg);
-    presets(cfg)
+    principles(cfg)
         .into_iter()
-        .map(|p| Preset {
+        .map(|p| Principle {
             doc_url: base.map(|b| {
                 // Own folder for an overridden id (needs a `doc_lang`); `base/`
                 // otherwise — the shared fallback corpus.

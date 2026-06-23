@@ -1,6 +1,6 @@
 use anyhow::Result;
 use code_ranker_plugin_api::{
-    Preset, default_cycle_kinds, default_node_kinds,
+    Principle, default_cycle_kinds, default_node_kinds,
     graph::Graph,
     level::{AttributeSpec, EdgeKindSpec, Grouping, Level, NodeKindSpec},
     metrics::MetricInputs,
@@ -107,11 +107,11 @@ impl LanguagePlugin for RustPlugin {
         ]
     }
 
-    fn presets(&self, _input: &PluginInput) -> Vec<Preset> {
+    fn principles(&self, _input: &PluginInput) -> Vec<Principle> {
         // The common catalog (from `defaults.toml`) plus the Rust-only metric
-        // lenses (`[[presets]]` in `rust.toml`), with each `doc_url` resolved to
+        // lenses (`[[principles]]` in `rust.toml`), with each `doc_url` resolved to
         // `{doc_base}/rust/<slug>.md`. All data-driven via the shared loader.
-        crate::config::resolved_presets(&CONFIG)
+        crate::config::resolved_principles(&CONFIG)
     }
 
     fn report_overrides(&self) -> code_ranker_plugin_api::report::ReportOverride {

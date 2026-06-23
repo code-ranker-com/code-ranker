@@ -9,7 +9,7 @@
 
 use crate::level_graph::LevelGraph;
 use chrono::{DateTime, Utc};
-use code_ranker_plugin_api::Preset;
+use code_ranker_plugin_api::Principle;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -50,9 +50,9 @@ pub struct Snapshot {
     pub timings: Vec<StageTime>,
     /// Analysis levels, keyed by level name. Today only `"files"` is produced.
     pub graphs: BTreeMap<String, LevelGraph>,
-    /// Prompt-Generator presets (refactoring principles), language-adapted.
+    /// Prompt-Generator principles (refactoring principles), language-adapted.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub presets: Vec<Preset>,
+    pub principles: Vec<Principle>,
     /// Prompt-Generator scaffolding prose (language-neutral framing), so the CLI
     /// `prompt` format and the HTML viewer render the same text from one source.
     #[serde(default)]
@@ -82,7 +82,7 @@ impl Snapshot {
         git: Option<GitInfo>,
         timings: Vec<StageTime>,
         graphs: BTreeMap<String, LevelGraph>,
-        presets: Vec<Preset>,
+        principles: Vec<Principle>,
         prompt: code_ranker_plugin_api::PromptTemplate,
     ) -> Self {
         Self {
@@ -98,7 +98,7 @@ impl Snapshot {
             git,
             timings,
             graphs,
-            presets,
+            principles,
             prompt,
         }
     }

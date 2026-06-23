@@ -17,7 +17,7 @@ use crate::graph::Graph;
 use crate::level::{AttributeSpec, Level};
 use crate::metrics::MetricInputs;
 use crate::node::Node;
-use crate::preset::Preset;
+use crate::principle::Principle;
 use crate::report::ReportOverride;
 use anyhow::Result;
 use std::collections::BTreeMap;
@@ -114,11 +114,11 @@ pub trait LanguagePlugin: Sync {
         Vec::new()
     }
 
-    /// The Prompt-Generator presets for this language. A plugin builds them from
+    /// The Prompt-Generator principles for this language. A plugin builds them from
     /// its own config (the common catalog in `defaults.toml` merged with the
     /// language's `<lang>.toml`, with each `doc_url` resolved). Default: none (a
-    /// plugin that ships no presets).
-    fn presets(&self, _input: &PluginInput) -> Vec<Preset> {
+    /// plugin that ships no principles).
+    fn principles(&self, _input: &PluginInput) -> Vec<Principle> {
         Vec::new()
     }
 
@@ -172,7 +172,7 @@ mod tests {
     use crate::graph::Graph;
 
     /// A minimal plugin that implements only the required methods, so the trait's
-    /// default hooks (`versions` / `roots` / `presets` / `metric_specs` /
+    /// default hooks (`versions` / `roots` / `principles` / `metric_specs` /
     /// `thresholds` / `metrics`) are exercised as-is.
     struct Dummy;
     impl LanguagePlugin for Dummy {
@@ -221,8 +221,8 @@ mod tests {
         // config defaults to an empty table (a stub with no config file).
         assert!(p.config().is_empty(), "default: empty config table");
 
-        // presets defaults to none; metric_specs defaults to pass-through.
-        assert!(p.presets(&input).is_empty());
+        // principles defaults to none; metric_specs defaults to pass-through.
+        assert!(p.principles(&input).is_empty());
         let specs: BTreeMap<String, AttributeSpec> = BTreeMap::new();
         assert!(p.metric_specs(specs).is_empty());
 

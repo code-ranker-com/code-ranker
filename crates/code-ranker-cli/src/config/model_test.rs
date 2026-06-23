@@ -117,15 +117,15 @@ fn threshold_value_accepts_int_and_float() {
 }
 
 #[test]
-fn project_preset_parses_with_id_defaults() {
-    // `[presets.TSR]` keys the preset by its table name; `label`/`title`
+fn project_principle_parses_with_id_defaults() {
+    // `[principles.TSR]` keys the principle by its table name; `label`/`title`
     // default to the id, so a minimal entry needs only `sort_metric`.
     let cfg = toml::from_str::<Config>(
-        "[presets.TSR]\nsort_metric = \"tsr\"\nprompt = \"fix the ratio\"\n",
+        "[principles.TSR]\nsort_metric = \"tsr\"\nprompt = \"fix the ratio\"\n",
     )
     .unwrap();
-    let def = &cfg.presets["TSR"];
-    let p = def.to_preset("TSR");
+    let def = &cfg.principles["TSR"];
+    let p = def.to_principle("TSR");
     assert_eq!(p.id, "TSR");
     assert_eq!(p.label, "TSR");
     assert_eq!(p.title, "TSR");

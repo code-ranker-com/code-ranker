@@ -90,8 +90,8 @@ genuine hub you have proven irreducible; for everything else, prefer the split.
 
 ## How code-ranker surfaces it
 
-HK is a first-class node metric (`hk`), the default sort, and the `HK` preset
-in the Prompt Generator. The preset ranks modules worst-first by HK and
+HK is a first-class node metric (`hk`), the default sort, and the `HK` principle
+in the Prompt Generator. The principle ranks modules worst-first by HK and
 pre-selects both incoming and outgoing connections, so the generated prompt
 shows the full crossroads around each hotspot.
 
@@ -108,7 +108,7 @@ a budget (worst-first; `--top 1` for just the single worst), each finding a
 self-contained where/issue/why/fix block you can paste into an AI assistant:
 
 ```bash
-code-ranker report --output.scorecard --focus-rule hk
+code-ranker report --output.scorecard --focus hk
 ```
 
 HK is `sloc × (fan_in × fan_out)²`: the coupling term is squared, so a unit dropped
@@ -153,7 +153,7 @@ Pick the canonical technique that matches the seam you found:
 
 - **Extract a focused submodule + re-export.** Move the cohesive group into a
   new module, keep the public path stable with a re-export
-  (`import module preset; re-export preset.Preset`). Callers don't churn; the
+  (`import module principle; re-export principle.Principle`). Callers don't churn; the
   hub's `sloc` drops and the moved item's narrow dependants detach from the hub.
 - **Move a pure data type (DTO) to its own module.** A plain data structure
   with no internal dependencies has `fan_out = 0`, so its own HK is `0`. When
@@ -205,7 +205,7 @@ code-ranker report \
 
 # Confirm the hotspot's HK actually dropped (and no sibling rose past it) —
 # re-rank with the scorecard, or let the gate decide (exit 0 = no breach):
-code-ranker report --output.scorecard --focus-rule hk
+code-ranker report --output.scorecard --focus hk
 code-ranker check --threshold file.hk=100000
 ```
 

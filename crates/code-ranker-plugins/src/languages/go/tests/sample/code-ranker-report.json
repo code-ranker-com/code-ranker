@@ -123,7 +123,7 @@
           "group": "complexity",
           "label": "Cognitive",
           "name": "Cognitive complexity",
-          "remediation": "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/languages/base/Cognitive.md",
+          "remediation": "Run `code-ranker report --doc Cognitive` and follow its instructions.",
           "short": "Cognitive",
           "value_type": "int"
         },
@@ -136,7 +136,7 @@
           "label": "Cyclomatic",
           "name": "Cyclomatic complexity",
           "omit_at": 1.0,
-          "remediation": "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/languages/base/Cyclomatic.md",
+          "remediation": "Run `code-ranker report --doc Cyclomatic` and follow its instructions.",
           "short": "Cyclomatic",
           "value_type": "int"
         },
@@ -187,7 +187,7 @@
           "group": "coupling",
           "label": "Fan-in",
           "name": "Fan-in",
-          "remediation": "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/languages/base/Fan-in.md",
+          "remediation": "Run `code-ranker report --doc Fan-in` and follow its instructions.",
           "short": "Fan-in",
           "value_type": "int"
         },
@@ -196,7 +196,7 @@
           "group": "coupling",
           "label": "Fan-out",
           "name": "Fan-out",
-          "remediation": "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/languages/base/Fan-out.md",
+          "remediation": "Run `code-ranker report --doc Fan-out` and follow its instructions.",
           "short": "Fan-out",
           "value_type": "int"
         },
@@ -217,7 +217,7 @@
           "group": "coupling",
           "label": "HK",
           "name": "Henry–Kafura",
-          "remediation": "Download and follow the instructions on https://github.com/ffedoroff/code-ranker/blob/main/languages/base/HK.md",
+          "remediation": "Run `code-ranker report --doc HK` and follow its instructions.",
           "short": "HK",
           "value_type": "float"
         },
@@ -552,7 +552,7 @@
     }
   },
   "plugin": "go",
-  "presets": [
+  "principles": [
     {
       "doc_url": "https://github.com/ffedoroff/code-ranker/blob/main/languages/base/CPX.md",
       "id": "CPX",

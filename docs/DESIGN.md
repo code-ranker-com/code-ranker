@@ -282,12 +282,12 @@ keys it understands, described per level by the semantics dictionaries.
 | AttributeSpec | Everything the UI needs to render a metric from data: `value_type`, `label`, `name` (tooltip title), `short` (table header), `description` (the diagnostic *why*), `remediation` (the diagnostic *fix* — both shown by `check`, data not Rust), `formula` (display), `calc` (an `eval`-able JS expression over sibling attrs — the live derivation), `direction` (`higher_better`/`lower_better`, for delta colour; **absent → the Δ stays neutral / uncoloured** — used for raw sizes like `sloc`/`lloc`/`blank` and for `fan_in`/`fan_out` (high coupling is dual — a tangled unit or a legitimate coordinator — so the directional signal lives in `hk` only), which have no agreed "good" way to move), `abbreviate` (K/M — **viewer-only**: the CLI scorecard/prompt always print exact integers), `group`, `thresholds {info, warning}`. All optional but `value_type`. | `crates/code-ranker-plugin-api/src/level.rs` |
 | NodeKindSpec / CycleKindSpec | Per-kind UI semantics. `NodeKindSpec`: `label`/`plural`/`fill`/`stroke`/`external`. `CycleKindSpec`: `label`/`description` (the cycle *why*)/`remediation` (the *fix*). `default_node_kinds()` seeds node kinds; `default_cycle_kinds()` seeds only the cycle *keys* (`mutual`/`chain`) — the orchestrator overlays the vocabulary centrally from `code-ranker-graph`'s `cycle_specs()` (the `builtin.toml [cycles.*]` catalog), so no cycle prose lives in Rust. | `crates/code-ranker-plugin-api/src/level.rs` |
 | Thresholds | `{ info: f64, warning: f64 }` — two-tier per-metric advisory thresholds overlaid onto the matching `AttributeSpec`; `warning` is the `[rules.thresholds.file]` gate limit, `info` an optional softer line below it (so the report mirrors the gate). | `crates/code-ranker-plugin-api/src/level.rs` |
-| Preset | A Prompt-Generator principle: `id`, `label`, `title`, `prompt`, `doc_url?`, `sort_metric`, `connections`. The orchestrator builds a generic default catalog (`code-ranker-cli/src/presets.rs`) and a plugin's `presets(input)` hook may pass through / edit / extend it. Stored top-level in the snapshot. Prompt-generator domain data — lives in its own module, not the parser contract. | `crates/code-ranker-plugin-api/src/preset.rs` |
-| PromptTemplate | The language-neutral prompt **scaffolding** the Prompt-Generator wraps a `Preset` in: `intro`, `doc_note`, `task` (bullet lines), `focus`, `cycle_note` (`{id}` substituted at render). Data, not code — sourced from `code-ranker-graph/metrics/prompt.md` (`code-ranker-graph`'s `prompt_template()`), carried top-level in the snapshot so the CLI `prompt` format and the viewer's Prompt Generator render the same text from one source. | `crates/code-ranker-plugin-api/src/preset.rs` |
+| Principle | A Prompt-Generator principle: `id`, `label`, `title`, `prompt`, `doc_url?`, `sort_metric`, `connections`. The orchestrator builds a generic default catalog (`code-ranker-cli/src/principles.rs`) and a plugin's `principles(input)` hook may pass through / edit / extend it. Stored top-level in the snapshot. Prompt-generator domain data — lives in its own module, not the parser contract. | `crates/code-ranker-plugin-api/src/principle.rs` |
+| PromptTemplate | The language-neutral prompt **scaffolding** the Prompt-Generator wraps a `Principle` in: `intro`, `doc_note`, `task` (bullet lines), `focus`, `cycle_note` (`{id}` substituted at render). Data, not code — sourced from `code-ranker-graph/metrics/prompt.md` (`code-ranker-graph`'s `prompt_template()`), carried top-level in the snapshot so the CLI `prompt` format and the viewer's Prompt Generator render the same text from one source. | `crates/code-ranker-plugin-api/src/principle.rs` |
 | CycleGroup | SCC with ≥ 2 nodes: `kind: String` (`"mutual"` for a 2-node SCC, `"chain"` for 3+), `nodes: Vec<NodeId>`. Each member node also carries a `cycle` attribute. | `crates/code-ranker-graph/src/level_graph.rs` |
 | LevelUi | Computed UI hints: `default_sort`, `sort`, `size`, `card`, `columns`, `summary` — each a curated metric order filtered to the attributes present on internal nodes, so the viewer renders them verbatim and hardcodes none of it — plus an optional `grouping` (carried through from the level spec, pruned to a usable attribute) telling the viewer how to cluster diagram nodes. | `crates/code-ranker-graph/src/level_graph.rs` |
 | LevelGraph | One analysis level in the snapshot: the semantics dictionaries (`edge_kinds`/`node_attributes`/`edge_attributes`/`attribute_groups`/`node_kinds`/`cycle_kinds`) + `nodes` + `edges` + `cycles: Vec<CycleGroup>` + `stats: BTreeMap<String, AttrValue>` (flat averages) + `ui: LevelUi`. | `crates/code-ranker-graph/src/level_graph.rs` |
-| Snapshot | The `.json` artifact: `schema_version: "3"`, `generated_at`, `command`, `workspace`, `target`, `plugin`, `config_file?`, `versions`, `roots`, `git?`, `timings`, `graphs: BTreeMap<String, LevelGraph>`, top-level `presets: Vec<Preset>`, and `prompt: PromptTemplate` (the Prompt-Generator scaffolding prose, read by both the CLI and the viewer). Serialized via `to_canonical_string_pretty` — **canonical JSON** (alphabetical keys; `nodes`/`edges` sorted). | `crates/code-ranker-graph/src/snapshot.rs` |
+| Snapshot | The `.json` artifact: `schema_version: "3"`, `generated_at`, `command`, `workspace`, `target`, `plugin`, `config_file?`, `versions`, `roots`, `git?`, `timings`, `graphs: BTreeMap<String, LevelGraph>`, top-level `principles: Vec<Principle>`, and `prompt: PromptTemplate` (the Prompt-Generator scaffolding prose, read by both the CLI and the viewer). Serialized via `to_canonical_string_pretty` — **canonical JSON** (alphabetical keys; `nodes`/`edges` sorted). | `crates/code-ranker-graph/src/snapshot.rs` |
 | StageTime | Per-stage timing entry: `stage`, `ms`, `detail`. Stored in `Snapshot.timings` in execution order. | `crates/code-ranker-graph/src/snapshot.rs` |
 
 **Relationships**:
@@ -341,7 +341,7 @@ Modules:
 - **`finalize.rs`** — `finalize_graph`: drop self-loops, dedup edges on
   `(source, target, kind)`, prune unreferenced external nodes, sort.
 - **`snapshot.rs`** — the top-level `Snapshot` artifact (`schema_version`,
-  header, `graphs` map, `presets`) plus its header types `GitInfo` / `StageTime`.
+  header, `graphs` map, `principles`) plus its header types `GitInfo` / `StageTime`.
 - **`level_graph.rs`** — the widely-imported per-level payload types: `LevelGraph`
   (graph + semantics dictionaries + computed cycles/stats/UI), `LevelUi`, and
   `CycleGroup`. Split out from `snapshot.rs` so their fan-in lands here, not on
@@ -1011,7 +1011,7 @@ dictionaries with the structural graph and the computed cycles/stats:
       "stats": { "cyclomatic": 1, "hk": 240, "sloc": 26, … }
     }
   },
-  "presets": [ { "id": "ADP", "title": "…", "prompt": "…", "doc_url": "…", "sort_metric": "cycle", "connections": ["common","out"] }, … ]
+  "principles": [ { "id": "ADP", "title": "…", "prompt": "…", "doc_url": "…", "sort_metric": "cycle", "connections": ["common","out"] }, … ]
 }
 ```
 
@@ -1020,7 +1020,7 @@ objects); a file node carries no `path` (its id IS its path); an edge is
 external iff its `target` is an `ext:` node (no `edge.external`). Every metric's
 label/name/formula/`calc`/direction/threshold is in `node_attributes`, node/cycle
 kinds in `node_kinds`/`cycle_kinds`, column/sort ordering in `ui`, and the
-Prompt-Generator principles in top-level `presets` — so the viewer renders
+Prompt-Generator principles in top-level `principles` — so the viewer renders
 entirely from this data and hardcodes none of it.
 
 `workspace` is the directory where `code-ranker` was invoked (cwd). `target`
@@ -1225,13 +1225,13 @@ extension, not part of the base flat-attribute schema.)
 code-ranker/
   crates/
     code-ranker-graph/             # Rust — graph types, JSON schema, StageTime, cycles/hk/stats + language-neutral metric scaffolding (write_metrics, metric_specs; metrics/builtin.toml catalog)
-    code-ranker-plugin-api/        # Rust — the LanguagePlugin trait (+ PluginInput) & its self-registering plugin registry (PluginRegistration/registry, inventory) in plugin.rs, the Preset DTO (preset.rs), the detect_with_marker helper (detection.rs), MetricInputs/FunctionUnit; shared TOML config utilities (toml_merge deep-merge, list_override DSL)
+    code-ranker-plugin-api/        # Rust — the LanguagePlugin trait (+ PluginInput) & its self-registering plugin registry (PluginRegistration/registry, inventory) in plugin.rs, the Principle DTO (principle.rs), the detect_with_marker helper (detection.rs), MetricInputs/FunctionUnit; shared TOML config utilities (toml_merge deep-merge, list_override DSL)
     code-ranker-plugins/           # Rust — all language plugins: languages/{rust,python,javascript,typescript,go,c,cpp,csharp,markdown} (+ shared languages/ecmascript & languages/cfamily) over one generic engine/ (tree-sitter metric walker); src/config/ (parse/views/specs/lookup facade) + src/defaults.toml; #[cfg(test)] test_support helpers
     code-ranker-viewer/            # Rust — HTML viewer: assets + render_html_viewer
     code-ranker-cli/               # Rust — orchestrator, plugin dispatch (over the plugin-api self-registered registry), check linter, report
       src/
         plugin/            # Built-in plugins: rust.rs (incl. module→file collapse), python.rs, javascript.rs, finalize.rs (file-graph normalizer for Python/JS), mod.rs
-        presets.rs         # Generic Prompt-Generator preset catalog (principles)
+        principles.rs         # Generic Prompt-Generator principle catalog (principles)
         recommend.rs       # Recommendation engine: scorecard + prompt formats (CLI counterpart of the viewer's Prompt Generator)
         assets/            # HTML/CSS/JS assets embedded via include_str! (see code-ranker-viewer/DESIGN.md for the full layer breakdown)
           index.html       # Shell template (single Files view); cs-baseline / cs-current JSON script tags embedded inline at render time
@@ -1271,7 +1271,7 @@ code-ranker/
     typescript/            # TypeScript/JavaScript principle docs
 ```
 
-A preset's `doc_url` resolves to `languages/<doc_lang>/<id>.md` for the principles
+A principle's `doc_url` resolves to `languages/<doc_lang>/<id>.md` for the principles
 a language overrides (its `doc_overrides`), and to `languages/base/<id>.md`
 otherwise — so a language without its own corpus inherits `base/`.
 

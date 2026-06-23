@@ -6,7 +6,7 @@
 #   [kinds] / [halstead] / [loc]  tree-sitter node-kind tables for the metric
 #                                 engine (`rust_ts.rs`); the walk logic stays in
 #                                 Rust, *which* kinds it counts is data.
-#   [[presets]]                   Rust-only metric-lens presets, appended to the
+#   [[principles]]                   Rust-only metric-lens principles, appended to the
 #                                 CLI's generic catalog (merged by `id`).
 #   [thresholds.<key>]            Rust-calibrated info/warning limits.
 #   [specs.<key>]                 Rust tweaks to a metric's display, applied over

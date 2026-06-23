@@ -5,7 +5,7 @@
 # same engine). This file therefore carries only what is JavaScript-specific to
 # the language-neutral config layer: its principle-corpus language for doc links.
 #
-# JavaScript adds NO metric-lens presets of its own — it inherits the common
+# JavaScript adds NO metric-lens principles of its own — it inherits the common
 # catalog from `defaults.toml`. Its principle docs share the TypeScript corpus
 # (matching the historical `principle_lang` mapping js → typescript), so
 # `doc_url` = `{doc_base}/typescript/<slug>.md`.

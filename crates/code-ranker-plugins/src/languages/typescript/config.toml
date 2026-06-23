@@ -5,7 +5,7 @@
 # same engine). This file therefore carries only what is TypeScript-specific to
 # the language-neutral config layer: its principle-corpus language for doc links.
 #
-# TypeScript adds NO metric-lens presets of its own — it inherits the common
+# TypeScript adds NO metric-lens principles of its own — it inherits the common
 # catalog from `defaults.toml`. `doc_url` = `{doc_base}/typescript/<slug>.md`.
 
 # Principle-corpus language for doc links (`doc_base` inherited from defaults).

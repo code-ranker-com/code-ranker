@@ -8,36 +8,36 @@ use super::{
 };
 use anyhow::{Result, bail};
 use code_ranker_graph::level_graph::LevelGraph;
-use code_ranker_plugin_api::{Preset, PromptTemplate, node::Node};
+use code_ranker_plugin_api::{Principle, PromptTemplate, node::Node};
 
 /// Compose the AI prompt for one principle — the same Markdown the HTML viewer's
 /// Prompt Generator produces: intent + summary + principle link + task checklist,
-/// then the ranked offending modules, then the preset's connection lists.
+/// then the ranked offending modules, then the principle's connection lists.
 /// `focus_paths` (empty = no restriction) narrows the ranked modules to a subtree.
 pub fn compose_prompt(
     level: &LevelGraph,
-    presets: &[Preset],
+    principles: &[Principle],
     tmpl: &PromptTemplate,
-    preset_id: &str,
+    principle_id: &str,
     sev: Severity,
     top: Option<usize>,
     focus_paths: &[String],
 ) -> Result<String> {
-    let Some(preset) = presets.iter().find(|p| p.id == preset_id) else {
-        let known: Vec<&str> = presets.iter().map(|p| p.id.as_str()).collect();
+    let Some(principle) = principles.iter().find(|p| p.id == principle_id) else {
+        let known: Vec<&str> = principles.iter().map(|p| p.id.as_str()).collect();
         bail!(
-            "unknown preset '{preset_id}'. Known presets: {}",
+            "unknown principle '{principle_id}'. Known principles: {}",
             known.join(", ")
         );
     };
 
-    let reco = reco_for(level, &preset.sort_metric);
-    // For the cycle (ADP) preset the unit is a whole cycle group, not a node:
+    let reco = reco_for(level, &principle.sort_metric);
+    // For the cycle (ADP) principle the unit is a whole cycle group, not a node:
     // `--top` counts CYCLES (default 1 — the single biggest chain), and every
-    // member of each selected cycle is listed. Other presets rank nodes, and
+    // member of each selected cycle is listed. Other principles rank nodes, and
     // the default count = the active tier's size (≥ 1). A cycle is a global unit,
     // so `--focus-path` only narrows the node-ranked (non-cycle) lists.
-    let is_cycle = preset.sort_metric == "cycle";
+    let is_cycle = principle.sort_metric == "cycle";
     let cycle_groups = if is_cycle {
         top_cycle_groups(level, top.unwrap_or(1))
     } else {
@@ -62,31 +62,31 @@ pub fn compose_prompt(
 
     // 1. Principle intent + summary + link + task protocol.
     // Scaffolding prose (intro / doc-note / task protocol / focus) is DATA from
-    // the snapshot's `prompt` template; only the Markdown skeleton + the preset's
+    // the snapshot's `prompt` template; only the Markdown skeleton + the principle's
     // own title/summary are assembled here. The doc-note points at the offline
     // `--doc <id>` command (no network URL).
     let mut head = String::new();
-    head.push_str(&format!("# {}\n\n", preset.title));
+    head.push_str(&format!("# {}\n\n", principle.title));
     head.push_str(&tmpl.intro);
     head.push_str("\n\n## Summary\n\n");
-    head.push_str(&preset.prompt);
+    head.push_str(&principle.prompt);
     head.push_str("\n\n");
     // A doc exists for this principle/metric (signalled by `doc_url`): point the
     // agent at the offline `--doc <id>` command rather than a network URL.
-    if preset.doc_url.is_some() {
-        head.push_str(&tmpl.doc_note.replace("{id}", preset_id));
+    if principle.doc_url.is_some() {
+        head.push_str(&tmpl.doc_note.replace("{id}", principle_id));
         head.push_str("\n\n");
     }
     head.push_str("## Task\n\n");
     for line in &tmpl.task {
-        head.push_str(&line.replace("{id}", preset_id));
+        head.push_str(&line.replace("{id}", principle_id));
         head.push('\n');
     }
     head.push('\n');
     head.push_str(&tmpl.focus);
     parts.push(head);
 
-    // 2. The offending modules, ordered by the preset's metric (or listed as a
+    // 2. The offending modules, ordered by the principle's metric (or listed as a
     //    cycle for cycle-based principles), each annotated with its value.
     if !modules.is_empty() {
         if is_cycle {
@@ -125,7 +125,7 @@ pub fn compose_prompt(
             }
             parts.push(s.trim_end().to_string());
         } else {
-            let m = &preset.sort_metric;
+            let m = &principle.sort_metric;
             let label = attr_short(level, m);
             // A single target reads as one module, not a ranking; the formula and a
             // repeated description are dropped (they live in `--doc <id>`).
@@ -139,7 +139,7 @@ pub fn compose_prompt(
                 // Summary above — true for the metric lens, whose summary IS the
                 // metric's description, so it would otherwise print twice.
                 if let Some(d) = &spec.description
-                    && d != &preset.prompt
+                    && d != &principle.prompt
                 {
                     s.push_str(d);
                     s.push_str("\n\n");
@@ -159,7 +159,7 @@ pub fn compose_prompt(
         }
     }
 
-    // 3. The preset's connection lists (only those with edges), endpoints as paths.
+    // 3. The principle's connection lists (only those with edges), endpoints as paths.
     let module_ids: std::collections::HashSet<&str> =
         modules.iter().map(|n| n.id.as_str()).collect();
     let internal: std::collections::HashSet<&str> = level
@@ -230,7 +230,7 @@ pub fn compose_prompt(
             parts.push(s);
         };
 
-    let wants = |c: &str| preset.connections.iter().any(|x| x == c);
+    let wants = |c: &str| principle.connections.iter().any(|x| x == c);
     if wants("common") {
         let inner: Vec<_> = local_edges
             .iter()

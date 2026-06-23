@@ -12,7 +12,8 @@ a `name`, and a **flat attribute map** (no nested `complexity` / `coupling` /
 `description` (the diagnostic *why*) and `remediation` (the diagnostic *fix*) are
 described by the level's
 `node_attributes` dictionary, so a consumer can render any metric without
-hardcoding it — see the main [DESIGN](DESIGN.md) §3.1/§3.7 and [PRD](PRD.md) §7.3.
+hardcoding it — see the main [DESIGN](DESIGN.md) §3.1/§3.7 (this doc is the full
+JSON-shape reference).
 (`check`'s `why` / `fix` lines are read from these spec fields — and, for cycle
 rules, from the level's `cycle_kinds` `description` / `remediation` — so no rule
 prose is hardcoded in the CLI.)
@@ -313,7 +314,7 @@ violation at a concrete spot to break (see the `github` / `sarif` annotations in
 
 ---
 
-**Related docs**: [PRD.md](PRD.md) §7.3 (the full Graph JSON Schema) ·
-[DESIGN.md](DESIGN.md) §3.1 Domain Model / §3.7 Snapshot File Format. The schema
+**Related docs**: [DESIGN.md](DESIGN.md) §3.1 Domain Model / §3.7 Snapshot File
+Format (the product [PRD.md](PRD.md) keeps no JSON details). The schema
 is defined by the `Node` / `Edge` structs in `crates/code-ranker-plugin-api/src/`
 and the `Snapshot` / `LevelGraph` structs in `crates/code-ranker-graph/src/`.

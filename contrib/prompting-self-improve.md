@@ -308,7 +308,7 @@ Columns, grouped by objective (most are extractable from the run's artifacts; th
 | `focus_before` / `focus_after` | quality | before/after `.json` scorecard | FOCUS violation count (e.g. ADP warnings) |
 | `focus_delta` | quality | `after − before` | ↓ (negative) = fewer violations |
 | `worst_before` / `worst_after` | quality | before/after `.json` | size of the worst instance (e.g. SCC node count) |
-| `new_cycles` | quality | after vs before `.json` | ↓ cycles present in `after` but **not** `before` — regression guard (a fix that breaks one cycle and creates another scores 0 here) |
+| `new_cycles` | quality | after vs before `.json` | ↓ cycles present in `after` but **not** `before` — regression guard (a fix that breaks one cycle and creates another scores 0 here). ⚠ **False positive:** a cycle whose membership only *shrank* (the survivor is a subset of a pre-existing cycle the fix partially cleared) registers here as "new". Diff the cycle node-sets before scoring a fix down — a subset/remnant is a *shrink*, not a new cycle. (Collector meta-gap: should classify subset-of-before as shrink.) |
 | `collateral_delta` | quality | full scorecard at main vs branch | Δ in **non-FOCUS** principle violations (run `report --output.scorecard --top 0` at each git state, sum all rows except FOCUS). ↓ = a fix that also cleared other principles; ↑ = collateral damage |
 | `quality_1_5` | quality | transcript + diff | ↑ real fix (extract/invert/split) vs metric-hack |
 | `tool_calls` | cost | transcript | ↓ total tool invocations (Read/Edit/Bash/Grep/…) |

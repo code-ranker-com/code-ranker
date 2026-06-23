@@ -310,9 +310,9 @@ Columns, grouped by objective (most are extractable from the run's artifacts; th
 |---|---|---|---|
 | `ts`,`cr_sha`,`project`,`focus`,`model`,`iter`,`run` | id | run.md | identity — `cr_sha` is the prompt version |
 | `tests_pass` | quality | project tests | 1/0 — tests green, behaviour preserved |
-| `focus_before` / `focus_after` | quality | before/after `.json` scorecard | FOCUS violation count (e.g. ADP warnings) |
-| `focus_delta` | quality | `after − before` | ↓ (negative) = fewer violations |
-| `worst_before` / `worst_after` | quality | before/after `.json` | size of the worst instance (e.g. SCC node count) |
+| `focus_before` / `focus_after` | quality | before/after `.json` | **Focus-aware.** Cycle FOCUS (`ADP`/`cycle`): total cycle-warning count. Metric FOCUS (`HK`, `sloc`, `cognitive`, …): the **project-wide sum** of that metric across module nodes — a flat total beside a dropped `worst_*` means the fix **relocated** the cost rather than dissolving it. |
+| `focus_delta` | quality | `after − before` | ↓ (negative) = better (fewer cycle warnings, or lower total metric) |
+| `worst_before` / `worst_after` | quality | before/after `.json` | worst instance: cycle FOCUS → largest SCC node count; metric FOCUS → the **worst module's metric value** (the `--top 1` target, e.g. HK 390825 → 140697). Direction from the snapshot's `node_attributes` schema (`higher_better` → worst is the min). |
 | `new_cycles` | quality | after vs before `.json` | ↓ cycles present in `after` but **not** `before` — regression guard (a fix that breaks one cycle and creates another scores 0 here). ⚠ **False positive:** a cycle whose membership only *shrank* (the survivor is a subset of a pre-existing cycle the fix partially cleared) registers here as "new". Diff the cycle node-sets before scoring a fix down — a subset/remnant is a *shrink*, not a new cycle. (Collector meta-gap: should classify subset-of-before as shrink.) |
 | `collateral_delta` | quality | full scorecard at main vs branch | Δ in **non-FOCUS** principle violations (run `report --output.scorecard --top 0` at each git state, sum all rows except FOCUS). ↓ = a fix that also cleared other principles; ↑ = collateral damage |
 | `quality_1_5` | quality | transcript + diff | ↑ real fix (extract/invert/split) vs metric-hack |

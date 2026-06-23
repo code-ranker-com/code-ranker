@@ -11,8 +11,13 @@ What it reads (all under one RUN_DIR = .../<ts>_<sha>/<model>-<focus>-<n>/):
                     api_duration_s, doc reads + rereads, first_edit_turn,
                     used_generated_prompt, focus_framing, discovery_retries,
                     (heuristic) tests_pass, planned_before_edit
-  - before/after.json -> cycle counts -> focus_before/after, worst_before/after,
-                    new_cycles   (ADP / cycle focus; blank for other metrics)
+  - before/after.json -> focus_before/after, worst_before/after, new_cycles.
+                    For a cycle FOCUS (ADP/cycle): cycle counts + worst SCC size +
+                    new-cycle count. For a metric FOCUS (hk/sloc/cognitive/…): the
+                    metric read off the module nodes — worst_* = the worst module's
+                    value (the --top 1 target), focus_* = the project-wide sum (flat
+                    total beside a dropped worst = coupling relocated, not dissolved),
+                    new_cycles blank.
 And, when --project-path is given, the PROJECT branch git diff -> files_changed,
 loc_added, loc_removed (branch defaults to <run>-<cr_sha>, unique per prompt version).
 
@@ -147,8 +152,9 @@ def from_transcript(path, focus):
             if tail:
                 docs.append(tail[0])
     m["read_doc_ai"] = 1 if any(d == "AI" for d in docs) else 0
-    focus_doc_aliases = {focus, "ADP", "cycle"}
-    m["read_doc_focus"] = 1 if any(d in focus_doc_aliases for d in docs) else 0
+    fl = (focus or "").lower()
+    aliases = {"adp", "cycle", "cycles"} if fl in CYCLE_FOCI else {fl}
+    m["read_doc_focus"] = 1 if any(d.lower() in aliases for d in docs) else 0
     m["doc_reread"] = len(docs) - len(set(docs))
 
     # adherence
@@ -205,21 +211,60 @@ def cycles(path):
     return found
 
 
-def from_snapshots(run_dir):
+CYCLE_FOCI = {"adp", "cycle", "cycles"}
+
+
+def node_metric(path, key):
+    """(values, direction) for one metric across internal (non-external) module nodes.
+
+    `key` is a node attribute (e.g. `hk`, `sloc`, `cognitive`); `direction` comes from
+    the snapshot's node_attributes schema (`lower_better` / `higher_better` / None)."""
+    with open(path) as fh:
+        d = json.load(fh)
+    files = (d.get("graphs") or {}).get("files") or {}
+    vals = [n[key] for n in files.get("nodes") or []
+            if not n.get("external") and isinstance(n.get(key), (int, float))]
+    direction = ((files.get("node_attributes") or {}).get(key) or {}).get("direction")
+    return vals, direction
+
+
+def from_snapshots(run_dir, focus):
     bj, aj = os.path.join(run_dir, "before.json"), os.path.join(run_dir, "after.json")
     if not (os.path.exists(bj) and os.path.exists(aj)):
         return {}
-    before, after = cycles(bj), cycles(aj)
-    sig = lambda cs: sorted((k, n) for k, n in cs)
-    bset = list(sig(before))
-    new = [c for c in sig(after) if not (c in bset and bset.remove(c) is None)]
+
+    if (focus or "").lower() in CYCLE_FOCI:
+        before, after = cycles(bj), cycles(aj)
+        sig = lambda cs: sorted((k, n) for k, n in cs)
+        bset = list(sig(before))
+        new = [c for c in sig(after) if not (c in bset and bset.remove(c) is None)]
+        return {
+            "focus_before": sum(n for _, n in before),
+            "focus_after": sum(n for _, n in after),
+            "focus_delta": sum(n for _, n in after) - sum(n for _, n in before),
+            "worst_before": max((n for _, n in before), default=0),
+            "worst_after": max((n for _, n in after), default=0),
+            "new_cycles": len(new),
+        }
+
+    # non-cycle metric focus (hk, sloc, cognitive, cyclomatic, fan_in, …): read the
+    # focused metric off the module nodes. worst_* = the worst module's value (the
+    # `--top 1` target); focus_* = the project-wide sum (a flat total beside a dropped
+    # worst = coupling *relocated*, not dissolved). new_cycles is N/A here.
+    key = (focus or "").lower().replace("-", "_")
+    bvals, direction = node_metric(bj, key)
+    avals, _ = node_metric(aj, key)
+    if not bvals and not avals:
+        return {}  # unknown/absent metric — leave the columns blank rather than wrong
+    worst = min if direction == "higher_better" else max
+    rnd = (lambda x: round(x, 2)) if any(isinstance(v, float) for v in bvals + avals) else int
     return {
-        "focus_before": sum(n for _, n in before),
-        "focus_after": sum(n for _, n in after),
-        "focus_delta": sum(n for _, n in after) - sum(n for _, n in before),
-        "worst_before": max((n for _, n in before), default=0),
-        "worst_after": max((n for _, n in after), default=0),
-        "new_cycles": len(new),
+        "focus_before": rnd(sum(bvals)),
+        "focus_after": rnd(sum(avals)),
+        "focus_delta": rnd(sum(avals) - sum(bvals)),
+        "worst_before": rnd(worst(bvals)) if bvals else 0,
+        "worst_after": rnd(worst(avals)) if avals else 0,
+        "new_cycles": "",
     }
 
 
@@ -278,7 +323,7 @@ def main():
     if not os.path.exists(chat):
         sys.exit(f"no chat.jsonl in {run_dir}")
     row.update(from_transcript(chat, focus))
-    row.update(from_snapshots(run_dir))
+    row.update(from_snapshots(run_dir, focus))
 
     if args.project_path:
         # PROJECT branches are flat and live across every build, so the run id alone

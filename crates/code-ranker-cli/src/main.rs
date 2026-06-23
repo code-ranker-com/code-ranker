@@ -7,6 +7,7 @@
 // while binding no name, so nothing can accidentally reach into it.
 extern crate code_ranker_plugins as _;
 
+mod ai;
 mod analyze;
 mod check;
 mod cli;
@@ -115,9 +116,14 @@ fn main() -> Result<()> {
                 },
             ),
         },
-        Command::Docs { out } => templates::build_corpus(&out).map(|n| {
-            logger::info(&format!("docs: wrote {n} files to {}", out.display()));
-        }),
+        // `ai`: print the embedded AI playbook to stdout. No analysis — only plugin
+        // resolution, which picks the full playbook (resolved) vs. a brief intro +
+        // plugin-setup guidance (unresolved). See `ai.rs`.
+        Command::Ai {
+            input,
+            plugin,
+            config,
+        } => ai::run(&input, plugin.as_deref(), &config),
     };
     match &res {
         Ok(_) => {

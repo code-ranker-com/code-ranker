@@ -24,13 +24,14 @@ exact command per entry (triage, CI gates, focused checks, baselines, AI prompts
 |---|---|
 | [`check`](#check) | A **verdict**: evaluates thresholds, cycle rules, and (with `--baseline`) regressions, prints diagnostics, and **exits non-zero** on violation. Writes no files. |
 | [`report`](#report) | **Artifacts**: an HTML viewer and/or a JSON snapshot. With `--baseline`, the HTML becomes a diff with a verdict. Can also emit a console **scorecard** triage and an AI **prompt** (see [Recommendations](#recommendations-scorecard--prompt)). Always exits `0`. |
+| [`ai`](#ai) | The offline **AI-agent playbook** to stdout. Never analyzes, always exits `0`. With a resolvable language plugin it prints the full playbook + principle/metric catalog; with none (no marker, or ambiguous markers) it prints a brief intro and how to select one. |
 
 There are two analysis commands, split by *what they emit*: `check` produces an exit
 code (a CI gate), `report` produces files (a snapshot and a viewer). Both take the same
-input and share the same vocabulary below. (A third, maintenance-only `docs`
-subcommand publishes the principle/metric doc corpus — composing each language
-manifest over its base — for GitHub Pages; see
-[templates.md](../templates.md).)
+input and share the same vocabulary below. A third command, `ai`, reads no project and
+just prints the embedded agent playbook. (The principle/metric doc corpus is not
+published — it is embedded in the binary and printed on demand with `report --doc <ID>`
+or, for the overview, `code-ranker ai`; see [templates.md](../templates.md).)
 
 ## Global options
 
@@ -589,6 +590,32 @@ TL;DR (auto-assembled from each base doc — see `templates.rs::tldr_index`).
 code-ranker report . --prompt HK --top 1   # HK fix-prompt for the worst module
 code-ranker report . --doc HK              # the full HK principle text, to stdout
 code-ranker report . --doc AI              # AI playbook + the principle/metric catalog
+```
+
+For the AI overview, prefer the [`ai`](#ai) command — instead of erroring on an
+ambiguous project it prints the playbook, adapting to whether a plugin resolves.
+
+## `ai`
+
+`code-ranker ai` prints the offline AI-agent playbook (from the embedded
+`base/AI.md`) to stdout, then exits `0`. It **never analyzes** — it only resolves
+which language plugin applies (explicit `--plugin` > the `plugin` config key >
+auto-detect from `[input]`'s markers, default `.`) to choose what to print:
+
+- **plugin resolved** → the full playbook **plus** the principle/metric catalog (the
+  TL;DR index expanded) — the project-free equivalent of `report --doc AI`. It does
+  not mention plugin setup; the language is already known.
+- **no plugin resolvable** (no project marker, or markers for more than one language)
+  → a brief product intro **plus** a *Select a language* section explaining how to
+  choose one (`--plugin <name>`, or the `plugin` key in `code-ranker.toml`) and
+  listing the built-ins. The catalog is **withheld** until a language is chosen.
+
+So `ai` always succeeds — even where `report` / `check` would stop with *"ambiguous
+project … pass --plugin to choose"* — and tells the user how to proceed.
+
+```sh
+code-ranker ai                  # auto-detect: full playbook, or how to pick a plugin
+code-ranker ai --plugin rust    # force a language → the full playbook + catalog
 ```
 
 ## `--baseline` (comparison)

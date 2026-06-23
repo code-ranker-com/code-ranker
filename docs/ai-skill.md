@@ -25,9 +25,18 @@ platform notes): [installation.md](installation.md).
 - **`report`** — produces artifacts: a JSON snapshot, an HTML viewer, and the
   advisory **`scorecard`** (console triage) / **`prompt`** (LLM prompt). Always
   exits `0`.
+- **`ai`** — prints this playbook to the terminal (no analysis; always exits `0`).
+  Run `code-ranker ai` to bootstrap: with a language plugin resolved it prints the
+  full playbook + principle/metric catalog; with none (no/ambiguous markers) it
+  prints a brief intro and how to select one.
 
 `[input]` is polymorphic: a directory is analyzed; a `.json` snapshot is read
 back with no re-analysis. Keep old `.code-ranker/` snapshots — they are baselines.
+
+`check` / `report` analyze one language, auto-detected from project markers. If a
+directory has markers for several (e.g. Rust + Markdown), they stop with *"ambiguous
+project … pass --plugin to choose"*: name the language with `--plugin <name>`, or set
+`plugin = "<name>"` in a `code-ranker.toml` at the project root. (`ai` never needs this.)
 
 ## The two metrics that matter
 

@@ -86,6 +86,14 @@ fn is_manifest(md: &str) -> bool {
 /// doc has none), so the AI overview always lists the current catalog.
 const TLDR_INDEX_MARKER: &str = "<!-- doc:tldr-index -->";
 
+/// Markers bracketing the `base/AI.md` *Select a language* section — the plugin-setup
+/// template (with `{reason}` / `{plugins}` / `{config_version}` placeholders filled by
+/// the `ai` command, see `ai::fill_select`). The `ai` command shows it (the intro,
+/// [`ai_doc_intro`]) only when no plugin resolves; every other served doc strips the
+/// whole section ([`expand_tldr_index`]) so its template never reaches the terminal.
+const AI_SELECT_START: &str = "<!-- ai:select-start -->";
+const AI_SELECT_END: &str = "<!-- ai:select-end -->";
+
 /// A base doc's one-paragraph summary for the index: its `**TL;DR**` paragraph
 /// (lines from the `**TL;DR**` line to the next blank line, joined into one), or
 /// the first prose paragraph after the H1 when there is no explicit TL;DR.
@@ -151,12 +159,27 @@ fn tldr_index() -> String {
 }
 
 /// Replace a `<!-- doc:tldr-index -->` marker with the generated catalog; a no-op
-/// for docs that don't carry it.
+/// for docs that don't carry it. Also drops the `base/AI.md` *Select a language*
+/// section ([`strip_select_section`]) — it is the `ai` command's unresolved-only
+/// template and must never appear in a served doc (`--doc AI`, `ai` when resolved).
 fn expand_tldr_index(md: &str) -> String {
+    let md = strip_select_section(md);
     if md.contains(TLDR_INDEX_MARKER) {
         md.replace(TLDR_INDEX_MARKER, &tldr_index())
     } else {
-        md.to_string()
+        md
+    }
+}
+
+/// Remove the `<!-- ai:select-start -->`…`<!-- ai:select-end -->` block (inclusive),
+/// rejoining the surrounding text with a blank line. A no-op for docs without it.
+fn strip_select_section(md: &str) -> String {
+    match (md.find(AI_SELECT_START), md.find(AI_SELECT_END)) {
+        (Some(start), Some(end)) if start < end => {
+            let after = &md[end + AI_SELECT_END.len()..];
+            format!("{}\n\n{}", md[..start].trim_end(), after.trim_start())
+        }
+        _ => md.to_string(),
     }
 }
 
@@ -166,6 +189,30 @@ pub(crate) fn resolve_doc(
     id: &str,
 ) -> Result<String> {
     Ok(expand_tldr_index(&resolve_doc_raw(snap, templates, id)?))
+}
+
+/// The offline AI-agent overview (`base/AI.md`) with its catalog index expanded —
+/// identical to `report --doc AI`, but served straight from the embedded corpus
+/// with **no snapshot, no project analysis, and no plugin detection**. Backs the
+/// `ai` subcommand, so the playbook prints in any directory regardless of language
+/// markers.
+pub(crate) fn ai_doc() -> Result<String> {
+    let md = corpus_doc("base/AI.md").context("base/AI.md is not embedded in this build")?;
+    Ok(expand_tldr_index(md))
+}
+
+/// The brief intro from `base/AI.md` for the `ai` command's unresolved mode:
+/// everything up to and including the *Select a language* section (its placeholders
+/// still raw — `ai::fill_select` fills them). That is the product description, the
+/// command list, and the plugin-setup template; the analysis playbook + catalog after
+/// it stay withheld until a language is chosen.
+pub(crate) fn ai_doc_intro() -> Result<String> {
+    let md = corpus_doc("base/AI.md").context("base/AI.md is not embedded in this build")?;
+    let head = md.split(AI_SELECT_END).next().unwrap_or(md);
+    Ok(format!(
+        "{}\n",
+        head.replace(&format!("{AI_SELECT_START}\n"), "").trim()
+    ))
 }
 
 /// Resolve the Markdown for doc `id` against the active snapshot. In order:
@@ -216,43 +263,6 @@ fn resolve_doc_raw(snap: &Snapshot, templates: &TemplatesConfig, id: &str) -> Re
         .map(str::to_string)
         .or_else(|| corpus_doc(&format!("base/{stem}.md")).map(str::to_string))
         .with_context(|| format!("doc {rel} is not embedded in this build"))
-}
-
-/// Write the published doc corpus into `out_dir` for GitHub Pages: every
-/// `base/<ID>.md` copied as-is (the fallback corpus), every language **manifest**
-/// (a `<lang>/<ID>.md` carrying `<!-- doc:base … -->` includes) emitted as its
-/// assembled doc, and any full `<lang>/<ID>.md` copied through verbatim. Returns the
-/// file count.
-pub(crate) fn build_corpus(out_dir: &std::path::Path) -> Result<usize> {
-    let mut written = 0usize;
-    for (rel, contents) in CORPUS {
-        let (lang, file) = match rel.split_once('/') {
-            Some(p) => p,
-            None => continue,
-        };
-        let stem = file.strip_suffix(".md").unwrap_or(file);
-
-        let body: String = if lang != "base" && is_manifest(contents) {
-            // Assemble: the published `<lang>/<ID>.md` is the manifest over base.
-            let base = corpus_doc(&format!("base/{stem}.md"))
-                .with_context(|| format!("manifest {rel} has no base/{stem}.md"))?;
-            crate::compose::compose(contents, base, lang_display(lang))?
-        } else {
-            // `base/*` and full language docs are published verbatim (the AI index's
-            // `<!-- doc:tldr-index -->` marker is expanded so Pages ships the catalog,
-            // not the raw marker).
-            expand_tldr_index(contents)
-        };
-
-        let dest = out_dir.join(rel);
-        if let Some(parent) = dest.parent() {
-            std::fs::create_dir_all(parent)
-                .with_context(|| format!("creating {}", parent.display()))?;
-        }
-        std::fs::write(&dest, &body).with_context(|| format!("writing {}", dest.display()))?;
-        written += 1;
-    }
-    Ok(written)
 }
 
 /// Display name for a corpus language folder, used as the H1 `(in <Lang>)` suffix.

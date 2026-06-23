@@ -18,7 +18,7 @@ and overrides them, and the CLI surface that prints a prompt or a doc directly.
 
 | Family | What it is | Source today | Rendered by |
 |---|---|---|---|
-| **Docs corpus** | per-principle / per-metric Markdown (`SRP.md`, `HK.md`, …) | `languages/<lang>/<ID>.md` | served by URL (`doc_url`); also embedded in the binary (§3) |
+| **Docs corpus** | per-principle / per-metric Markdown (`SRP.md`, `HK.md`, …) | `languages/<lang>/<ID>.md` | embedded in the binary (§3) and addressed by `doc_url`; no longer served live (§5) |
 | **Prompt scaffolding** | the framing prose around a principle in an AI prompt (intro, task protocol, …) | `code-ranker-graph/metrics/prompt.md` → `PromptTemplate` | `compose_prompt` (CLI), `composePrompt` (viewer) |
 
 They are converging on **one composition engine** (§4) and one override mechanism
@@ -126,8 +126,7 @@ One Rust composer implements `compose(manifest, base)`, used in three places so 
 logic exists exactly once:
 
 1. **Runtime** — embed fragments, compose on demand for CLI/viewer output (§3).
-2. **`code-ranker docs build`** — write the composed corpus for publishing (§5).
-3. **Prompt scaffolding** — the same section/`{key}` machinery renders the
+2. **Prompt scaffolding** — the same section/`{key}` machinery renders the
    `PromptTemplate` (§8).
 
 It builds on the existing `{key}` interpolation in
@@ -137,13 +136,14 @@ substitution primitive already in the tree.
 
 ---
 
-## 5. Publishing to GitHub Pages ✅
+## 5. Publishing to GitHub Pages — removed
 
-**Variant B — Pages-only.** The repo's `main` holds only the *source* (`base/` +
-per-language manifests). A GitHub Action runs `code-ranker docs build` and deploys the composed
-corpus to GitHub Pages; `doc_base` points at the Pages URL. No compiled files are
-committed, so there is no drift gate to maintain — Pages is always rebuilt from
-source.
+Corpus publishing to GitHub Pages (and the `code-ranker docs` subcommand that
+composed the corpus to disk) has been **removed**. The corpus is no longer served
+over a URL; it lives only **embedded in the binary** (§3) and is reached through
+`--doc <ID>` / inline prompt text. The Pages workflow still publishes the HTML
+*report* (`report . → site/index.html`), but not the doc corpus, so a finding's
+`doc_url` no longer resolves to a live page.
 
 ---
 
@@ -245,8 +245,7 @@ project may substitute its own via `prompt_template_from()`), and is carried in 
 snapshot as [`PromptTemplate`](../crates/code-ranker-plugin-api/src/principle.rs) so the
 CLI and the viewer render identical text from one source. Unlike the principle/metric
 corpus, `prompt.md` is **internal template prose**: it sits next to `builtin.toml`
-(not under `languages/`), is not a `<lang>/<ID>` doc, and is not published by
-`code-ranker docs`.
+(not under `languages/`) and is not a `<lang>/<ID>` doc.
 
 | Field | Role |
 |---|---|
@@ -288,9 +287,9 @@ and JS.
 | `[templates.languages.<lang>.<ID>]` per-file override | ✅ |
 | `report --prompt <ID>` / `--doc <ID>` | ✅ |
 | Manifest composer (`compose.rs`: `doc:base` + `from`/`to`) + `resolve_doc` wiring | ✅ |
-| `code-ranker docs` build subcommand + Pages publishing (Variant B) | ✅ |
+| `code-ranker docs` build subcommand + corpus Pages publishing (Variant B) | ✗ removed — corpus is binary-embedded only, not served over a URL |
 | `base/` + per-language manifest migration | ◐ all `rust/` docs migrated; `python`/`typescript` 🔜 |
-| `doc_base` → Pages URL (activation; needs Pages live + goldens pass) | 🔜 |
+| `doc_base` → Pages URL (activation) | ✗ dropped with corpus Pages publishing |
 | Pre-render prompt head into the snapshot (de-dup Rust↔JS) | ✗ deferred — net-negative (bloats the snapshot to remove ~20 stable JS lines) |
 
 See also: [customization/config-resolution.md](customization/config-resolution.md) ·

@@ -184,23 +184,6 @@ fn resolve_doc_unknown_id_errors() {
 }
 
 #[test]
-fn build_corpus_writes_every_doc_including_assembled() {
-    let dir = tempfile::tempdir().unwrap();
-    let n = build_corpus(dir.path()).unwrap();
-    assert!(n > 0, "wrote at least one doc");
-
-    // Base docs are copied verbatim.
-    assert!(dir.path().join("base/HK.md").exists());
-
-    // A rust manifest is published assembled, with its includes expanded.
-    let assembled = std::fs::read_to_string(dir.path().join("rust/ADP.md")).unwrap();
-    assert!(
-        !assembled.contains("<!-- doc:base"),
-        "manifest includes expanded on publish"
-    );
-}
-
-#[test]
 fn lang_display_maps_known_folders_and_passes_through() {
     assert_eq!(lang_display("rust"), "Rust");
     assert_eq!(lang_display("cpp"), "C++");
@@ -269,6 +252,82 @@ fn resolve_doc_ai_index_expands_tldr_marker() {
     assert!(
         !doc.contains("### code-ranker — AI agent skill"),
         "AI.md excludes itself from its own index"
+    );
+}
+
+#[test]
+fn ai_doc_matches_resolve_doc_and_needs_no_snapshot() {
+    // `ai_doc()` backs the project-free `ai` subcommand: it must produce exactly
+    // what `report --doc AI` does, but without a snapshot or plugin.
+    let doc = ai_doc().unwrap();
+    let via_resolve = resolve_doc(
+        &snap(vec![], BTreeMap::new()),
+        &TemplatesConfig::default(),
+        "AI",
+    )
+    .unwrap();
+    assert_eq!(doc, via_resolve, "ai_doc == report --doc AI output");
+    assert!(
+        doc.contains("code-ranker — AI agent skill"),
+        "overview head"
+    );
+    assert!(!doc.contains("doc:tldr-index"), "catalog marker expanded");
+    assert!(
+        !doc.contains("ai:select"),
+        "select-section markers stripped"
+    );
+    assert!(
+        doc.contains("## Commands") && doc.contains("**`help`**"),
+        "the playbook lists the main commands incl. help"
+    );
+    assert!(
+        doc.contains("## Principles & metrics") && doc.contains("### ADP"),
+        "the resolved-mode doc carries the full catalog"
+    );
+    // The Select-a-language section is stripped in the resolved doc — plugin setup is
+    // only shown by the `ai` command's unresolved branch (see `ai::fill_select`). Its
+    // placeholders must never leak into a served doc.
+    assert!(
+        !doc.contains("## Select a language"),
+        "resolved playbook never mentions how to set the plugin"
+    );
+    for ph in ["{reason}", "{plugins}", "{config_version}"] {
+        assert!(
+            !doc.contains(ph),
+            "no template placeholder {ph} in a served doc"
+        );
+    }
+}
+
+#[test]
+fn ai_doc_intro_keeps_description_and_commands_but_not_the_playbook() {
+    let intro = ai_doc_intro().unwrap();
+    assert!(
+        intro.contains("code-ranker — AI agent skill") && intro.contains("**TL;DR**"),
+        "intro keeps the title + product description"
+    );
+    assert!(
+        intro.contains("## Commands")
+            && intro.contains("**`check")
+            && intro.contains("**`report")
+            && intro.contains("**`ai`**")
+            && intro.contains("**`help`**"),
+        "intro lists the main commands: {intro}"
+    );
+    // Carries the Select-a-language template (placeholders still raw — `ai` fills them).
+    assert!(
+        intro.contains("## Select a language") && intro.contains("{plugins}"),
+        "intro includes the plugin-setup template from the doc: {intro}"
+    );
+    assert!(
+        !intro.contains("ai:select"),
+        "bracketing markers not included"
+    );
+    // Stops before the analysis playbook + catalog (those wait for a plugin).
+    assert!(
+        !intro.contains("## The two that matter most")
+            && !intro.contains("## Principles & metrics"),
+        "intro stops before the analysis playbook: {intro}"
     );
 }
 

@@ -69,13 +69,16 @@ fn sample_dir(lang: &str) -> PathBuf {
 /// Run the binary on the language's `sample/` project with its own config and
 /// return the parsed JSON report.
 fn run_report(lang: &str) -> Value {
-    let root = repo_root();
     let sample = sample_dir(lang);
     let out_dir = tempfile::tempdir().expect("create temp output dir");
 
     let out_json = out_dir.path().join("fresh.json");
+    // Run from the temp dir: the report also emits the default html (the built-in
+    // `[output.html]` path is always set, so it is written even when only the json
+    // path is overridden), which would otherwise litter the repo's own `.code-ranker/`.
+    // cwd doesn't affect analysis — sample and config are absolute paths.
     let status = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
-        .current_dir(&root)
+        .current_dir(out_dir.path())
         .env("CARGO_NET_OFFLINE", "true") // Rust sample resolves crates from cache
         .arg("report")
         .arg(&sample)
@@ -238,10 +241,15 @@ fn assert_sample_matches(lang: &str) {
 /// stderr (instead of comparing a golden file). Used for the recommendation
 /// formats (`scorecard` / `prompt`), which stream to stdout.
 fn run_report_capture(lang: &str, extra: &[&str]) -> (bool, String, String) {
-    let root = repo_root();
     let sample = sample_dir(lang);
+    // Run from a throwaway cwd. A `report` with no explicit json/html path falls back
+    // to the default `.code-ranker/{ts}-…` pair (the recommendation formats — scorecard
+    // / prompt — never suppress it), which, run from the repo root, would litter the
+    // repo's own `.code-ranker/`. cwd doesn't affect analysis: `sample` and its config
+    // are absolute, and the plugin reads the sample dir, not cwd.
+    let cwd = tempfile::tempdir().expect("create temp cwd");
     let out = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
-        .current_dir(&root)
+        .current_dir(cwd.path())
         .env("CARGO_NET_OFFLINE", "true")
         .arg("report")
         .arg(&sample)
@@ -436,12 +444,12 @@ fn rust_sample_check_suggest_config() {
 /// (no new violations).
 #[test]
 fn rust_sample_check_baseline_verdict_neutral() {
-    let root = repo_root();
     let sample = sample_dir("rust");
+    let cwd = tempfile::tempdir().expect("temp cwd"); // keep default html out of the repo
     let tmp = std::env::temp_dir().join("cs-e2e-baseline-rust.json");
     // Capture a baseline snapshot.
     let report = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
-        .current_dir(&root)
+        .current_dir(cwd.path())
         .env("CARGO_NET_OFFLINE", "true")
         .arg("report")
         .arg(&sample)
@@ -471,11 +479,11 @@ fn rust_sample_check_baseline_verdict_neutral() {
 /// trailing `Baseline verdict:` line (the json test above covers the wrapper).
 #[test]
 fn rust_sample_check_baseline_verdict_human() {
-    let root = repo_root();
     let sample = sample_dir("rust");
+    let cwd = tempfile::tempdir().expect("temp cwd"); // keep default html out of the repo
     let tmp = std::env::temp_dir().join("cs-e2e-baseline-rust-human.json");
     let report = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
-        .current_dir(&root)
+        .current_dir(cwd.path())
         .env("CARGO_NET_OFFLINE", "true")
         .arg("report")
         .arg(&sample)
@@ -567,26 +575,78 @@ fn rust_sample_report_rejects_prompt_with_doc() {
     );
 }
 
-/// `docs --out <dir>` assembles the embedded corpus to disk: `base/*` verbatim and
-/// each language manifest as its composed Markdown. No analysis runs.
+/// `ai` with **no resolvable plugin** (an empty directory — no markers) exits `0`
+/// and prints the brief intro plus how to select a plugin, **withholding** the
+/// principle/metric catalog until a language is chosen.
 #[test]
-fn docs_subcommand_writes_the_corpus() {
-    let root = repo_root();
-    let out = std::env::temp_dir().join("cs-e2e-docs-corpus");
-    let _ = std::fs::remove_dir_all(&out);
+fn ai_unresolved_omits_catalog_and_shows_plugin_setup() {
+    let dir = std::env::temp_dir().join("cr-e2e-ai-unresolved");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
     let res = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
-        .current_dir(&root)
-        .arg("docs")
-        .arg("--out")
-        .arg(&out)
+        .current_dir(&dir)
+        .arg("ai")
         .output()
-        .expect("spawn docs");
-    assert!(res.status.success(), "docs run failed");
-    assert!(out.join("base/ADP.md").exists(), "base doc copied verbatim");
-    let assembled = std::fs::read_to_string(out.join("rust/ADP.md")).unwrap();
+        .expect("spawn ai");
     assert!(
-        !assembled.contains("<!-- doc:base"),
-        "manifest includes expanded on publish: {assembled}"
+        res.status.success(),
+        "ai must exit 0 even with no plugin: {}",
+        String::from_utf8_lossy(&res.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&res.stdout);
+    assert!(
+        stdout.contains("code-ranker — AI agent skill"),
+        "brief product intro present: {stdout}"
+    );
+    assert!(
+        stdout.contains("## Commands")
+            && stdout.contains("**`help`**")
+            && stdout.contains("**`report"),
+        "lists the main commands (check/report/ai/help)"
+    );
+    assert!(
+        stdout.contains("## Select a language") && stdout.contains("--plugin"),
+        "tells the user how to select a plugin"
+    );
+    // The doc template's placeholders are filled (live plugin list + version), not leaked.
+    assert!(
+        stdout.contains("rust")
+            && !stdout.contains("{plugins}")
+            && !stdout.contains("{config_version}"),
+        "Select-a-language placeholders are substituted: {stdout}"
+    );
+    assert!(
+        !stdout.contains("## Principles & metrics") && !stdout.contains("### ADP"),
+        "catalog withheld until a plugin is resolved: {stdout}"
+    );
+}
+
+/// `ai` run inside a project whose plugin **auto-detects** (the Rust sample) prints
+/// the full playbook + catalog and never mentions plugin setup.
+#[test]
+fn ai_resolved_prints_full_catalog_without_setup() {
+    let res = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
+        .current_dir(sample_dir("rust"))
+        .arg("ai")
+        .output()
+        .expect("spawn ai");
+    assert!(
+        res.status.success(),
+        "ai failed: {}",
+        String::from_utf8_lossy(&res.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&res.stdout);
+    assert!(
+        stdout.contains("### ADP — Acyclic Dependencies Principle"),
+        "full catalog present when the plugin resolves: {stdout}"
+    );
+    assert!(
+        !stdout.contains("## Select a language"),
+        "resolved mode never shows plugin setup"
+    );
+    assert!(
+        !stdout.contains("doc:tldr-index"),
+        "catalog marker expanded, not literal"
     );
 }
 
@@ -626,16 +686,17 @@ fn report_default_writes_json_and_html() {
 /// `…-diff.html` (the rename branch of the html artifact path).
 #[test]
 fn report_baseline_html_is_named_diff() {
-    let root = repo_root();
     let sample = sample_dir("rust");
     let dir = std::env::temp_dir().join("cs-e2e-report-diff");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let base = dir.join("base.json");
     let html = dir.join("viewer.html");
-    // Capture a baseline snapshot.
+    // Run from `dir`: each command overrides only one of json/html, and the other is
+    // still emitted by default (the built-in `[output.*]` paths are always set) — keep
+    // that default artifact in the temp dir, not the repo's `.code-ranker/`.
     let cap = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
-        .current_dir(&root)
+        .current_dir(&dir)
         .env("CARGO_NET_OFFLINE", "true")
         .arg("report")
         .arg(&sample)
@@ -647,7 +708,7 @@ fn report_baseline_html_is_named_diff() {
     assert!(cap.status.success(), "baseline capture failed");
     // Render the HTML viewer against that baseline.
     let res = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
-        .current_dir(&root)
+        .current_dir(&dir)
         .env("CARGO_NET_OFFLINE", "true")
         .arg("report")
         .arg(&sample)

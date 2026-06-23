@@ -255,12 +255,26 @@ pub(crate) enum Command {
         doc_id: Option<String>,
     },
 
-    /// Assemble the embedded doc corpus into a directory for publishing (e.g.
-    /// GitHub Pages): `base/<ID>.md` copied as-is, each language manifest emitted as
-    /// its assembled Markdown, full language docs copied verbatim. No analysis.
-    Docs {
-        /// Output directory for the composed corpus.
-        #[arg(long = "out", value_name = "DIR", default_value = "site")]
-        out: PathBuf,
+    /// Print the offline AI-agent playbook to stdout — no analysis, always exits 0.
+    /// Output adapts to whether a language plugin can be resolved (explicit
+    /// `--plugin` > config `plugin` > auto-detect from `[input]` markers): when one
+    /// is resolved, it prints the full playbook + principle/metric catalog; when
+    /// none can be resolved (no marker, or ambiguous markers), it prints a brief
+    /// product intro plus how to select a plugin, and omits the catalog.
+    Ai {
+        /// Directory whose markers decide the output mode (default: current dir).
+        /// No analysis is run — only plugin resolution.
+        #[arg(default_value = ".")]
+        input: PathBuf,
+
+        /// Plugin: rust | python | javascript | auto. Resolves the mode explicitly
+        /// (skips auto-detection).
+        #[arg(long)]
+        plugin: Option<String>,
+
+        /// Config file path, or inline `KEY=VALUE` override (repeatable) — consulted
+        /// only for its `plugin` key when resolving the mode.
+        #[arg(long, value_name = "PATH | KEY=VALUE")]
+        config: Vec<String>,
     },
 }

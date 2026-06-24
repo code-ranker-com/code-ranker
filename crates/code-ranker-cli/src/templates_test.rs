@@ -181,7 +181,10 @@ fn doc_rel_path_serves_lang_override_for_a_metric_doc() {
         metric_spec("Run `code-ranker report --doc HK` and follow its instructions."),
     );
     let s = snap(
-        vec![principle("ADP", "https://x/blob/main/languages/rust/ADP.md")],
+        vec![principle(
+            "ADP",
+            "https://x/blob/main/languages/rust/ADP.md",
+        )],
         attrs,
     );
     assert_eq!(doc_rel_path(&s, "HK"), Some("rust/HK.md".to_string()));

@@ -169,6 +169,25 @@ fn resolve_doc_finds_metric_via_remediation_doc_ref() {
 }
 
 #[test]
+fn doc_rel_path_serves_lang_override_for_a_metric_doc() {
+    // A metric doc (`hk` → `HK`) is routed to the `<lang>/` corpus when the
+    // plugin's principle docs route there (`override_lang` → "rust") AND that
+    // language actually ships `rust/HK.md` — the metric-override branch added in
+    // 566fb23 (templates.rs line 63). Without a rust-routing principle the same
+    // metric falls back to `base/HK.md` (see the previous test).
+    let mut attrs = BTreeMap::new();
+    attrs.insert(
+        "hk".to_string(),
+        metric_spec("Run `code-ranker report --doc HK` and follow its instructions."),
+    );
+    let s = snap(
+        vec![principle("ADP", "https://x/blob/main/languages/rust/ADP.md")],
+        attrs,
+    );
+    assert_eq!(doc_rel_path(&s, "HK"), Some("rust/HK.md".to_string()));
+}
+
+#[test]
 fn resolve_doc_unknown_id_errors() {
     let s = snap(
         vec![principle(

@@ -56,13 +56,10 @@ fn doc_rel_path(snap: &Snapshot, id: &str) -> Option<String> {
         // doc override exactly as principle docs do: if the plugin routes its
         // principle docs to a `<lang>/` folder (via `doc_overrides`) and actually
         // ships a `<lang>/<doc>.md`, serve that; otherwise the shared `base/`.
-        if let Some(lang) = override_lang(snap) {
-            let rel = format!("{lang}/{doc}.md");
-            if corpus_doc(&rel).is_some() {
-                return Some(rel);
-            }
-        }
-        return Some(format!("base/{doc}.md"));
+        let lang_doc = override_lang(snap)
+            .map(|lang| format!("{lang}/{doc}.md"))
+            .filter(|rel| corpus_doc(rel).is_some());
+        return Some(lang_doc.unwrap_or_else(|| format!("base/{doc}.md")));
     }
     // Fallback: any base corpus doc addressable by its filename stem
     // (case-insensitive) — covers docs that are neither a principle nor a metric:

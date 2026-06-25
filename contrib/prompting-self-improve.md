@@ -512,8 +512,8 @@ Track one row per run so the sweep is auditable:
 
 | date | cr version+commit | PROJECT | FOCUS | MODEL | iter | branch | verdict (Δ) | tests | quality 1–5 | tokens | time (s) | notes / failure class |
 |------|-------------------|---------|-------|-------|------|--------|-------------|-------|-------------|--------|----------|----------------------|
-| … | 4.0.0-alpha.1 @abc123 | … | cycle | opus | 1 | opus-cycle-1 | improved (−2 cycles) | pass | 5 | 49.7k | 196 | reference |
-| … | 4.0.0-alpha.1 @abc123 | … | cycle | sonnet | 1 | sonnet-cycle-1 | neutral (0) | pass | 2 | 88k | 310 | skipped `--doc`, hacked one edge |
+| … | 4.0.0 @abc123 | … | cycle | opus | 1 | opus-cycle-1 | improved (−2 cycles) | pass | 5 | 49.7k | 196 | reference |
+| … | 4.0.0 @abc123 | … | cycle | sonnet | 1 | sonnet-cycle-1 | neutral (0) | pass | 2 | 88k | 310 | skipped `--doc`, hacked one edge |
 
 `tokens` and `time (s)` are the cost axis at a glance (full breakdown —
 `tool_calls`, `commands`, `input_tokens`, `output_tokens`, `wall_s` — lives in

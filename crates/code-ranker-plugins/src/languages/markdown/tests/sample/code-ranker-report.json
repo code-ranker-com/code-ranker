@@ -264,7 +264,7 @@
     }
   ],
   "versions": {
-    "code-ranker": "4.0.0-alpha.1"
+    "code-ranker": "4.0.0"
   },
   "workspace": "/home/user/code-ranker"
 }

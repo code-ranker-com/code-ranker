@@ -146,6 +146,26 @@ impl PrincipleDef {
     }
 }
 
+/// Merge the project's `[principles.<ID>]` over a plugin's principle catalog: a
+/// same-id project principle replaces the plugin's (in place, keeping catalog
+/// order), a new id is appended. So a project can recommend / scorecard / document
+/// its own custom metric. Lives here (next to [`PrincipleDef`]) so both the
+/// analysis pipeline and the analysis-free `docs` command share one merge without
+/// either depending on the other.
+pub(crate) fn merge_project_principles(
+    mut catalog: Vec<code_ranker_plugin_api::Principle>,
+    project: &std::collections::BTreeMap<String, PrincipleDef>,
+) -> Vec<code_ranker_plugin_api::Principle> {
+    for (id, def) in project {
+        let p = def.to_principle(id);
+        match catalog.iter_mut().find(|e| e.id == p.id) {
+            Some(existing) => *existing = p,
+            None => catalog.push(p),
+        }
+    }
+    catalog
+}
+
 /// `[levels]` — opt-in extra graph levels beyond `files`.
 #[derive(Debug, Clone, Copy, Deserialize, Default)]
 #[serde(default, deny_unknown_fields)]

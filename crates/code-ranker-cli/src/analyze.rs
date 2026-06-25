@@ -74,7 +74,6 @@ fn analyze_from_snapshot(
         cycles: cfg.rules.cycles,
         rules: cfg.rules,
         output: cfg.output,
-        templates: cfg.templates,
     })
 }
 

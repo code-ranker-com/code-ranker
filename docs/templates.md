@@ -141,7 +141,7 @@ substitution primitive already in the tree.
 Corpus publishing to GitHub Pages (and the `code-ranker docs` subcommand that
 composed the corpus to disk) has been **removed**. The corpus is no longer served
 over a URL; it lives only **embedded in the binary** (§3) and is reached through
-`--doc <ID>` / inline prompt text. The Pages workflow still publishes the HTML
+the `docs <ID>` command / inline prompt text. The Pages workflow still publishes the HTML
 *report* (`report . → site/index.html`), but not the doc corpus, so a finding's
 `doc_url` no longer resolves to a live page.
 
@@ -213,13 +213,13 @@ code-ranker report . --prompt HK --top 5 --focus-path src/engine
 stdout counterpart — the quick "show me HK" path — and (being a standalone dump)
 accepts any `--top N` to widen the ranked module list.
 
-### 7.2 `--doc <ID>` — print the raw principle doc ✅
+### 7.2 `docs <ID>` — print the raw principle doc ✅
 
-Dumps the embedded principle/metric Markdown itself (composed for the active
-`--plugin`, with any `[templates.…]` override applied), no analysis:
+The `docs` command dumps the embedded principle/metric Markdown itself (composed for the
+active `--plugin`, with any `[templates.…]` override applied), no analysis and no `[input]`:
 
 ```bash
-code-ranker report . --doc HK        # the resolved languages/<lang>/HK.md
+code-ranker docs HK        # the resolved languages/<lang>/HK.md
 ```
 
 ### 7.3 Existing prompt surfaces ✅
@@ -250,7 +250,7 @@ corpus, `prompt.md` is **internal template prose**: it sits next to `builtin.tom
 | Field | Role |
 |---|---|
 | `intro` | one-line intent under the title |
-| `doc_note` | how to read the full principle — points at the offline `code-ranker report --doc <id>` command (`{id}` substituted), not a network URL |
+| `doc_note` | how to read the full principle — points at the offline `code-ranker docs <id>` command (`{id}` substituted), not a network URL |
 | `task` | the task-protocol bullets (`{id}` → active principle id) |
 | `focus` | closing emphasis line |
 | `cycle_note` | note prepended to a single dependency-cycle's module list |
@@ -285,7 +285,8 @@ and JS.
 | `report --output.prompt`, `check --output-format prompt` | ✅ |
 | Embedding the corpus in the binary (`build.rs` → `CORPUS`) | ✅ |
 | `[templates.languages.<lang>.<ID>]` per-file override | ✅ |
-| `report --prompt <ID>` / `--doc <ID>` | ✅ |
+| `report --prompt <ID>` | ✅ |
+| `docs <ID>` | ✅ |
 | Manifest composer (`compose.rs`: `doc:base` + `from`/`to`) + `resolve_doc` wiring | ✅ |
 | `code-ranker docs` build subcommand + corpus Pages publishing (Variant B) | ✗ removed — corpus is binary-embedded only, not served over a URL |
 | `base/` + per-language manifest migration | ◐ all `rust/` docs migrated; `python`/`typescript` 🔜 |

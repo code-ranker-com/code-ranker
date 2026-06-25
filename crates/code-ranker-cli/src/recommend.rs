@@ -75,8 +75,8 @@ pub fn resolve_focus(level: &LevelGraph, principles: &[Principle], name: &str) -
 
 /// Build a throwaway [`Principle`] that frames a **metric** as its own principle, so
 /// the metric-lens prompt reuses [`compose_prompt`] verbatim — the title is the
-/// metric (`HK — Henry–Kafura`), the summary its `description`, the `doc_url` the
-/// fix-prompt doc linked from its `remediation`, and the ranking axis the metric
+/// metric (`HK — Henry–Kafura`), the summary its `description`, the `doc_url` its
+/// base-corpus doc stem (resolved by key), and the ranking axis the metric
 /// itself. No SOLID principle is involved. Coupling metrics also pull the in/out
 /// connection lists (the HK fix workflow needs the crossroads); others omit them.
 pub fn synth_metric_principle(
@@ -113,9 +113,9 @@ pub fn synth_metric_principle(
     } else {
         format!("{label} — {name}")
     };
-    let doc_url = spec
-        .and_then(|s| s.remediation.as_deref())
-        .and_then(doc_ref);
+    // The doc this metric's prompt points at — its base-corpus doc stem (`hk`→`HK`),
+    // or `None` for a metric that ships no prose doc.
+    let doc_url = crate::templates::metric_doc_stem(metric).map(str::to_string);
     let connections = if spec.and_then(|s| s.group.as_deref()) == Some("coupling") {
         vec!["in".to_string(), "out".to_string(), "common".to_string()]
     } else {
@@ -130,19 +130,6 @@ pub fn synth_metric_principle(
         sort_metric: metric.to_string(),
         connections,
     }
-}
-
-/// The doc id a `remediation` string points at: the `<ID>` token after `--doc `
-/// in "Run `code-ranker report --doc <ID>` and follow its instructions." (the
-/// `<ID>` is the canonical doc filename stem, e.g. `HK`, `Fan-in`, `ADP`). `None`
-/// when the remediation names no doc. Shared with `templates::doc_rel_path`.
-pub(crate) fn doc_ref(s: &str) -> Option<String> {
-    let after = s.split("--doc ").nth(1)?;
-    let id: String = after
-        .chars()
-        .take_while(|c| !c.is_whitespace() && *c != '`')
-        .collect();
-    (!id.is_empty()).then_some(id)
 }
 
 /// Which threshold tier drives an output. `Auto` resolves to `Warning` when any

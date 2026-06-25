@@ -25,10 +25,10 @@ platform notes): [installation.md](installation.md).
 - **`report`** — produces artifacts: a JSON snapshot, an HTML viewer, and the
   advisory **`scorecard`** (console triage) / **`prompt`** (LLM prompt). Always
   exits `0`.
-- **`ai`** — prints this playbook to the terminal (no analysis; always exits `0`).
-  Run `code-ranker ai` to bootstrap: with a language plugin resolved it prints the
-  full playbook + principle/metric catalog; with none (no/ambiguous markers) it
-  prints a brief intro and how to select one.
+- **`docs <subject>`** — prints a reference doc to the terminal (no analysis; always
+  exits `0`). Run `code-ranker docs ai` to bootstrap this playbook: with a language
+  plugin resolved it prints the full playbook + principle/metric catalog; with none
+  (no/ambiguous markers) it prints a brief intro and how to select one.
 
 `[input]` is polymorphic: a directory is analyzed; a `.json` snapshot is read
 back with no re-analysis. Keep old `.code-ranker/` snapshots — they are baselines.
@@ -36,7 +36,7 @@ back with no re-analysis. Keep old `.code-ranker/` snapshots — they are baseli
 `check` / `report` analyze one language, auto-detected from project markers. If a
 directory has markers for several (e.g. Rust + Markdown), they stop with *"ambiguous
 project … pass --plugin to choose"*: name the language with `--plugin <name>`, or set
-`plugin = "<name>"` in a `code-ranker.toml` at the project root. (`ai` never needs this.)
+`plugin = "<name>"` in a `code-ranker.toml` at the project root. (`docs` never needs this.)
 
 ## The two metrics that matter
 
@@ -47,7 +47,7 @@ Focus on these; treat everything else as secondary.
   module on a busy crossroads of incoming/outgoing dependencies. Full
   diagnose-and-split workflow (measure one file, list its fan_in/fan_out, find
   the mixed scenarios, split, verify with a before/after diff report): run
-  `code-ranker report --doc HK` (prints the full principle to the terminal, offline).
+  `code-ranker docs HK` (prints the full principle to the terminal, offline).
 
 **Strategy:** fix one thing at a time, worst-first. Cycles (ADP) are structural —
 clear them first; then coupling (HK). Focus on one metric or principle with `--focus` and inspect

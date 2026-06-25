@@ -60,10 +60,19 @@ pub fn rule_doc(
     }
     let metric = id.rsplit('.').next().unwrap_or(id);
     let s = node_attributes.get(metric)?;
+    // A metric's `fix` is its own `remediation` when one is authored (a project
+    // `[metrics.<key>]` may set a custom fix); otherwise auto-derive the pointer to
+    // its doc from the key, so the built-in catalog carries no duplicated boilerplate
+    // and the command always names the correct subject (`docs <key>`).
+    let fix = s.remediation.clone().or_else(|| {
+        Some(format!(
+            "Run `code-ranker docs {metric}` and follow its instructions."
+        ))
+    });
     Some(RuleDoc {
         title: s.name.clone().or_else(|| s.label.clone()),
         why: s.description.clone(),
-        fix: s.remediation.clone(),
+        fix,
     })
 }
 

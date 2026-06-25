@@ -275,33 +275,27 @@ pub(crate) enum Command {
         /// to shape the ranked module list.
         #[arg(long = "prompt", value_name = "PRINCIPLE | METRIC")]
         prompt_id: Option<String>,
-
-        /// Print the principle/metric doc Markdown for one id to stdout and exit
-        /// (e.g. `--doc HK`) — the resolved `languages/<lang>/<ID>.md`, with any
-        /// `[templates.languages.…]` override applied. No artifacts are written.
-        #[arg(long = "doc", value_name = "PRINCIPLE | METRIC")]
-        doc_id: Option<String>,
     },
 
-    /// Print the offline AI-agent playbook to stdout — no analysis, always exits 0.
-    /// Output adapts to whether a language plugin can be resolved (explicit
-    /// `--plugin` > config `plugin` > auto-detect from `[input]` markers): when one
-    /// is resolved, it prints the full playbook + principle/metric catalog; when
-    /// none can be resolved (no marker, or ambiguous markers), it prints a brief
-    /// product intro plus how to select a plugin, and omits the catalog.
-    Ai {
-        /// Directory whose markers decide the output mode (default: current dir).
-        /// No analysis is run — only plugin resolution.
-        #[arg(default_value = ".")]
-        input: PathBuf,
+    /// Print a reference doc to stdout — no analysis, no `[input]`. The `<subject>`
+    /// is `ai` (the offline AI-agent playbook), `metrics` or `principles` (an index
+    /// of each), a metric category (`loc`, `complexity`, …), a metric key (`sloc`,
+    /// `hk`, …), or a principle id (`SRP`, `ADP`, … — including project-defined
+    /// `[principles.<ID>]` and `[metrics.<key>]`). With no subject it prints a
+    /// catalog of every option. Config is auto-discovered from the current directory
+    /// (override with `--config`); `--plugin` resolves the language explicitly.
+    Docs {
+        /// What to print: `ai` | `metrics` | `principles` | a category | a metric
+        /// | a principle id. Omit to list every available subject.
+        subject: Option<String>,
 
-        /// Plugin: rust | python | javascript | auto. Resolves the mode explicitly
-        /// (skips auto-detection).
+        /// Plugin: rust | python | javascript | auto. Resolves the language whose
+        /// principles / metric refinements drive the docs (skips auto-detection).
         #[arg(long)]
         plugin: Option<String>,
 
         /// Config file path, or inline `KEY=VALUE` override (repeatable) — consulted
-        /// only for its `plugin` key when resolving the mode.
+        /// for the `plugin` key and any project `[principles]` / `[metrics]`.
         #[arg(long, value_name = "PATH | KEY=VALUE")]
         config: Vec<String>,
     },

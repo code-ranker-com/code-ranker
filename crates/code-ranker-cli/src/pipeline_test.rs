@@ -31,7 +31,7 @@ fn project_principles_override_then_append() {
             ..Default::default()
         },
     );
-    let merged = merge_project_principles(catalog, &project);
+    let merged = config::merge_project_principles(catalog, &project);
     assert_eq!(merged.len(), 2);
     let cpx = merged.iter().find(|p| p.id == "CPX").unwrap();
     assert_eq!(cpx.sort_metric, "cyclomatic", "same id replaced in place");

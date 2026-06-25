@@ -147,11 +147,11 @@ def from_transcript(path, focus):
     # doc reads / rereads
     docs = []
     for _, cmd in cmds:
-        if "--doc " in cmd:
-            tail = cmd.split("--doc ", 1)[1].split()
+        if "docs " in cmd:
+            tail = cmd.split("docs ", 1)[1].split()
             if tail:
                 docs.append(tail[0])
-    m["read_doc_ai"] = 1 if any(d == "AI" for d in docs) else 0
+    m["read_doc_ai"] = 1 if any(d.lower() == "ai" for d in docs) else 0
     fl = (focus or "").lower()
     aliases = {"adp", "cycle", "cycles"} if fl in CYCLE_FOCI else {fl}
     m["read_doc_focus"] = 1 if any(d.lower() in aliases for d in docs) else 0

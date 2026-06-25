@@ -189,7 +189,7 @@ fn compose_prompt_cycle_lists_modules_and_connections() {
     assert!(md.contains("# ADP — Acyclic"), "title heading: {md}");
     assert!(md.contains("## Summary\n\nthe DAG rule"), "summary body");
     assert!(
-        md.contains("`code-ranker report --doc ADP`"),
+        md.contains("`code-ranker docs ADP`"),
         "offline doc command (id substituted): {md}"
     );
     assert!(
@@ -728,8 +728,9 @@ fn parse_severity_rejects_garbage() {
 }
 
 /// `synth_metric_principle` frames a metric as its own "principle": title from
-/// label+name, summary from description, `doc_url` extracted from the remediation
-/// URL, and in/out/common connections for a coupling metric (none otherwise).
+/// label+name, summary from description, `doc_url` resolved from the metric's
+/// base-corpus doc (by key), and in/out/common connections for a coupling metric
+/// (none otherwise).
 #[test]
 fn synth_metric_principle_frames_metric() {
     let mut hk = AttributeSpec::new(ValueType::Float, "HK");
@@ -737,7 +738,6 @@ fn synth_metric_principle_frames_metric() {
     hk.name = Some("Henry–Kafura".into());
     hk.description = Some("coupling × size".into());
     hk.group = Some("coupling".into());
-    hk.remediation = Some("Run `code-ranker report --doc HK` and follow its instructions.".into());
     let mut sloc = AttributeSpec::new(ValueType::Int, "SLOC");
     sloc.description = Some("source lines".into());
     let mut na: BTreeMap<String, AttributeSpec> = BTreeMap::new();
@@ -756,7 +756,7 @@ fn synth_metric_principle_frames_metric() {
     assert_eq!(
         p.doc_url.as_deref(),
         Some("HK"),
-        "doc id from the remediation's --doc reference"
+        "doc stem resolved from the metric key (hk → HK)"
     );
     assert_eq!(
         p.connections,
@@ -767,7 +767,10 @@ fn synth_metric_principle_frames_metric() {
     let q = synth_metric_principle(&level, &[], "sloc");
     assert_eq!(q.title, "SLOC", "no `name` → title is the label");
     assert!(q.connections.is_empty(), "non-coupling → no connections");
-    assert!(q.doc_url.is_none(), "no remediation URL → no doc link");
+    assert!(
+        q.doc_url.is_none(),
+        "metric ships no corpus doc → no doc link"
+    );
 }
 
 /// `synth_metric_principle("cycle", …)` borrows the ADP principle (the one whose

@@ -564,19 +564,8 @@ fn rust_sample_prompt_flag_targets_metric_lens() {
     );
 }
 
-/// `--prompt` and `--doc` are mutually exclusive (the standalone-output guard).
-#[test]
-fn rust_sample_report_rejects_prompt_with_doc() {
-    let (ok, _stdout, stderr) = run_report_capture("rust", &["--prompt", "HK", "--doc", "SRP"]);
-    assert!(!ok, "mutually-exclusive flags must error");
-    assert!(
-        stderr.contains("--prompt and --doc are mutually exclusive"),
-        "names the conflict: {stderr}"
-    );
-}
-
-/// `ai` with **no resolvable plugin** (an empty directory — no markers) exits `0`
-/// and prints the brief intro plus how to select a plugin, **withholding** the
+/// `docs ai` with **no resolvable plugin** (an empty directory — no markers) exits
+/// `0` and prints the brief intro plus how to select a plugin, **withholding** the
 /// principle/metric catalog until a language is chosen.
 #[test]
 fn ai_unresolved_omits_catalog_and_shows_plugin_setup() {
@@ -585,12 +574,12 @@ fn ai_unresolved_omits_catalog_and_shows_plugin_setup() {
     std::fs::create_dir_all(&dir).unwrap();
     let res = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
         .current_dir(&dir)
-        .arg("ai")
+        .args(["docs", "ai"])
         .output()
-        .expect("spawn ai");
+        .expect("spawn docs ai");
     assert!(
         res.status.success(),
-        "ai must exit 0 even with no plugin: {}",
+        "docs ai must exit 0 even with no plugin: {}",
         String::from_utf8_lossy(&res.stderr)
     );
     let stdout = String::from_utf8_lossy(&res.stdout);
@@ -602,7 +591,7 @@ fn ai_unresolved_omits_catalog_and_shows_plugin_setup() {
         stdout.contains("## Commands")
             && stdout.contains("**`help`**")
             && stdout.contains("**`report"),
-        "lists the main commands (check/report/ai/help)"
+        "lists the main commands (check/report/docs/help)"
     );
     assert!(
         stdout.contains("## Select a language") && stdout.contains("--plugin"),
@@ -621,18 +610,18 @@ fn ai_unresolved_omits_catalog_and_shows_plugin_setup() {
     );
 }
 
-/// `ai` run inside a project whose plugin **auto-detects** (the Rust sample) prints
-/// the full playbook + catalog and never mentions plugin setup.
+/// `docs ai` run inside a project whose plugin **auto-detects** (the Rust sample)
+/// prints the full playbook + catalog and never mentions plugin setup.
 #[test]
 fn ai_resolved_prints_full_catalog_without_setup() {
     let res = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
         .current_dir(sample_dir("rust"))
-        .arg("ai")
+        .args(["docs", "ai"])
         .output()
-        .expect("spawn ai");
+        .expect("spawn docs ai");
     assert!(
         res.status.success(),
-        "ai failed: {}",
+        "docs ai failed: {}",
         String::from_utf8_lossy(&res.stderr)
     );
     let stdout = String::from_utf8_lossy(&res.stdout);
@@ -841,22 +830,61 @@ fn rust_sample_output_prompt_focus_principle_targets_it() {
     );
 }
 
-/// `report --doc <ID>` prints the embedded corpus Markdown for a principle/metric
-/// directly. `HK` is a metric (its doc lives in `base/`, reached via the metric's
-/// remediation URL), exercising the metric-doc resolution path.
+/// `docs <ID>` prints a reference doc with no analysis. A metric (`hk`) renders its
+/// spec card and then appends the embedded corpus doc (reached via the metric's
+/// remediation reference); a principle (`SRP`) prints its full corpus doc.
 #[test]
-fn rust_sample_doc_flag_prints_embedded_markdown() {
-    let (ok, stdout, stderr) = run_report_capture("rust", &["--doc", "HK"]);
-    assert!(ok, "--doc run failed: {stderr}");
+fn rust_sample_docs_subject_prints_embedded_markdown() {
+    let run = |subject: &str| -> (bool, String) {
+        let res = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
+            .current_dir(sample_dir("rust"))
+            .args(["docs", subject])
+            .output()
+            .expect("spawn docs");
+        (
+            res.status.success(),
+            String::from_utf8_lossy(&res.stdout).into_owned(),
+        )
+    };
+    let (ok, stdout) = run("hk");
+    assert!(ok, "docs hk failed");
     assert!(
-        stdout.starts_with("# HK — Henry–Kafura"),
-        "embedded HK doc printed: {stdout}"
+        stdout.starts_with("# hk: Henry–Kafura"),
+        "metric spec card first: {stdout}"
+    );
+    assert!(
+        stdout.contains("# HK — Henry–Kafura"),
+        "embedded HK doc appended after the card: {stdout}"
     );
     // A principle id resolves too (SRP → its own rust/ corpus doc).
-    let (ok2, stdout2, _) = run_report_capture("rust", &["--doc", "SRP"]);
+    let (ok2, stdout2) = run("SRP");
     assert!(
         ok2 && stdout2.contains("Single Responsibility"),
         "SRP doc: {stdout2}"
+    );
+
+    // A metric category prints its label + member metrics.
+    let (ok3, stdout3) = run("loc");
+    assert!(
+        ok3 && stdout3.contains("loc: Lines of Code") && stdout3.contains("- sloc:"),
+        "category listing: {stdout3}"
+    );
+
+    // Subjects match separator/case-insensitively: `FAN out` resolves `fan_out`.
+    let (ok_norm, stdout_norm) = run("FAN out");
+    assert!(
+        ok_norm && stdout_norm.starts_with("# fan_out: Fan-out"),
+        "normalized subject resolves the metric: {stdout_norm}"
+    );
+
+    // An unknown subject prints the catalog and exits non-zero.
+    let (ok4, stdout4) = run("nope");
+    assert!(!ok4, "unknown subject must exit non-zero");
+    assert!(
+        stdout4.contains("Unknown docs subject `nope`")
+            && stdout4.contains("principles: Design principles")
+            && stdout4.contains("Call `docs`"),
+        "catalog shown for an unknown subject: {stdout4}"
     );
 }
 

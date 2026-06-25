@@ -31,12 +31,12 @@ All user-facing operations MUST be accessible through a single binary
 through an explicit subcommand; there is no default command. There are
 **two** analysis subcommands, split by *what they emit* — `check` produces
 an exit code (a CI gate), `report` produces files (a snapshot and a
-viewer) — plus a small project-free `ai` command (below):
+viewer) — plus a small project-free `docs` command (below):
 
 ```
 code-ranker check  [input] [--plugin <name|auto>] [--baseline <snapshot>] [options]
 code-ranker report [input] [--plugin <name|auto>] [--baseline <snapshot>] [--output.<fmt>.path <path>] [options]
-code-ranker ai     [input] [--plugin <name|auto>]   # offline agent playbook (no analysis)
+code-ranker docs   <subject> [--plugin <name|auto>] [--config <PATH|KEY=VALUE>]   # reference docs (no analysis)
 ```
 
 The single positional `[input]` (default `.`) is **polymorphic**: a
@@ -57,15 +57,21 @@ snapshot input.
   always exits `0`. Without `--baseline` the HTML is a single-snapshot
   viewer; with `--baseline <snapshot>` it becomes a baseline↔current diff
   view with a verdict, named `…-diff.html`.
-- `ai` prints the offline AI-agent playbook (the embedded `base/AI.md`) to stdout
-  and always exits `0`. It runs **no analysis** — it only resolves which language
-  plugin applies (explicit `--plugin`, the `plugin` config key, or auto-detection
-  from `[input]`'s markers) to choose the output: with a plugin resolved it prints
-  the full playbook **plus** the principle/metric catalog (the project-free
-  equivalent of `report --doc AI`); with none resolvable (no marker, or markers for
-  several languages) it prints a brief product intro **plus** how to select a plugin
-  and **omits** the catalog. So it succeeds even where `report` / `check` would stop
-  on an ambiguous project, and guides the user to a working setup.
+- `docs <subject>` prints a reference doc to stdout and always exits `0` (an unknown
+  subject exits non-zero). It runs **no analysis** and takes **no `[input]`** — config
+  is auto-discovered from the current directory, and `--plugin` (explicit, the `plugin`
+  config key, or none) resolves which language's docs to serve. The `<subject>` selects
+  the output: `ai` (the offline AI-agent playbook from the embedded `base/AI.md`),
+  `metrics` / `principles` (the metric / principle index), a metric **category** (`loc`,
+  `complexity`, `halstead`, `maintainability`, `coupling` → its label + member metrics),
+  a **metric** key (`sloc`, `hk`, … → its spec card, with the prose doc appended for
+  `hk` / `cyclomatic` / `cognitive` / `fan_in` / `fan_out`), a **principle** id (`SRP`,
+  `ADP`, … → its full doc), or no/unknown subject (a catalog of every subject). For
+  `docs ai`, with a plugin resolved it prints the full playbook **plus** the
+  principle/metric catalog; with none resolvable it prints a brief product intro
+  **plus** how to select a plugin and **omits** the catalog. So `docs ai` succeeds even
+  where `report` / `check` would stop on an ambiguous project, and guides the user to a
+  working setup.
 
 `report` selects artifacts and their destinations through one flag family,
 `--output.<fmt>.path <path>` (`<fmt>` is `json`, `html`, `sarif`, `codequality`,

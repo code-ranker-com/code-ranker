@@ -27,8 +27,6 @@ pub(crate) struct Analyzed {
     /// `[output.<fmt>]` config: per-format `path` template and `enabled` flag
     /// (CLI flags still win — resolved in `run_report`).
     pub(crate) output: config::OutputConfig,
-    /// `[templates.languages.<lang>.<ID>]` doc-corpus overrides (for `--doc`).
-    pub(crate) templates: config::TemplatesConfig,
 }
 
 /// Directory input: load config, run the plugin, annotate the graphs, collect
@@ -327,7 +325,7 @@ pub(crate) fn analyze_directory(
     // same-id project principle overrides the plugin's, a new id appends. So a
     // project can recommend / scorecard on its custom metric.
     let principles =
-        merge_project_principles(plugin::principles(&plugin_name, &input), &cfg.principles);
+        config::merge_project_principles(plugin::principles(&plugin_name, &input), &cfg.principles);
 
     // Prompt-Generator scaffolding: the built-in `metrics/prompt.md`, or a
     // `[templates] prompt = "<path>"` override read from disk (same `## <field>`
@@ -361,25 +359,7 @@ pub(crate) fn analyze_directory(
         cycles: cfg.rules.cycles,
         rules: cfg.rules,
         output: cfg.output,
-        templates: cfg.templates,
     })
-}
-
-/// Merge the project's `[principles.<ID>]` over the plugin catalog: a same-id project
-/// principle replaces the plugin's (in place, keeping catalog order), a new id is
-/// appended. So a project can recommend / scorecard on its own custom metric.
-fn merge_project_principles(
-    mut catalog: Vec<code_ranker_plugin_api::Principle>,
-    project: &BTreeMap<String, config::model::PrincipleDef>,
-) -> Vec<code_ranker_plugin_api::Principle> {
-    for (id, def) in project {
-        let p = def.to_principle(id);
-        match catalog.iter_mut().find(|e| e.id == p.id) {
-            Some(existing) => *existing = p,
-            None => catalog.push(p),
-        }
-    }
-    catalog
 }
 
 /// The advisory `info`/`warning` tiers overlaid onto the metric specs (scorecard,

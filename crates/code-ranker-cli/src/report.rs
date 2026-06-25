@@ -37,8 +37,6 @@ pub(crate) struct ReportReco {
     pub(crate) index: Option<usize>,
     /// `--prompt <ID>`: print the named principle/metric prompt to stdout and exit.
     pub(crate) prompt_id: Option<String>,
-    /// `--doc <ID>`: print the named principle/metric doc Markdown to stdout and exit.
-    pub(crate) doc_id: Option<String>,
 }
 
 /// `report` — analyze (or read) the input and write artifacts. Which formats are
@@ -50,9 +48,9 @@ pub(crate) fn run_report(
     out: ReportOutputs,
     reco: ReportReco,
 ) -> Result<()> {
-    // `--prompt <ID>` / `--doc <ID>`: analyze, print the one artifact to stdout,
-    // and exit — a direct dump that bypasses the file-artifact flags entirely.
-    if reco.prompt_id.is_some() || reco.doc_id.is_some() {
+    // `--prompt <ID>`: analyze, print the prompt to stdout, and exit — a direct
+    // dump that bypasses the file-artifact flags entirely.
+    if reco.prompt_id.is_some() {
         return run_direct(args, &reco);
     }
 
@@ -225,22 +223,13 @@ pub(crate) fn run_report(
     Ok(())
 }
 
-/// `--prompt <ID>` / `--doc <ID>`: analyze the input and print one principle's AI
-/// prompt or its doc Markdown to stdout, then exit. Standalone — no file artifacts
-/// and none of the `--output.*` validation (so `--prompt HK --top 5` is fine).
+/// `--prompt <ID>`: analyze the input and print one principle's AI fix-prompt to
+/// stdout, then exit. Standalone — no file artifacts and none of the `--output.*`
+/// validation (so `--prompt HK --top 5` is fine). Reference docs are a separate
+/// concern, served analysis-free by the `docs` command.
 fn run_direct(args: &AnalyzeArgs, reco: &ReportReco) -> Result<()> {
-    if reco.prompt_id.is_some() && reco.doc_id.is_some() {
-        anyhow::bail!("--prompt and --doc are mutually exclusive");
-    }
     let a = analyze_input(args, &[], &[])?;
     let snap = &a.snapshot;
-
-    // `--doc <ID>`: the resolved corpus Markdown (with any `[templates.…]` override).
-    if let Some(id) = &reco.doc_id {
-        let md = crate::templates::resolve_doc(snap, &a.templates, id)?;
-        print!("{}", crate::templates::with_trailing_newline(md));
-        return Ok(());
-    }
 
     // `--prompt <ID>`: compose the named principle/metric prompt (same builder as
     // `--output.prompt`, but for the id you name, to stdout).

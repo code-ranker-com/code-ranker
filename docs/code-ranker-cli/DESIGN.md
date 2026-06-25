@@ -36,17 +36,20 @@ The single user-facing binary `code-ranker`. There is no default command —
 a bare invocation prints help. `main()` owns two analysis subcommands — `check`
 and `report` — both taking a single polymorphic positional `[input]` (a directory
 to **analyze**, or a `.json`/`.html` snapshot to **read**, via
-`analyze_input` → `is_snapshot_input`); a third `ai` subcommand (`ai.rs`) runs **no
-analysis** — it resolves the language plugin (`plugin::resolve_plugin`) only to pick
-the output and prints the embedded `base/AI.md` playbook to stdout (full playbook +
-catalog when a plugin resolves; a brief intro + how to select one when none does):
+`analyze_input` → `is_snapshot_input`); a third `docs` subcommand (`docs.rs`) runs **no
+analysis** and takes **no `[input]`** — it resolves the language plugin
+(`plugin::resolve_plugin`) only to pick the language, then prints the reference doc for
+the requested `<subject>` to stdout (the `ai` playbook, a metric/principle index, a
+category or metric spec card, or a principle's full doc; for `docs ai`, the full
+playbook + catalog when a plugin resolves, a brief intro + how to select one when
+none does):
 
 The binary is decomposed by concern — `main()` only parses and dispatches:
 `cli.rs` (the clap argument model), `analyze.rs` (input dispatch, the snapshot
 path, and snapshot loading), `pipeline.rs` (the directory-analysis pipeline +
 `LevelGraph` assembly, owning the `Analyzed` result), `check.rs` (`run_check`),
-`report.rs` (`run_report`), `recommend.rs` (prompt/scorecard), `ai.rs` (the `ai`
-playbook command), and the `config/`
+`report.rs` (`run_report`), `recommend.rs` (prompt/scorecard), `docs.rs` (the `docs`
+reference command), and the `config/`
 module (`model` / `load` / `ignore` / `rules` / `violations`, re-exported through
 its `mod.rs` facade). `pipeline.rs` concentrates the high fan-out orchestration
 behind a single caller (`analyze_input`), keeping every file's Henry-Kafura HK
@@ -286,7 +289,7 @@ This section notes the implementation binding.
 The full CLI surface is documented in [CLI.md](CLI.md). The two analysis commands
 are `check` (verdict + exit code, no files) and `report` (artifacts); both take a
 polymorphic `[input]` and accept `--baseline <snapshot>`. The doc corpus is embedded
-in the binary and printed on demand via `report --doc <ID>` — there is no separate
+in the binary and printed on demand via `docs <ID>` — there is no separate
 publishing subcommand.
 
 ### Snapshots — `code-ranker report --output.json`

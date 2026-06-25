@@ -1,9 +1,23 @@
 use super::*;
 use code_ranker_graph::level_graph::LevelGraph;
+use code_ranker_graph::snapshot::Snapshot;
 use code_ranker_plugin_api::Principle;
 use code_ranker_plugin_api::attrs::ValueType;
 use code_ranker_plugin_api::level::AttributeSpec;
 use std::collections::BTreeMap;
+
+/// Test shim mirroring the old snapshot-based `resolve_doc`: pulls the principles
+/// and `files`-level node-attribute specs out of a test snapshot and feeds the
+/// spec-based core. Keeps these tests reading naturally now that production
+/// resolves docs from config/plugin specs (no snapshot) via `docs`.
+fn resolve_doc(s: &Snapshot, templates: &TemplatesConfig, id: &str) -> Result<String> {
+    resolve_doc_from_specs(
+        &s.principles,
+        &s.graphs["files"].node_attributes,
+        templates,
+        id,
+    )
+}
 
 /// A snapshot carrying just the bits `resolve_doc`/`doc_rel_path` read:
 /// the principles and the `files` level's node-attribute specs.
@@ -42,10 +56,10 @@ fn principle(id: &str, doc_url: &str) -> Principle {
     }
 }
 
-fn metric_spec(remediation: &str) -> AttributeSpec {
-    let mut spec = AttributeSpec::new(ValueType::Float, "HK");
-    spec.remediation = Some(remediation.to_string());
-    spec
+fn metric_spec() -> AttributeSpec {
+    // The doc now resolves from the attribute's key (not a remediation string), so a
+    // bare spec under the right key is all these tests need.
+    AttributeSpec::new(ValueType::Float, "HK")
 }
 
 #[test]
@@ -154,18 +168,33 @@ fn resolve_doc_cycle_resolves_to_adp() {
 }
 
 #[test]
-fn resolve_doc_finds_metric_via_remediation_doc_ref() {
-    // No matching principle — the doc resolves through the metric's remediation
-    // `--doc <ID>` reference (the attribute looked up by its lowercased key, the
-    // canonical doc filename taken from the `--doc` id). Metric docs live in base/.
+fn resolve_doc_finds_metric_doc_by_key() {
+    // No matching principle — the doc resolves through the metric key itself: the
+    // attribute is present in `node_attributes`, and its base-corpus doc is found by
+    // normalized stem (`hk`→`HK`, separators/case ignored). Metric docs live in base/.
     let mut attrs = BTreeMap::new();
-    attrs.insert(
-        "hk".to_string(),
-        metric_spec("Run `code-ranker report --doc HK` and follow its instructions."),
-    );
+    attrs.insert("hk".to_string(), metric_spec());
     let s = snap(vec![], attrs);
     let doc = resolve_doc(&s, &TemplatesConfig::default(), "HK").unwrap();
     assert_eq!(doc, corpus_doc("base/HK.md").unwrap());
+}
+
+#[test]
+fn normalize_id_collapses_separators_and_case() {
+    assert_eq!(normalize_id("Fan-in"), "fanin");
+    assert_eq!(normalize_id("fan_in"), "fanin");
+    assert_eq!(normalize_id("FAN in"), "fanin");
+    assert_eq!(normalize_id("HK"), "hk");
+}
+
+#[test]
+fn metric_doc_stem_maps_key_to_corpus_stem() {
+    // `_`/`-`/case all ignored, so a metric key finds its corpus doc.
+    assert_eq!(metric_doc_stem("hk"), Some("HK"));
+    assert_eq!(metric_doc_stem("fan_in"), Some("Fan-in"));
+    assert_eq!(metric_doc_stem("fan_out"), Some("Fan-out"));
+    // A metric with no prose doc resolves to nothing.
+    assert_eq!(metric_doc_stem("sloc"), None);
 }
 
 #[test]
@@ -176,10 +205,7 @@ fn doc_rel_path_serves_lang_override_for_a_metric_doc() {
     // 566fb23 (templates.rs line 63). Without a rust-routing principle the same
     // metric falls back to `base/HK.md` (see the previous test).
     let mut attrs = BTreeMap::new();
-    attrs.insert(
-        "hk".to_string(),
-        metric_spec("Run `code-ranker report --doc HK` and follow its instructions."),
-    );
+    attrs.insert("hk".to_string(), metric_spec());
     let s = snap(
         vec![principle(
             "ADP",
@@ -187,7 +213,11 @@ fn doc_rel_path_serves_lang_override_for_a_metric_doc() {
         )],
         attrs,
     );
-    assert_eq!(doc_rel_path(&s, "HK"), Some("rust/HK.md".to_string()));
+    let na = &s.graphs["files"].node_attributes;
+    assert_eq!(
+        doc_rel_path(&s.principles, na, "HK"),
+        Some("rust/HK.md".to_string())
+    );
 }
 
 #[test]
@@ -267,7 +297,7 @@ fn resolve_doc_ai_index_expands_tldr_marker() {
         "catalog lists ADP"
     );
     assert!(
-        doc.contains("Full doc: `code-ranker report --doc ADP`"),
+        doc.contains("Full doc: `code-ranker docs ADP`"),
         "each entry points at its --doc id"
     );
     assert!(doc.contains("**TL;DR**"), "entries carry their TL;DR");
@@ -280,7 +310,7 @@ fn resolve_doc_ai_index_expands_tldr_marker() {
 #[test]
 fn ai_doc_matches_resolve_doc_and_needs_no_snapshot() {
     // `ai_doc()` backs the project-free `ai` subcommand: it must produce exactly
-    // what `report --doc AI` does, but without a snapshot or plugin.
+    // what `docs AI` does, but without a snapshot or plugin.
     let doc = ai_doc().unwrap();
     let via_resolve = resolve_doc(
         &snap(vec![], BTreeMap::new()),
@@ -288,7 +318,7 @@ fn ai_doc_matches_resolve_doc_and_needs_no_snapshot() {
         "AI",
     )
     .unwrap();
-    assert_eq!(doc, via_resolve, "ai_doc == report --doc AI output");
+    assert_eq!(doc, via_resolve, "ai_doc == docs AI output");
     assert!(
         doc.contains("code-ranker — AI agent skill"),
         "overview head"
@@ -325,14 +355,14 @@ fn ai_doc_matches_resolve_doc_and_needs_no_snapshot() {
 fn ai_doc_intro_keeps_description_and_commands_but_not_the_playbook() {
     let intro = ai_doc_intro().unwrap();
     assert!(
-        intro.contains("code-ranker — AI agent skill") && intro.contains("**TL;DR**"),
+        intro.contains("code-ranker — AI agent skill"),
         "intro keeps the title + product description"
     );
     assert!(
         intro.contains("## Commands")
             && intro.contains("**`check")
             && intro.contains("**`report")
-            && intro.contains("**`ai`**")
+            && intro.contains("**`docs")
             && intro.contains("**`help`**"),
         "intro lists the main commands: {intro}"
     );
@@ -391,7 +421,7 @@ fn catalog_entry_includes_summary_when_present_and_omits_when_absent() {
         "heading first: {with}"
     );
     assert!(
-        with.contains("Full doc: `code-ranker report --doc HK`"),
+        with.contains("Full doc: `code-ranker docs HK`"),
         "carries the --doc pointer: {with}"
     );
     assert!(
@@ -401,10 +431,7 @@ fn catalog_entry_includes_summary_when_present_and_omits_when_absent() {
 
     // No summary → heading + pointer only, no trailing paragraph (the `None` arm).
     let without = catalog_entry("Edge Case", "EC", None);
-    assert_eq!(
-        without,
-        "### Edge Case\n\nFull doc: `code-ranker report --doc EC`"
-    );
+    assert_eq!(without, "### Edge Case\n\nFull doc: `code-ranker docs EC`");
 }
 
 #[test]

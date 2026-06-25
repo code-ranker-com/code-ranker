@@ -1,6 +1,6 @@
 # code-ranker — AI agent skill
 
-**TL;DR**: `code-ranker` is a multi-language **structural analysis platform** an AI
+`code-ranker` is a multi-language **structural analysis platform** an AI
 assistant can drive. It builds a project's dependency graph, finds the structural
 problems that make code hard to change — dependency **cycles** (ADP), heavy
 **coupling** (Henry–Kafura), and complexity hotspots — ranks them worst-first, and
@@ -19,9 +19,11 @@ This is the short guide for driving it — the commands below operate the tool.
 - **`report [input]`** — produces **artifacts**: a JSON snapshot, a self-contained
   HTML viewer, and the advisory **`scorecard`** (console triage) / **`prompt`** (an
   LLM fix-prompt). Always exits `0` — the analysis + refactoring entry point.
-- **`ai`** — print this playbook. With a language plugin resolved it appends the
-  full principle/metric catalog; with none it explains how to select one. No
-  analysis; always exits `0`.
+- **`docs <subject>`** — print a reference doc to stdout (no analysis). `docs ai`
+  prints this playbook (with a language plugin resolved it appends the full
+  principle/metric catalog); `docs metrics` / `docs principles` index every metric /
+  principle; `docs <category>` (`loc`, `complexity`, …) lists a category; `docs <ID>`
+  prints one metric or principle (`docs hk`, `docs SRP`). Always exits `0`.
 - **`help`** — usage for the binary or any command (`code-ranker --help`,
   `code-ranker <command> --help`, or `-h <command>`). Lists every flag.
 
@@ -52,7 +54,7 @@ version = "{config_version}"
 plugin = "<name>"
 ```
 
-Then re-run `code-ranker ai` for the full playbook and the principle/metric catalog.
+Then re-run `code-ranker docs ai` for the full playbook and the principle/metric catalog.
 <!-- ai:select-end -->
 
 ## The two that matter most
@@ -68,25 +70,24 @@ inspect the worst tier with `--severity warning`.
 ## The fix loop
 
 ```sh
-code-ranker check .                                                   # 1. the gate verdict
-code-ranker report . --output.scorecard --focus cycle --top 1   # 2. focus one metric/principle, worst-first
-code-ranker report --doc <principle>                                  # 3. READ the deep doc — before you touch code
-code-ranker report . --output.prompt.path=stdout --top 1             # 4. fix-prompt for the worst module
+code-ranker check .                                           # 1. the gate verdict
+code-ranker report . --output.scorecard --focus ADP --top 1   # 2. focus one metric/principle, worst-first
+code-ranker docs <principle>                                  # 3. READ the deep doc — before you touch code
 ```
 
-**Step 3 is not optional — read the `--doc <principle>` page before proposing a
+**Step 3 is not optional — read the `docs <principle>` page before proposing a
 fix.** It names the *language-specific cause* of this violation and the *smallest
 correct remedy* for it, often with a worked example. Agents that skip it reach for a
 heavier, wrong-shaped refactor that can leave the real cycle intact, introduce a new
 one, or drop tests. Read it first; then fix.
 
 `--focus` takes any catalog id below (a principle like `ADP`, or a metric like
-`hk` / `cycle`): focusing on a metric frames the output by that metric; on a
+`hk` / `loc`): focusing on a metric frames the output by that metric; on a
 principle, by that design principle.
 
 ## Principles & metrics
 
-Each entry summarizes one principle or metric; run `code-ranker report --doc <ID>`
+Each entry summarizes one principle or metric; run `code-ranker docs <ID>`
 to print its full doc (offline, straight to the terminal).
 
 <!-- doc:tldr-index -->

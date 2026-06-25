@@ -7,12 +7,12 @@
 // while binding no name, so nothing can accidentally reach into it.
 extern crate code_ranker_plugins as _;
 
-mod ai;
 mod analyze;
 mod check;
 mod cli;
 mod compose;
 mod config;
+mod docs;
 mod export;
 mod git;
 mod logger;
@@ -42,11 +42,18 @@ fn main() -> Result<()> {
         "code-ranker {}",
         std::env::args().skip(1).collect::<Vec<_>>().join(" ")
     );
+    // The run skeleton (`▶` startup + `✓ … — <time>` finish) is only meaningful for
+    // the analysis commands — `check` / `report` do real work worth timing. `docs`
+    // is a plain doc dump to stdout, so it stays quiet (no `▶` / `✓`); errors still
+    // surface on every command.
+    let timed = matches!(cli.command, Command::Check { .. } | Command::Report { .. });
     // Startup line (verbose only): the exact command this run was invoked with. The
     // config it resolved is logged next, by `config::load`. The matching summary-tier
     // `✓ … — <time>` finish line is emitted by this timer.
-    logger::verbose(&format!("▶ {cmd}"));
-    let t = logger::Timer::start(&cmd);
+    let timer = timed.then(|| {
+        logger::verbose(&format!("▶ {cmd}"));
+        logger::Timer::start(&cmd)
+    });
     let res = match cli.command {
         Command::Check {
             analyze,
@@ -93,7 +100,6 @@ fn main() -> Result<()> {
             index,
             export_full_config,
             prompt_id,
-            doc_id,
         } => match export_full_config {
             // `--export-full-config PATH`: dump the effective config and exit; no analysis.
             Some(path) => export::export_full_config(&analyze, &path),
@@ -121,22 +127,24 @@ fn main() -> Result<()> {
                     top,
                     index,
                     prompt_id,
-                    doc_id,
                 },
             ),
         },
-        // `ai`: print the embedded AI playbook to stdout. No analysis — only plugin
-        // resolution, which picks the full playbook (resolved) vs. a brief intro +
-        // plugin-setup guidance (unresolved). See `ai.rs`.
-        Command::Ai {
-            input,
+        // `docs <subject>`: print a reference doc to stdout. No analysis — it builds
+        // the principle/metric/category specs from config + plugin and serves the
+        // playbook, an index, a category, a metric card, or a principle doc. See
+        // `docs.rs`.
+        Command::Docs {
+            subject,
             plugin,
             config,
-        } => ai::run(&input, plugin.as_deref(), &config),
+        } => docs::run(subject.as_deref(), plugin.as_deref(), &config),
     };
     match &res {
         Ok(_) => {
-            t.finish();
+            if let Some(t) = timer {
+                t.finish();
+            }
         }
         Err(e) => logger::error(&format!("error: {e:#}")),
     }

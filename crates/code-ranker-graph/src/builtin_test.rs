@@ -12,7 +12,7 @@ fn prompt_template_parses_from_markdown() {
         "I want to apply this to some modules in my system."
     );
     assert!(
-        t.doc_note.contains("`code-ranker report --doc {id}`"),
+        t.doc_note.contains("`code-ranker docs {id}`"),
         "doc_note points at the offline --doc command: {:?}",
         t.doc_note
     );

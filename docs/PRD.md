@@ -380,7 +380,8 @@ workspaces. The plugin MUST:
   The recommendation catalog is the shared 13 design principles (from
   `defaults.toml`); each coupling/complexity **metric** carries its own
   fix-prompt doc under `languages/base/` (`HK`, `Fan-in`, `Fan-out`, `Cognitive`,
-  `Cyclomatic`; the cycle metric reuses `ADP`), referenced from the metric's `remediation`
+  `Cyclomatic`; the cycle metric reuses `ADP`), resolved from the metric key
+  (`hk`→`HK`, `fan_in`→`Fan-in`) — separator/case-insensitive
 
 **Rationale**: Rust is the primary use-case for the initial release.
 The `rust` module of the `code-ranker-plugins` crate (cargo metadata + `syn`,

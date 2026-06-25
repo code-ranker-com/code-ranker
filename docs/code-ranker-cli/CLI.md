@@ -24,14 +24,14 @@ exact command per entry (triage, CI gates, focused checks, baselines, AI prompts
 |---|---|
 | [`check`](#check) | A **verdict**: evaluates thresholds, cycle rules, and (with `--baseline`) regressions, prints diagnostics, and **exits non-zero** on violation. Writes no files. |
 | [`report`](#report) | **Artifacts**: an HTML viewer and/or a JSON snapshot. With `--baseline`, the HTML becomes a diff with a verdict. Can also emit a console **scorecard** triage and an AI **prompt** (see [Recommendations](#recommendations-scorecard--prompt)). Always exits `0`. |
-| [`ai`](#ai) | The offline **AI-agent playbook** to stdout. Never analyzes, always exits `0`. With a resolvable language plugin it prints the full playbook + principle/metric catalog; with none (no marker, or ambiguous markers) it prints a brief intro and how to select one. |
+| [`docs`](#docs) | A reference doc for a `<subject>` to stdout. Never analyzes, always exits `0` (an unknown subject exits non-zero). Resolves a language plugin (explicit `--plugin` > the `plugin` config key > none) to choose what to print; serves the AI playbook (`docs ai`), metric/principle indexes, category and metric spec cards, and full principle docs. |
 
 There are two analysis commands, split by *what they emit*: `check` produces an exit
 code (a CI gate), `report` produces files (a snapshot and a viewer). Both take the same
-input and share the same vocabulary below. A third command, `ai`, reads no project and
-just prints the embedded agent playbook. (The principle/metric doc corpus is not
-published — it is embedded in the binary and printed on demand with `report --doc <ID>`
-or, for the overview, `code-ranker ai`; see [templates.md](../templates.md).)
+input and share the same vocabulary below. A third command, `docs`, reads no project and
+just prints a reference doc for the `<subject>` you name. (The principle/metric doc corpus
+is not published — it is embedded in the binary and printed on demand with `docs <ID>`;
+see [templates.md](../templates.md).)
 
 ## Global options
 
@@ -557,7 +557,7 @@ scopes the ranked modules to a subtree.
 Defaults to the file `.code-ranker/{ts}-{git-hash-3}-{principle}.md` (use
 `--output.prompt.path=stdout` to pipe it). It is **auto-targeted**: it emits the Markdown
 fix-prompt for the **single worst module** — its principle's intent and summary, how to
-read the full principle (the offline `code-ranker report --doc <id>` command, no network),
+read the full principle (the offline `code-ranker docs <id>` command, no network),
 a task checklist, the offending module annotated with its metric value, and the relevant
 **flow** connection lists (`uses` — structural `contains`/`reexports` are excluded). The
 `{principle}` in the default filename is the auto-selected principle id.
@@ -573,53 +573,59 @@ code-ranker report . --output.prompt.path=stdout --top 1
 code-ranker report . --output.prompt --top 1
 ```
 
-### `--prompt <ID>` / `--doc <ID>` — one principle/metric by name
+### `--prompt <ID>` — one principle/metric fix-prompt by name
 
 `--prompt <ID>` is the **named** counterpart of `--output.prompt`: it prints that
 principle/metric's fix-prompt to stdout and exits (shape the module list with `--top N` /
-`--focus-path`). `--doc <ID>` prints the **raw principle/metric doc** Markdown (the
-resolved `languages/<lang>/<ID>.md`, with any `[templates.languages.…]` override) — offline,
-no network. Both accept a principle id (`SRP`, `ADP`) or a metric key (`hk`, `cyclomatic`),
-case-insensitive; they are mutually exclusive and write no artifacts.
-
-`--doc` resolves an id, in order: a principle id, a metric key (the canonical doc
-filename comes from the metric's `remediation`, e.g. key `fan_in` → `Fan-in.md`),
-then **any base doc by its filename stem** — so `--doc Fan-in`, `--doc metrics`
-(the LOC-counting reference) and `--doc AI` all work. `--doc cycle` resolves to the
-ADP doc (cycle is ADP's metric lens). **`--doc AI`** prints an AI-agent overview: a
-short playbook plus a catalog of every principle/metric with its one-paragraph
-TL;DR (auto-assembled from each base doc — see `templates.rs::tldr_index`).
+`--focus-path`). It accepts a principle id (`SRP`, `ADP`) or a metric key (`hk`,
+`cyclomatic`), case-insensitive, and writes no artifacts.
 
 ```sh
 code-ranker report . --prompt HK --top 1   # HK fix-prompt for the worst module
-code-ranker report . --doc HK              # the full HK principle text, to stdout
-code-ranker report . --doc AI              # AI playbook + the principle/metric catalog
 ```
 
-For the AI overview, prefer the [`ai`](#ai) command — instead of erroring on an
-ambiguous project it prints the playbook, adapting to whether a plugin resolves.
+To print a **reference doc** itself (a principle's text, a metric's spec card, the AI
+playbook, …) rather than a fix-prompt, use the analysis-free [`docs`](#docs) command —
+e.g. `code-ranker docs HK` or `code-ranker docs ai`.
 
-## `ai`
+## `docs`
 
-`code-ranker ai` prints the offline AI-agent playbook (from the embedded
-`base/AI.md`) to stdout, then exits `0`. It **never analyzes** — it only resolves
-which language plugin applies (explicit `--plugin` > the `plugin` config key >
-auto-detect from `[input]`'s markers, default `.`) to choose what to print:
+```
+code-ranker docs <subject> [--plugin <name|auto>] [--config <PATH|KEY=VALUE>]
+```
 
-- **plugin resolved** → the full playbook **plus** the principle/metric catalog (the
-  TL;DR index expanded) — the project-free equivalent of `report --doc AI`. It does
-  not mention plugin setup; the language is already known.
-- **no plugin resolvable** (no project marker, or markers for more than one language)
-  → a brief product intro **plus** a *Select a language* section explaining how to
-  choose one (`--plugin <name>`, or the `plugin` key in `code-ranker.toml`) and
-  listing the built-ins. The catalog is **withheld** until a language is chosen.
+`code-ranker docs <subject>` prints a reference doc to stdout, then exits `0`. It **never
+analyzes** and takes **no `[input]` positional** — config is auto-discovered from the
+current directory, and `--plugin` (explicit `--plugin` > the `plugin` config key > none)
+resolves which language's docs to serve. An unknown subject exits non-zero.
 
-So `ai` always succeeds — even where `report` / `check` would stop with *"ambiguous
-project … pass --plugin to choose"* — and tells the user how to proceed.
+`<subject>` selects what to print:
+
+| `<subject>` | What it prints |
+|---|---|
+| `ai` | The offline **AI-agent playbook** (from the embedded `base/AI.md`). With a plugin resolved → the full playbook **plus** the principle/metric catalog; with none → a brief intro and how to pick a plugin. |
+| `metrics` | An **index of every metric**, grouped by category. |
+| `principles` | An **index of every design principle**. |
+| a metric **category** (`loc`, `complexity`, `halstead`, `maintainability`, `coupling`) | The category's label/description **plus** its member metrics. |
+| a **metric** key (`sloc`, `hk`, …) | The metric's **spec card** (label / name / description / category / formula). For metrics with a full prose doc (`hk`, `cyclomatic`, `cognitive`, `fan_in`, `fan_out`) the prose doc is appended after the card. |
+| a **principle** id (`SRP`, `ADP`, … including project-defined `[principles.<ID>]`) | The principle's **full doc** (or a synthetic card for a doc-less custom principle). |
+| *(none, or an unknown subject)* | A **catalog of every subject**. No subject exits `0`; an unknown subject exits non-zero. |
+
+`docs ai` always succeeds — even where `report` / `check` would stop with *"ambiguous
+project … pass --plugin to choose"*: with a plugin resolved it prints the full playbook +
+catalog (the full project-free playbook); with none it prints a
+brief product intro **plus** a *Select a language* section (how to choose one with
+`--plugin <name>` or the `plugin` key in `code-ranker.toml`, and the built-ins), withholding
+the catalog until a language is chosen.
 
 ```sh
-code-ranker ai                  # auto-detect: full playbook, or how to pick a plugin
-code-ranker ai --plugin rust    # force a language → the full playbook + catalog
+code-ranker docs                # the catalog of every subject
+code-ranker docs ai             # auto-detect: full playbook, or how to pick a plugin
+code-ranker docs ai --plugin rust   # force a language → the full playbook + catalog
+code-ranker docs HK             # the full HK principle text, to stdout
+code-ranker docs metrics        # the metric index, grouped by category
+code-ranker docs coupling       # the coupling category + its member metrics
+code-ranker docs cycle          # the ADP doc (cycle is ADP's metric lens)
 ```
 
 ## `--baseline` (comparison)

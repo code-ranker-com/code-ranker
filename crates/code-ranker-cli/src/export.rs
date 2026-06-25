@@ -69,7 +69,7 @@ pub(crate) fn export_full_config(args: &AnalyzeArgs, out: &Path) -> Result<()> {
 
     std::fs::write(out, format!("{header}{body}"))
         .with_context(|| format!("writing {}", out.display()))?;
-    logger::info(&format!(
+    logger::summary(&format!(
         "✓ wrote full config for plugin `{plugin_name}` to {}",
         out.display()
     ));

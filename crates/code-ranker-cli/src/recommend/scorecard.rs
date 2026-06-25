@@ -30,7 +30,7 @@ struct Row {
 
 /// One row of the worst-modules list.
 struct ModRow {
-    warning_icon: bool,
+    is_warning: bool,
     path: String,
     head: String,
     rest: Vec<String>,
@@ -255,10 +255,10 @@ fn render_principle_table(out: &mut String, rows: &[Row], want_warning: bool, wa
     };
     let mut header = format!("{:<id_w$}  {:<name_w$}", "PRESET", "PRINCIPLE");
     if want_warning {
-        header.push_str("  ⚠");
+        header.push_str("  WARN");
     }
     if want_info {
-        header.push_str("  ⓘ");
+        header.push_str("  INFO");
     }
     header.push_str("  TOP MODULE");
     out.push_str(&header);
@@ -266,10 +266,10 @@ fn render_principle_table(out: &mut String, rows: &[Row], want_warning: bool, wa
     for r in rows {
         let mut line = format!("{:<id_w$}  {:<name_w$}", r.id, clip(&r.name, name_w));
         if want_warning {
-            line.push_str(&format!("  {:>1}", r.warn));
+            line.push_str(&format!("  {:>4}", r.warn));
         }
         if want_info {
-            line.push_str(&format!("  {:>1}", r.info));
+            line.push_str(&format!("  {:>4}", r.info));
         }
         line.push_str(&format!("  {}", r.top));
         out.push_str(&line);
@@ -316,7 +316,7 @@ fn cycle_mod_rows(out: &mut String, level: &LevelGraph, top: Option<usize>) -> V
     for (g, members) in &groups {
         for n in members {
             mod_rows.push(ModRow {
-                warning_icon: true,
+                is_warning: true,
                 path: clean_path(&n.id),
                 head: g.kind.clone(),
                 rest: Vec::new(),
@@ -350,7 +350,7 @@ fn metric_mod_rows(
                 _ => attr_short(level, m).to_string(),
             };
             ModRow {
-                warning_icon: true,
+                is_warning: true,
                 path: clean_path(&n.id),
                 head,
                 rest: Vec::new(),
@@ -410,7 +410,7 @@ fn breach_row(level: &LevelGraph, n: &Node, breaches: &[Breach]) -> ModRow {
         .map(|b| breach_label(level, &b.metric, None))
         .collect();
     ModRow {
-        warning_icon: n_warn > 0,
+        is_warning: n_warn > 0,
         path: clean_path(&n.id),
         head,
         rest,
@@ -436,8 +436,8 @@ fn breach_label(level: &LevelGraph, metric: &str, value: Option<f64>) -> String 
 fn render_mod_rows(out: &mut String, mod_rows: &[ModRow]) {
     let path_w = mod_rows.iter().map(|r| r.path.len()).max().unwrap_or(0);
     for (i, r) in mod_rows.iter().enumerate() {
-        let icon = if r.warning_icon { "⚠" } else { "ⓘ" };
-        let mut line = format!("{:>2} {} {:<path_w$}  {}", i + 1, icon, r.path, r.head);
+        let tier = if r.is_warning { "warn" } else { "info" };
+        let mut line = format!("{:>2} {:<4} {:<path_w$}  {}", i + 1, tier, r.path, r.head);
         if !r.rest.is_empty() {
             line.push_str(&format!("  +{}", r.rest.join(", ")));
         }

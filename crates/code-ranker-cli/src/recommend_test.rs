@@ -528,8 +528,8 @@ fn resolve_focus_picks_metric_or_principle() {
 }
 
 /// Info-tier breaches: a node over the info line (but under warning) is shown
-/// with the ⓘ icon, and a worse metric pushes a co-occurring cycle into the
-/// `+rest` list (the non-cycle-worst path).
+/// with the `info` tier label, and a worse metric pushes a co-occurring cycle
+/// into the `+rest` list (the non-cycle-worst path).
 #[test]
 fn scorecard_info_tier_and_cycle_in_rest() {
     let level = level_with(vec![
@@ -555,8 +555,8 @@ fn scorecard_info_tier_and_cycle_in_rest() {
     )
     .unwrap();
     assert!(
-        sc.contains("info.rs") && sc.contains("ⓘ"),
-        "info icon: {sc}"
+        sc.contains("info.rs") && sc.contains("info "),
+        "info-tier label on the info-only module: {sc}"
     );
     assert!(
         sc.contains("hot.rs") && sc.contains("+cycle"),

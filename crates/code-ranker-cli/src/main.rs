@@ -24,19 +24,28 @@ mod templates;
 
 use anyhow::Result;
 use clap::Parser;
+use code_ranker_plugin_api::log;
 
-use cli::{Cli, Command};
+use cli::{Cli, Command, OutputMode};
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    // Apply the verbosity before emitting anything: every later line (here, in the
+    // stages, and in the plugins) reads this one switch. `--output.mode` is global,
+    // so it is honoured wherever it appears on the command line.
+    log::set_level(match cli.output_mode {
+        OutputMode::Quiet => log::QUIET,
+        OutputMode::Summary => log::SUMMARY,
+        OutputMode::Verbose => log::VERBOSE,
+    });
     let cmd = format!(
         "code-ranker {}",
         std::env::args().skip(1).collect::<Vec<_>>().join(" ")
     );
-    // Startup line: the exact command this run was invoked with. The config it
-    // resolved is logged next, by `config::load`. The matching `✓ … — <time>`
-    // finish line is emitted by this timer.
-    logger::info(&format!("▶ {cmd}"));
+    // Startup line (verbose only): the exact command this run was invoked with. The
+    // config it resolved is logged next, by `config::load`. The matching summary-tier
+    // `✓ … — <time>` finish line is emitted by this timer.
+    logger::verbose(&format!("▶ {cmd}"));
     let t = logger::Timer::start(&cmd);
     let res = match cli.command {
         Command::Check {
@@ -129,7 +138,7 @@ fn main() -> Result<()> {
         Ok(_) => {
             t.finish();
         }
-        Err(e) => logger::info(&format!("error: {e:#}")),
+        Err(e) => logger::error(&format!("error: {e:#}")),
     }
     res
 }

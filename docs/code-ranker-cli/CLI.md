@@ -35,21 +35,25 @@ or, for the overview, `code-ranker ai`; see [templates.md](../templates.md).)
 
 ## Global options
 
-`code-ranker` takes no global flags of its own beyond the clap built-ins:
+`code-ranker` takes these global flags (accepted before or after the subcommand);
+all other flags are per-command and must follow the command name:
 
 | Flag | Meaning |
 |---|---|
 | `-h, --help` | Print help — top-level, or per-command with `code-ranker <cmd> --help`. |
 | `-V, --version` | Print the version. |
+| `--output.mode <quiet\|summary\|verbose>` | Verbosity of the **stderr** diagnostic stream (default `summary`). Machine output and artifacts on stdout/files are unaffected. See below. |
 
 Progress and timing lines are written to **stderr**, each stamped `[HH:MM:SS.mmm]`;
 diagnostics and machine output go to **stdout** or files, so the two streams never mix.
-A run opens with a `▶ <command>` startup line and the resolved `config:` path, logs
-every external tool it shells out to with its duration to millisecond precision
-(`↳ cargo metadata --offline — 28.500s`, `↳ git status --porcelain — 0.017s`,
-`rustc …`), and closes with a `✓ <command> — <time>` line. The sub-command lines make
-the cost of a cold cargo cache visible at a glance. All other flags are per-command and
-must follow the command name.
+`--output.mode` controls how much of that stderr stream is emitted — it never changes
+what lands on stdout:
+
+| `--output.mode` | What stderr shows |
+|---|---|
+| `quiet` | Errors only (`error: …`); stderr is otherwise silent. Handy for scripts/CI that want a clean stream. |
+| `summary` *(default)* | Errors, config-sanity warnings (`⚠ …`), written-artifact paths (`html-report=…`), and the closing `✓ <command> — <time>` line — the command name and total time, nothing more. |
+| `verbose` | Everything: the `▶ <command>` startup line, the resolved `config:` path, and every external tool it shells out to with its duration to millisecond precision (`↳ cargo metadata --offline — 28.500s`, `↳ git status --porcelain — 0.017s`, `↳ rustc …`). The `↳` lines make the cost of a cold cargo cache visible at a glance. |
 
 ## Input: code or snapshot
 
@@ -531,15 +535,15 @@ code-ranker report . --output.scorecard --focus sloc   # narrow to one metric
 ```text
 scorecard  (rust, 142 files)
 
-PRESET  PRINCIPLE              ⚠  ⓘ   TOP MODULE
-ADP     Acyclic Dependencies   2  2   a.rs ↔ b.rs
-SRP     Single Responsibility  5 18   cli/main.rs (sloc 1832)
-CPX     Reduce Complexity      3 11   cli/main.rs (cog 67)
+PRESET  PRINCIPLE              WARN  INFO  TOP MODULE
+ADP     Acyclic Dependencies      2     2  a.rs ↔ b.rs
+SRP     Single Responsibility     5    18  cli/main.rs (sloc 1832)
+CPX     Reduce Complexity         3    11  cli/main.rs (cog 67)
 
 WORST MODULES
- 1 ⚠ cli/main.rs     hk 4.2M   +sloc, fan_out, cycle
- 2 ⚠ snapshot.rs     sloc 1.8K +hk
- 3 ⓘ plugin/rust.rs  fan_out 14
+ 1 warn cli/main.rs     hk 4.2M   +sloc, fan_out, cycle
+ 2 warn snapshot.rs     sloc 1.8K +hk
+ 3 info plugin/rust.rs  fan_out 14
 
 → code-ranker report . --output.prompt.path=… --top 1
 ```

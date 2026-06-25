@@ -397,7 +397,7 @@ fn write_artifact(dest: &str, content: &str, kind: &str) -> Result<()> {
     }
     std::fs::write(path, content)
         .with_context(|| format!("writing {kind} to {}", path.display()))?;
-    logger::info(&format!("{kind}-report={}", path.display()));
+    logger::summary(&format!("{kind}-report={}", path.display()));
     Ok(())
 }
 

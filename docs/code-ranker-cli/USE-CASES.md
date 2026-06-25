@@ -9,9 +9,9 @@ Two commands underlie everything:
   `rules.cycles`), prints diagnostics, and **exits non-zero** on a violation. Writes no
   files. Thresholds come from `code-ranker.toml` (or `--threshold` overrides).
 - **`report`** — produces **artifacts** (JSON snapshot, HTML viewer) and the **advisory**
-  outputs (`scorecard` triage, `prompt` for an AI). The advisory tiers (⚠ warning / ⓘ info)
-  are driven by the **same `[rules.thresholds.file]` limits the gate enforces** — ⚠ is the
-  gate line, ⓘ an optional softer line below it — so the report shows what fails (or is
+  outputs (`scorecard` triage, `prompt` for an AI). The advisory tiers (`warn` / `info`)
+  are driven by the **same `[rules.thresholds.file]` limits the gate enforces** — `warn` is the
+  gate line, `info` an optional softer line below it — so the report shows what fails (or is
   about to fail) `check`. Always exits `0`.
 
 `[input]` is polymorphic: a directory is analyzed; a `.json`/`.html` snapshot is read back

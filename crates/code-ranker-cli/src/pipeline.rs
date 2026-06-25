@@ -251,7 +251,7 @@ pub(crate) fn analyze_directory(
                 .any(|n| n.kind != "external" && n.attrs.contains_key(key)),
         };
         if !present {
-            logger::info(&format!(
+            logger::summary(&format!(
                 "⚠ metric `{key}` produced no value on any node — check its formula \
                  (a misspelled input key?) or whether it is always at its no-signal value",
             ));
@@ -401,7 +401,7 @@ fn gate_thresholds(
             let info = match declared_info {
                 Some(i) if i < warning => i,
                 Some(i) => {
-                    logger::info(&format!(
+                    logger::summary(&format!(
                         "⚠ `[metrics.{key}]` info ({i}) ≥ gate threshold ({warning}); \
                          dropping the info tier for `{key}` (the gate wins)",
                     ));

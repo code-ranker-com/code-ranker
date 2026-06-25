@@ -1,8 +1,19 @@
 use code_ranker_plugin_api::log;
 use std::time::Instant;
 
-pub fn info(msg: &str) {
+/// Always shown, even at `--output.mode quiet` (errors).
+pub fn error(msg: &str) {
     log::line(msg);
+}
+
+/// Shown at `summary`+ : warnings and written-artifact confirmations.
+pub fn summary(msg: &str) {
+    log::summary(msg);
+}
+
+/// Shown only at `--output.mode verbose` : the `▶` command echo and `config:` line.
+pub fn verbose(msg: &str) {
+    log::verbose(msg);
 }
 
 pub struct Timer {
@@ -20,7 +31,7 @@ impl Timer {
 
     pub fn finish_with(self, extra: &str) -> u64 {
         let elapsed = self.start.elapsed();
-        log::line(&format!(
+        log::summary(&format!(
             "✓ {} — {}{}",
             self.label,
             log::secs(elapsed),

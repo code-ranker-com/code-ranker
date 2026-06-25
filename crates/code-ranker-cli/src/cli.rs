@@ -11,8 +11,36 @@ use std::path::PathBuf;
     about = "Pluggable multi-language structural analysis platform"
 )]
 pub(crate) struct Cli {
+    /// Verbosity of the stderr diagnostic stream (machine output/artifacts always
+    /// go to stdout/files, untouched by this). `quiet` = errors only; `summary`
+    /// (default) = errors, warnings, written-artifact paths, and the closing
+    /// `✓ … — <time>` line; `verbose` = also the `▶`/`config:` startup lines and
+    /// every external command's duration (`↳ cargo metadata — 0.399s`). Global:
+    /// accepted before or after the subcommand.
+    #[arg(
+        long = "output.mode",
+        value_enum,
+        default_value_t = OutputMode::Summary,
+        global = true,
+        value_name = "quiet|summary|verbose"
+    )]
+    pub(crate) output_mode: OutputMode,
+
     #[command(subcommand)]
     pub(crate) command: Command,
+}
+
+/// Verbosity of the stderr diagnostic stream. Mapped to `log::{QUIET,SUMMARY,VERBOSE}`
+/// in `main` and applied process-wide before the first line is emitted.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum, Default)]
+pub(crate) enum OutputMode {
+    /// Errors only — stderr is otherwise silent.
+    Quiet,
+    /// Errors, warnings, written-artifact paths, and the closing `✓` line.
+    #[default]
+    Summary,
+    /// Everything, including the `▶`/`config:` startup lines and per-tool `↳` timings.
+    Verbose,
 }
 
 /// Diagnostics format for `check`.

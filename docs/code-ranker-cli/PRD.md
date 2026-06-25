@@ -369,7 +369,11 @@ only on new violations) whose verdict is machine-readable with
 `--output-format json`.
 
 Global options accepted by every command: `--config <PATH | KEY=VALUE>`
-(repeatable; inline wins), `-h/--help`, `-V/--version`.
+(repeatable; inline wins), `--output.mode <quiet|summary|verbose>` (verbosity of
+the **stderr** diagnostic stream; default `summary` — errors, warnings,
+written-artifact paths and the closing `✓ … — <time>` line; `quiet` = errors only;
+`verbose` = also the `▶`/`config:` startup lines and every external command's
+`↳` timing — stdout/artifacts are unaffected), `-h/--help`, `-V/--version`.
 
 **Exit codes**: 0 = `check` passed (or `--exit-zero`), `report`
 completed; non-zero = generic failure, or `check` found a violation;

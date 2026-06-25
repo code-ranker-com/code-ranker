@@ -62,8 +62,8 @@ pub fn load(
     // files, auto-discovery of `code-ranker.toml` is skipped.
     let (layers, source_file) = discover_user_tables(workspace, &explicit)?;
     match &source_file {
-        Some(p) => log::line(&format!("config: {p}")),
-        None => log::line("config: built-in defaults (no config file found)"),
+        Some(p) => log::verbose(&format!("config: {p}")),
+        None => log::verbose("config: built-in defaults (no config file found)"),
     }
     let merged = layers.into_iter().fold(builtin_table(), deep_merge);
     let mut config: Config = merged

@@ -817,7 +817,14 @@ See [§3.7 Plugin System](#37-plugin-system).
   shell-outs (`cargo metadata`, `rustc`) emit one consistent `[HH:MM:SS.mmm]`
   format. `log::timed(label, f)` wraps every external invocation and prints its
   duration to millisecond precision; `code-ranker-cli`'s `logger` delegates its
-  formatting here.
+  formatting here. How loud the stream is is a single process-wide verbosity level
+  (`log::set_level`, one of `QUIET`/`SUMMARY`/`VERBOSE`) set once in `main` from the
+  global `--output.mode` flag — it lives in the foundation crate because the gated
+  lines come from both the CLI stages and the plugins, which share one switch.
+  Emitters tier accordingly: `line` always prints (errors), `summary` prints at
+  `SUMMARY`+ (the closing `✓` line, warnings, written-artifact paths), and
+  `verbose`/`subcmd` print only at `VERBOSE` (the `▶`/`config:` startup lines and
+  every `↳` shell-out timing).
 - The Rust plugin's module→file collapse lives in `code-ranker-plugins/src/rust/mod.rs`.
 - `code-ranker-cli` orchestrates: it dispatches the language plugins (through the
   trait) and hands the snapshot to `code-ranker-viewer` for rendering.

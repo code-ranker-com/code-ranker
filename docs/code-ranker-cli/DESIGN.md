@@ -50,7 +50,10 @@ playbook command), and the `config/`
 module (`model` / `load` / `ignore` / `rules` / `violations`, re-exported through
 its `mod.rs` facade). `pipeline.rs` concentrates the high fan-out orchestration
 behind a single caller (`analyze_input`), keeping every file's Henry-Kafura HK
-low.
+low. Before dispatching, `main()` applies the global `--output.mode`
+(`quiet`/`summary`/`verbose`) to the shared stderr log's process-wide verbosity
+level (`code-ranker-plugin-api::log`), so every later line — from the stages and
+the plugins alike — honours it; stdout artifacts are never affected.
 
 The shared analysis core (`analyze_input`, used by both `check` and `report`)
 either reads an embedded snapshot (`.json`/`.html` input — `analyze_from_snapshot`,

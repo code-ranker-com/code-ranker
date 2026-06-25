@@ -1,0 +1,73 @@
+# C++ language config — inherits `../cfamily/config.toml` (which itself inherits
+# `../defaults.toml`); see `../config.rs`'s `load_chain`. The shared C-family
+# base supplies the `#include` graph vocab and the node-kind entries identical
+# for C and C++; this file carries only what is C++-specific.
+
+# No own principle corpus yet: with no `doc_overrides`, every `doc_url` inherits
+# the shared `base/` corpus. `doc_lang` names the folder a future own corpus would use.
+doc_lang = "cpp"
+
+# C++ sources/headers. `.h` is left to the C plugin to avoid a clash.
+# C/C++ have no universal manifest, so detection is by source-file presence
+# (see `cfamily::detect`) — no `detect_markers`. `skip_dirs` / `test_dirs` are
+# shared and inherited from `../cfamily/config.toml`.
+extensions = ["cpp", "cc", "cxx", "hpp", "hh", "hxx", "ipp"]
+test_suffixes = ["_test.cpp", "_test.cc", "_test.cxx"]
+
+# `default` (a plain function) is inherited from cfamily; C++ adds `method`.
+[units]
+method = "method"
+
+[roles]
+# Functions, methods (both `function_definition`) and lambdas are spaces.
+space_kinds.named = ["function_definition", "lambda_expression"]
+# Cyclomatic decision points: if / loops (incl. range-for) / case arms / ?: /
+# catch clauses. (The short-circuit `&&`/`||` `branch_kinds.anon` are inherited.)
+branch_kinds.named = [
+    "if_statement", "for_statement", "for_range_loop", "while_statement",
+    "do_statement", "case_statement", "conditional_expression", "catch_clause",
+]
+exit_kinds.named = ["return_statement", "co_return_statement"]
+
+# ── Halstead operators / operands ─────────────────────────────────────────────
+[halstead]
+operators.anon = [
+    "(", "{", "[", ",", ".", ";", ":", "::", "->", "+", "-", "*", "/", "%", "++",
+    "--", "+=", "-=", "*=", "/=", "%=", "=", "==", "!=", "<", ">", "<=", ">=",
+    "&&", "||", "!", "&", "|", "^", "<<", ">>", "&=", "|=", "^=", "<<=", ">>=",
+    "?", "~", "...", "break", "case", "catch", "class", "const", "constexpr",
+    "continue", "default", "delete", "do", "else", "enum", "explicit", "extern",
+    "for", "friend", "goto", "if", "inline", "namespace", "new", "operator",
+    "override", "private", "protected", "public", "return", "sizeof", "static",
+    "struct", "switch", "template", "throw", "try", "typedef", "typename",
+    "union", "using", "virtual", "volatile", "while",
+    "#define", "#include", "#if", "#ifdef", "#ifndef", "#else", "#endif", "#elif",
+]
+operands.named = [
+    "identifier", "field_identifier", "qualified_identifier", "type_identifier",
+    "number_literal", "char_literal", "string_literal", "raw_string_literal",
+    "system_lib_string", "true", "false", "null", "this", "primitive_type",
+]
+operands.anon = ["nullptr"]
+
+# ── LOC breakdown (comment_kinds inherited from cfamily) ───────────────────────
+[loc]
+noop_kinds.named = [
+    "translation_unit", "compound_statement", "string_literal", "raw_string_literal",
+    "char_literal", "system_lib_string", "string_content",
+]
+statement_kinds.named = [
+    "declaration", "field_declaration", "expression_statement", "if_statement",
+    "for_statement", "for_range_loop", "while_statement", "do_statement",
+    "switch_statement", "case_statement", "return_statement", "co_return_statement",
+    "break_statement", "continue_statement", "goto_statement", "labeled_statement",
+    "try_statement", "throw_statement", "compound_statement", "type_definition",
+    "using_declaration", "namespace_definition", "template_declaration",
+    "preproc_include", "preproc_def", "preproc_function_def", "preproc_call",
+]
+
+[specs.eta1]
+description = "Distinct operators (η₁): the count of unique operator token kinds. C++ counts the C operators plus `::`, `new` / `delete`, `throw` / `try` / `catch`, and the keywords `class namespace template typename using virtual override explicit friend operator public private protected constexpr` (alongside the C control / type keywords and the preprocessor directives)."
+
+[specs.eta2]
+description = "Distinct operands (η₂): the count of unique operand texts. C++ counts identifiers (incl. field / qualified / type identifiers), literals (number, char, string, raw-string), primitive type names, and `true` / `false` / `nullptr` / `this`."

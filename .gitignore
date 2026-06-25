@@ -1,0 +1,20 @@
+.claude/
+.code-split
+.code-ranker
+/target/
+lcov.info
+crates/code-ranker-cli/src/assets/data.js
+.DS_Store
+node_modules/
+package.json
+package-lock.json
+__pycache__/
+*.egg-info/
+dist/
+build/
+
+# BEGIN Constructor Studio
+# Generated Constructor Studio runtime and agent integration files.
+# Files matched here are owned by Constructor Studio and may be overwritten.
+.cf-studio/
+# END Constructor Studio

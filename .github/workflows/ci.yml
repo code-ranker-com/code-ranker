@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Least-privilege default for GITHUB_TOKEN. Every job here only reads the repo
+# (build / lint / test; coverage uploads via CODECOV_TOKEN, not the token), so a
+# read-only default is safe and satisfies CodeQL's workflow-permissions check.
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test & lint
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@cargo-machete
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Unused dependencies
+        # Mirrors `make machete`: fails the build on any unused crate dependency.
+        run: cargo machete
+      - name: Test
+        run: cargo test --workspace
+      - name: Warm cargo cache for offline dogfood (all targets)
+        # `code-ranker check` runs `cargo metadata --offline`, which resolves the
+        # graph for ALL targets — including platform-only transitive deps (e.g.
+        # android_system_properties) that the host-target build above never fetches.
+        # Populate them online once so the offline step below can read them.
+        run: cargo metadata --format-version=1 > /dev/null
+      - name: code-ranker check (dogfood)
+        # Run our own gate on this repo: exits non-zero on a violation, and the
+        # github format emits ::error annotations inline on the PR. Kept here (not
+        # a separate job) so it reuses the warm build + cache from the steps above.
+        run: cargo run -q -p code-ranker -- check . --output-format github
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Generate coverage (lcov)
+        run: cargo llvm-cov --workspace --lcov --output-path lcov.info
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v6
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info
+          fail_ci_if_error: false
+
+  audit:
+    name: Security audit
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@cargo-audit
+      - name: cargo audit
+        run: cargo audit
+
+  docs:
+    name: Docs lint
+    runs-on: ubuntu-22.04
+    # Mirrors `make lint-md`: offline link check + markdownlint. No Rust
+    # toolchain, so it runs in parallel with the build jobs instead of waiting
+    # behind a compile.
+    steps:
+      - uses: actions/checkout@v6
+      - name: lychee (offline link check)
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: --offline --no-progress --exclude-path languages/_overlay docs/**/*.md contrib/**/*.md languages/**/*.md AGENTS.md CLAUDE.md
+          fail: true
+      - name: markdownlint
+        # Argless — globs and rules come from .markdownlint-cli2.jsonc.
+        run: npx --yes markdownlint-cli2

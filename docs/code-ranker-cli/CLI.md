@@ -594,10 +594,15 @@ e.g. `code-ranker docs HK` or `code-ranker docs ai`.
 code-ranker docs <subject> [--plugin <name|auto>] [--config <PATH|KEY=VALUE>]
 ```
 
-`code-ranker docs <subject>` prints a reference doc to stdout, then exits `0`. It **never
-analyzes** and takes **no `[input]` positional** — config is auto-discovered from the
-current directory, and `--plugin` (explicit `--plugin` > the `plugin` config key > none)
-resolves which language's docs to serve. An unknown subject exits non-zero.
+`code-ranker docs <subject>` prints a reference doc to stdout. It **never analyzes** and
+takes **no `[input]` positional** — config is auto-discovered from the current directory,
+and `--plugin` (explicit `--plugin` > the `plugin` config key > auto-detect from cwd
+markers) resolves which language's docs to serve. A reference doc is **strictly
+per-language**, so every subject but `ai` **requires a resolved plugin**: with none (no
+marker, or ambiguous markers) the command fails with the same diagnostic `check` /
+`report` give. An unknown subject exits non-zero. Subject matching is
+**separator/case-insensitive** — `fan_in`, `Fan-in`, and `FAN in` all resolve the same
+metric.
 
 `<subject>` selects what to print:
 
@@ -607,7 +612,7 @@ resolves which language's docs to serve. An unknown subject exits non-zero.
 | `metrics` | An **index of every metric**, grouped by category. |
 | `principles` | An **index of every design principle**. |
 | a metric **category** (`loc`, `complexity`, `halstead`, `maintainability`, `coupling`) | The category's label/description **plus** its member metrics. |
-| a **metric** key (`sloc`, `hk`, …) | The metric's **spec card** (label / name / description / category / formula). For metrics with a full prose doc (`hk`, `cyclomatic`, `cognitive`, `fan_in`, `fan_out`) the prose doc is appended after the card. |
+| a **metric** key (`sloc`, `hk`, the language's own `unsafe` / `items`, …) | The metric's **spec card** (label / name / description / category / formula). For metrics with a full prose doc (`hk`, `cyclomatic`, `cognitive`, `fan_in`, `fan_out`) the prose doc is appended after the card. |
 | a **principle** id (`SRP`, `ADP`, … including project-defined `[principles.<ID>]`) | The principle's **full doc** (or a synthetic card for a doc-less custom principle). |
 | *(none, or an unknown subject)* | A **catalog of every subject**. No subject exits `0`; an unknown subject exits non-zero. |
 
@@ -619,12 +624,13 @@ brief product intro **plus** a *Select a language* section (how to choose one wi
 the catalog until a language is chosen.
 
 ```sh
-code-ranker docs                # the catalog of every subject
+code-ranker docs                # the catalog of every subject (needs a resolved plugin)
 code-ranker docs ai             # auto-detect: full playbook, or how to pick a plugin
 code-ranker docs ai --plugin rust   # force a language → the full playbook + catalog
-code-ranker docs HK             # the full HK principle text, to stdout
+code-ranker docs hk             # the HK metric card + its full doc, to stdout
 code-ranker docs metrics        # the metric index, grouped by category
 code-ranker docs coupling       # the coupling category + its member metrics
+code-ranker docs unsafe         # a language-specific metric (rust)
 code-ranker docs cycle          # the ADP doc (cycle is ADP's metric lens)
 ```
 

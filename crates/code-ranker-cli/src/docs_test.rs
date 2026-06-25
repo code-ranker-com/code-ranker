@@ -86,7 +86,7 @@ fn category_subject_resolves_case_insensitively() {
 #[test]
 fn render_category_lists_label_description_and_members() {
     let out = render_category(&specs(), "loc");
-    assert!(out.contains("loc: Lines of Code"), "header: {out}");
+    assert!(out.contains("Lines of Code"), "header (human label): {out}");
     assert!(
         out.contains("Lines of code breakdown"),
         "description: {out}"
@@ -127,15 +127,18 @@ fn catalog_lists_every_subject_class() {
         out.contains("Unknown docs subject `zzz`"),
         "lead note: {out}"
     );
-    // Categories and their metrics (two-level).
-    assert!(out.contains("loc: Lines of Code"), "category group: {out}");
+    // Categories and their metrics (two-level): `<key> — <description>` header.
+    assert!(
+        out.contains("loc — Lines of code breakdown"),
+        "category group: {out}"
+    );
     assert!(
         out.contains("- sloc: Source lines"),
         "category member: {out}"
     );
     // Principles render as one more group.
     assert!(
-        out.contains("principles: Design principles"),
+        out.contains("principles — SOLID"),
         "principles group: {out}"
     );
     assert!(out.contains("- TSR: Test Ratio"), "principle member: {out}");
@@ -144,4 +147,28 @@ fn catalog_lists_every_subject_class() {
         out.contains("Call `docs`") && out.contains("docs ai"),
         "closing note: {out}"
     );
+}
+
+#[test]
+fn metrics_index_lists_categories_and_members() {
+    let out = render_metrics_index(&specs());
+    assert!(
+        out.contains("loc — Lines of code breakdown"),
+        "category: {out}"
+    );
+    assert!(out.contains("- sloc: Source lines"), "member: {out}");
+}
+
+#[test]
+fn principles_index_lists_each_principle() {
+    let out = render_principles_index(&specs());
+    assert!(out.contains("- TSR: Test Ratio"), "principle listed: {out}");
+}
+
+#[test]
+fn principles_block_reports_when_the_plugin_defines_none() {
+    let mut s = specs();
+    s.principles.clear();
+    let out = render_principles_index(&s);
+    assert!(out.contains("(none"), "empty principles note: {out}");
 }

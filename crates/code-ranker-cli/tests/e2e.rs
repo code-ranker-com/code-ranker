@@ -804,7 +804,7 @@ fn rust_sample_output_prompt_focus_metric_uses_metric_lens() {
     );
     assert!(ok, "focus-metric prompt failed: {stderr}");
     assert!(
-        stdout.starts_with("# HK — Henry–Kafura"),
+        stdout.starts_with("# HK — God-object risk"),
         "metric-lens prompt titled by the metric: {stdout}"
     );
 }
@@ -831,8 +831,8 @@ fn rust_sample_output_prompt_focus_principle_targets_it() {
 }
 
 /// `docs <ID>` prints a reference doc with no analysis. A metric (`hk`) renders its
-/// spec card and then appends the embedded corpus doc (reached via the metric's
-/// remediation reference); a principle (`SRP`) prints its full corpus doc.
+/// spec card and then appends the embedded corpus doc (resolved from the key); a
+/// principle (`SRP`) prints its full corpus doc.
 #[test]
 fn rust_sample_docs_subject_prints_embedded_markdown() {
     let run = |subject: &str| -> (bool, String) {
@@ -849,7 +849,7 @@ fn rust_sample_docs_subject_prints_embedded_markdown() {
     let (ok, stdout) = run("hk");
     assert!(ok, "docs hk failed");
     assert!(
-        stdout.starts_with("# hk: Henry–Kafura"),
+        stdout.starts_with("# hk: God-object risk"),
         "metric spec card first: {stdout}"
     );
     assert!(
@@ -866,15 +866,28 @@ fn rust_sample_docs_subject_prints_embedded_markdown() {
     // A metric category prints its label + member metrics.
     let (ok3, stdout3) = run("loc");
     assert!(
-        ok3 && stdout3.contains("loc: Lines of Code") && stdout3.contains("- sloc:"),
+        ok3 && stdout3.contains("Lines of Code") && stdout3.contains("- sloc:"),
         "category listing: {stdout3}"
     );
 
     // Subjects match separator/case-insensitively: `FAN out` resolves `fan_out`.
     let (ok_norm, stdout_norm) = run("FAN out");
     assert!(
-        ok_norm && stdout_norm.starts_with("# fan_out: Fan-out"),
+        ok_norm && stdout_norm.starts_with("# fan_out: Outgoing dependencies"),
         "normalized subject resolves the metric: {stdout_norm}"
+    );
+
+    // A language-specific metric (Rust's `unsafe`, from `[node_attributes.*]`) is
+    // surfaced too — both as its own subject and in the metrics index.
+    let (ok_u, stdout_u) = run("unsafe");
+    assert!(
+        ok_u && stdout_u.starts_with("# unsafe: Unsafe"),
+        "rust `unsafe` metric card: {stdout_u}"
+    );
+    let (ok_m, stdout_m) = run("metrics");
+    assert!(
+        ok_m && stdout_m.contains("- unsafe: Unsafe"),
+        "metrics index lists the rust `unsafe` metric: {stdout_m}"
     );
 
     // An unknown subject prints the catalog and exits non-zero.
@@ -882,10 +895,52 @@ fn rust_sample_docs_subject_prints_embedded_markdown() {
     assert!(!ok4, "unknown subject must exit non-zero");
     assert!(
         stdout4.contains("Unknown docs subject `nope`")
-            && stdout4.contains("principles: Design principles")
+            && stdout4.contains("principles — SOLID")
             && stdout4.contains("Call `docs`"),
         "catalog shown for an unknown subject: {stdout4}"
     );
+}
+
+/// `docs` is strictly per-language: with no plugin resolvable (an empty directory —
+/// no markers), every subject but `ai` fails with the same diagnostic `check` /
+/// `report` give, pointing the user at `--plugin`.
+#[test]
+fn docs_requires_a_resolved_plugin() {
+    let dir = std::env::temp_dir().join("cr-e2e-docs-no-plugin");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let res = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
+        .current_dir(&dir)
+        .args(["docs", "metrics"])
+        .output()
+        .expect("spawn docs metrics");
+    assert!(
+        !res.status.success(),
+        "docs with no resolvable plugin must exit non-zero"
+    );
+    let stderr = String::from_utf8_lossy(&res.stderr);
+    assert!(
+        stderr.contains("--plugin"),
+        "error points the user at --plugin: {stderr}"
+    );
+    // With no config present, the error also says to create a `code-ranker.toml`.
+    assert!(
+        stderr.contains("code-ranker.toml") && stderr.contains("plugin ="),
+        "error suggests pinning the plugin in config: {stderr}"
+    );
+    // The error is printed once (our stamped `error:` line) — the runtime does not
+    // also emit its own `Error:` line.
+    assert!(
+        !stderr.contains("Error:"),
+        "error is not double-printed: {stderr}"
+    );
+    // `docs ai` still works there — it prints the intro on how to pick a plugin.
+    let ai = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
+        .current_dir(&dir)
+        .args(["docs", "ai"])
+        .output()
+        .expect("spawn docs ai");
+    assert!(ai.status.success(), "docs ai succeeds with no plugin");
 }
 
 /// `--focus <metric>` frames the scorecard by that metric. `--focus cycle`

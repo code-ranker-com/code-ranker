@@ -45,23 +45,23 @@ omit_at = 0.0
 # ── categories ────────────────────────────────────────────────────────────────
 [categories.complexity]
 label = "Complexity"
-description = "Code complexity metrics"
+description = "per-function branching, nesting & size"
 
 [categories.halstead]
 label = "Halstead"
-description = "Halstead software metrics"
+description = "operator/operand vocabulary & derived effort"
 
 [categories.loc]
 label = "Lines of Code"
-description = "Lines of code breakdown"
+description = "physical line counts"
 
 [categories.maintainability]
 label = "Maintainability"
-description = "Maintainability index"
+description = "composite score"
 
 [categories.coupling]
 label = "Coupling"
-description = "Internal coupling (Henry-Kafura)"
+description = "how tightly modules depend on each other"
 
 # ── ast (tier-1, measured directly from the AST) ──────────────────────────────
 # Halstead base counts — emitted so the derived formulas (length, vocabulary,
@@ -104,7 +104,7 @@ category = "halstead"
 [ast.spaces]
 value_type = "int"
 label = "Spaces"
-name = "Unit count"
+name = "Code units"
 description = "Unit count: the source file (1) plus each function / impl / trait / closure space. Feeds `cyclomatic`."
 direction = "lower_better"
 category = "complexity"
@@ -157,6 +157,7 @@ category = "complexity"
 [ast.closures]
 value_type = "int"
 label = "Closures"
+name = "Closures defined"
 description = "Number of closures defined in the unit."
 direction = "lower_better"
 category = "complexity"
@@ -203,7 +204,7 @@ category = "loc"
 [fields.bugs]
 value_type = "float"
 label = "Bugs"
-name = "Halstead bugs"
+name = "Estimated bugs"
 short = "H.bugs"
 description = "Estimated delivered bugs — a rough predictor of defect density."
 formula_cel = "eta2 > 0.0 ? pow(effort, 2.0 / 3.0) / 3000.0 : 0.0"
@@ -231,7 +232,7 @@ omit_at = 1.0
 [fields.effort]
 value_type = "float"
 label = "Effort"
-name = "Halstead effort"
+name = "Implementation effort"
 short = "H.effort"
 description = "Mental effort to implement the algorithm."
 formula_cel = "eta2 > 0.0 ? (eta1 / 2.0) * (n2 / eta2) * volume : 0.0"
@@ -243,7 +244,7 @@ category = "halstead"
 [fields.length]
 value_type = "float"
 label = "Length"
-name = "Halstead length"
+name = "Total tokens"
 short = "H.len"
 description = "Program length — total operator + operand occurrences."
 formula_cel = "n1 + n2"
@@ -278,7 +279,7 @@ category = "maintainability"
 [fields.time]
 value_type = "float"
 label = "Time"
-name = "Halstead time, s"
+name = "Coding time (s)"
 short = "H.time(s)"
 description = "Estimated implementation time, in seconds."
 formula_cel = "effort / 18.0"
@@ -290,7 +291,7 @@ category = "halstead"
 [fields.vocabulary]
 value_type = "float"
 label = "Vocabulary"
-name = "Halstead vocabulary"
+name = "Distinct symbols"
 short = "H.vocab"
 description = "Vocabulary — distinct operators + operands."
 formula_cel = "eta1 + eta2"
@@ -302,7 +303,7 @@ category = "halstead"
 [fields.volume]
 value_type = "float"
 label = "Volume"
-name = "Halstead volume"
+name = "Code volume"
 short = "H.vol"
 description = "Algorithm size in bits, from distinct operators and operands."
 formula_cel = "vocabulary > 0.0 ? length * log2(vocabulary) : 0.0"
@@ -320,7 +321,7 @@ category = "halstead"
 [fields.hk]
 value_type = "float"
 label = "HK"
-name = "Henry–Kafura"
+name = "God-object risk"
 short = "HK"
 description = "Henry-Kafura information-flow complexity: a module that is both a busy crossroads (high fan-in × fan-out) and large — the most expensive place in the codebase to change."
 formula_cel = "sloc * pow(fan_in * fan_out, 2.0)"
@@ -339,25 +340,30 @@ abbreviate = true
 [coupling.fan_in]
 value_type = "int"
 label = "Fan-in"
+name = "Incoming dependencies"
 description = "Many other units depend on this one, making it risky to change and a single point of failure — though some hubs (shared types) carry high fan-in legitimately."
 category = "coupling"
 
 [coupling.fan_out]
 value_type = "int"
 label = "Fan-out"
+name = "Outgoing dependencies"
 description = "This unit depends on many others, so it breaks when any of them change and is hard to test in isolation."
 category = "coupling"
 
 [coupling.fan_out_external]
 value_type = "int"
 label = "Fan-out (external)"
+name = "External dependencies"
 description = "Number of distinct external libraries this node depends on."
 category = "coupling"
 
 [coupling.cycle]
 value_type = "str"
 label = "Cycle"
+name = "Dependency cycle"
 short = "Cycle"
+category = "coupling"
 description = "Cycle kind this node participates in."
 
 # ── cycle kinds (computed by annotate_cycles) ─────────────────────────────────

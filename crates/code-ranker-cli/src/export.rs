@@ -38,6 +38,7 @@ pub(crate) fn export_full_config(args: &AnalyzeArgs, out: &Path) -> Result<()> {
         args.plugin.as_deref(),
         loaded.config.plugin.as_deref(),
         &workspace,
+        loaded.source_file.as_deref(),
     )?;
     let plugin_table = plugin::registry()
         .into_iter()

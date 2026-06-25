@@ -1,5 +1,5 @@
 {
-  "command": "code-ranker report crates/code-ranker-plugins/src/languages/csharp/tests/sample --config crates/code-ranker-plugins/src/languages/csharp/tests/sample/code-ranker.toml --output.json.path=crates/code-ranker-plugins/src/languages/csharp/tests/sample/code-ranker-report.json",
+  "command": "code-ranker report crates/code-ranker-plugins/src/languages/csharp/tests/sample --config crates/code-ranker-plugins/src/languages/csharp/tests/sample/code-ranker.toml --output.json.path=crates/code-ranker-plugins/src/languages/csharp/tests/sample/code-ranker-report.json --output.mode quiet",
   "config_file": "crates/code-ranker-plugins/src/languages/csharp/tests/sample/code-ranker.toml",
   "generated_at": "1970-01-01T00:00:00Z",
   "git": {
@@ -12,23 +12,23 @@
     "files": {
       "attribute_groups": {
         "complexity": {
-          "description": "Code complexity metrics",
+          "description": "per-function branching, nesting & size",
           "label": "Complexity"
         },
         "coupling": {
-          "description": "Internal coupling (Henry-Kafura)",
+          "description": "how tightly modules depend on each other",
           "label": "Coupling"
         },
         "halstead": {
-          "description": "Halstead software metrics",
+          "description": "operator/operand vocabulary & derived effort",
           "label": "Halstead"
         },
         "loc": {
-          "description": "Lines of code breakdown",
+          "description": "physical line counts",
           "label": "Lines of Code"
         },
         "maintainability": {
-          "description": "Maintainability index",
+          "description": "composite score",
           "label": "Maintainability"
         }
       },
@@ -96,7 +96,7 @@
           "formula": "effort^⅔ ÷ 3000",
           "group": "halstead",
           "label": "Bugs",
-          "name": "Halstead bugs",
+          "name": "Estimated bugs",
           "short": "H.bugs",
           "value_type": "float"
         },
@@ -113,7 +113,7 @@
           "direction": "lower_better",
           "group": "complexity",
           "label": "Closures",
-          "name": "Closures",
+          "name": "Closures defined",
           "short": "Closures",
           "value_type": "int"
         },
@@ -145,7 +145,7 @@
           "formula": "(eta1 ÷ 2) × (n2 ÷ eta2) × volume",
           "group": "halstead",
           "label": "Effort",
-          "name": "Halstead effort",
+          "name": "Implementation effort",
           "short": "H.effort",
           "value_type": "float"
         },
@@ -184,7 +184,7 @@
           "description": "Many other units depend on this one, making it risky to change and a single point of failure — though some hubs (shared types) carry high fan-in legitimately.",
           "group": "coupling",
           "label": "Fan-in",
-          "name": "Fan-in",
+          "name": "Incoming dependencies",
           "short": "Fan-in",
           "value_type": "int"
         },
@@ -192,7 +192,7 @@
           "description": "This unit depends on many others, so it breaks when any of them change and is hard to test in isolation.",
           "group": "coupling",
           "label": "Fan-out",
-          "name": "Fan-out",
+          "name": "Outgoing dependencies",
           "short": "Fan-out",
           "value_type": "int"
         },
@@ -200,7 +200,7 @@
           "description": "Number of distinct external libraries this node depends on.",
           "group": "coupling",
           "label": "Fan-out (external)",
-          "name": "Fan-out (external)",
+          "name": "External dependencies",
           "short": "Fan-out (external)",
           "value_type": "int"
         },
@@ -212,7 +212,7 @@
           "formula": "sloc × (fan_in × fan_out)²",
           "group": "coupling",
           "label": "HK",
-          "name": "Henry–Kafura",
+          "name": "God-object risk",
           "short": "HK",
           "value_type": "float"
         },
@@ -223,7 +223,7 @@
           "formula": "n1 + n2",
           "group": "halstead",
           "label": "Length",
-          "name": "Halstead length",
+          "name": "Total tokens",
           "short": "H.len",
           "value_type": "float"
         },
@@ -237,7 +237,9 @@
         },
         "loc": {
           "description": "Raw file line count, including blank and comment lines (unlike `sloc`). Large files tend to hold several responsibilities and are harder to review, test, and reuse.",
+          "group": "loc",
           "label": "Lines",
+          "name": "Total lines",
           "remediation": "Split by responsibility into smaller units, extract helpers, and separate data definitions from behavior. For an average breach, break up the largest units first (--top).",
           "value_type": "int"
         },
@@ -294,7 +296,7 @@
           "direction": "lower_better",
           "group": "complexity",
           "label": "Spaces",
-          "name": "Unit count",
+          "name": "Code units",
           "short": "Spaces",
           "value_type": "int"
         },
@@ -314,7 +316,7 @@
           "formula": "effort ÷ 18",
           "group": "halstead",
           "label": "Time",
-          "name": "Halstead time, s",
+          "name": "Coding time (s)",
           "short": "H.time(s)",
           "value_type": "float"
         },
@@ -325,7 +327,7 @@
           "formula": "eta1 + eta2",
           "group": "halstead",
           "label": "Vocabulary",
-          "name": "Halstead vocabulary",
+          "name": "Distinct symbols",
           "short": "H.vocab",
           "value_type": "float"
         },
@@ -336,7 +338,7 @@
           "formula": "length × log₂(vocabulary)",
           "group": "halstead",
           "label": "Volume",
-          "name": "Halstead volume",
+          "name": "Code volume",
           "short": "H.vol",
           "value_type": "float"
         }

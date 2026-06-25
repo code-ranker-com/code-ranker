@@ -77,7 +77,7 @@ impl LanguagePlugin for RustPlugin {
                 edge_kinds,
                 node_attributes,
                 edge_attributes,
-                attribute_groups: BTreeMap::new(),
+                attribute_groups: crate::config::attribute_groups(&CONFIG),
                 node_kinds: default_node_kinds(),
                 cycle_kinds: default_cycle_kinds(),
                 // Cluster the diagram by the owning crate (compilation unit), not by

@@ -30,7 +30,10 @@ pub use specs::{
     PrincipleCfg, SpecOverride, apply_spec_overrides, principles, resolved_principles,
     spec_overrides,
 };
-pub use views::{attr_key, edge_attributes, edge_kind_id, edge_kinds, node_attributes, node_kinds};
+pub use views::{
+    attr_key, attribute_groups, edge_attributes, edge_kind_id, edge_kinds, node_attributes,
+    node_kinds,
+};
 
 #[cfg(test)]
 #[path = "../tests/config.rs"]

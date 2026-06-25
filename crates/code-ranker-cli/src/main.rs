@@ -22,13 +22,12 @@ mod recommend;
 mod report;
 mod templates;
 
-use anyhow::Result;
 use clap::Parser;
 use code_ranker_plugin_api::log;
 
 use cli::{Cli, Command, OutputMode};
 
-fn main() -> Result<()> {
+fn main() {
     let cli = Cli::parse();
     // Apply the verbosity before emitting anything: every later line (here, in the
     // stages, and in the plugins) reads this one switch. `--output.mode` is global,
@@ -140,13 +139,18 @@ fn main() -> Result<()> {
             config,
         } => docs::run(subject.as_deref(), plugin.as_deref(), &config),
     };
-    match &res {
-        Ok(_) => {
+    match res {
+        Ok(()) => {
             if let Some(t) = timer {
                 t.finish();
             }
         }
-        Err(e) => logger::error(&format!("error: {e:#}")),
+        // Print the error ourselves (one stamped `error:` line) and exit non-zero.
+        // `main` returns `()` rather than `Result` so the runtime does NOT also print
+        // its own `Error: …` line — that double-print is exactly what we avoid here.
+        Err(e) => {
+            logger::error(&format!("error: {e:#}"));
+            std::process::exit(1);
+        }
     }
-    res
 }

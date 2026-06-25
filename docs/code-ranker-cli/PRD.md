@@ -57,20 +57,24 @@ snapshot input.
   always exits `0`. Without `--baseline` the HTML is a single-snapshot
   viewer; with `--baseline <snapshot>` it becomes a baseline↔current diff
   view with a verdict, named `…-diff.html`.
-- `docs <subject>` prints a reference doc to stdout and always exits `0` (an unknown
-  subject exits non-zero). It runs **no analysis** and takes **no `[input]`** — config
-  is auto-discovered from the current directory, and `--plugin` (explicit, the `plugin`
-  config key, or none) resolves which language's docs to serve. The `<subject>` selects
-  the output: `ai` (the offline AI-agent playbook from the embedded `base/AI.md`),
-  `metrics` / `principles` (the metric / principle index), a metric **category** (`loc`,
-  `complexity`, `halstead`, `maintainability`, `coupling` → its label + member metrics),
-  a **metric** key (`sloc`, `hk`, … → its spec card, with the prose doc appended for
-  `hk` / `cyclomatic` / `cognitive` / `fan_in` / `fan_out`), a **principle** id (`SRP`,
-  `ADP`, … → its full doc), or no/unknown subject (a catalog of every subject). For
-  `docs ai`, with a plugin resolved it prints the full playbook **plus** the
-  principle/metric catalog; with none resolvable it prints a brief product intro
-  **plus** how to select a plugin and **omits** the catalog. So `docs ai` succeeds even
-  where `report` / `check` would stop on an ambiguous project, and guides the user to a
+- `docs <subject>` prints a reference doc to stdout (an unknown subject exits
+  non-zero). It runs **no analysis** and takes **no `[input]`** — config is
+  auto-discovered from the current directory, and `--plugin` (explicit > the `plugin`
+  config key > auto-detect from cwd markers) resolves which language's docs to serve.
+  A reference doc is **strictly per-language**, so every subject but `ai` **requires a
+  resolved plugin**: with none (no marker, or ambiguous markers) the command fails with
+  the same diagnostic `check` / `report` give — name one with `--plugin` or set `plugin`
+  in `code-ranker.toml`. The `<subject>` selects the output: `metrics` / `principles`
+  (the metric / principle index), a metric **category** (`loc`, `complexity`,
+  `halstead`, `maintainability`, `coupling` → its label + member metrics), a **metric**
+  key (`sloc`, `hk`, the language's own `unsafe`/`items`, … → its spec card, with the
+  prose doc appended where one exists), a **principle** id (`SRP`, `ADP`, … → its full
+  doc), or no/unknown subject (a catalog of every subject). Subject matching is
+  separator/case-insensitive (`fan_in` = `Fan-in` = `FAN in`). The one exception is
+  **`docs ai`** (the offline AI-agent playbook from the embedded `base/AI.md`): with a
+  plugin resolved it prints the full playbook **plus** the principle/metric catalog;
+  with none resolvable it prints a brief product intro **plus** how to select a plugin
+  and **omits** the catalog — so `docs ai` always succeeds and guides the user to a
   working setup.
 
 `report` selects artifacts and their destinations through one flag family,

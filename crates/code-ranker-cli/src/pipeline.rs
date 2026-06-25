@@ -55,8 +55,12 @@ pub(crate) fn analyze_directory(
     .context("configuration error")?;
     let cfg = loaded.config;
 
-    let plugin_name =
-        plugin::resolve_plugin(args.plugin.as_deref(), cfg.plugin.as_deref(), &target)?;
+    let plugin_name = plugin::resolve_plugin(
+        args.plugin.as_deref(),
+        cfg.plugin.as_deref(),
+        &target,
+        loaded.source_file.as_deref(),
+    )?;
 
     let command = format!(
         "code-ranker {}",

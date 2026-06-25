@@ -5,6 +5,7 @@
 //! `name()`. Adding a language is a self-contained module in the plugins crate.
 
 use anyhow::{Result, bail};
+use code_ranker_graph::version::CONFIG_VERSION;
 use code_ranker_graph::write_metrics;
 use code_ranker_plugin_api::{
     graph::Graph,
@@ -125,6 +126,17 @@ pub fn principles(name: &str, input: &PluginInput) -> Vec<Principle> {
     }
 }
 
+/// The matching plugin's level specs — its node-attribute / edge-kind / group
+/// dictionaries, built from config with **no analysis**. The `docs` command reads
+/// the `files` level to surface a language's own structural metrics (e.g. Rust's
+/// `unsafe`, `items`) without walking a source tree.
+pub fn levels(name: &str) -> Vec<code_ranker_plugin_api::level::Level> {
+    match registry().iter().find(|p| p.name() == name) {
+        Some(p) => p.levels(),
+        None => Vec::new(),
+    }
+}
+
 /// Let the matching plugin refine the language-neutral default metric specs
 /// (e.g. add Rust-specific `#[cfg(test)]` nuance to LOC descriptions). The
 /// neutral catalog comes from `code-ranker-graph`; the plugin overrides only
@@ -166,7 +178,12 @@ pub fn detect(workspace: &Path, input: &PluginInput) -> Result<String> {
 /// Resolve the plugin name: explicit `--plugin` > config `plugin` > auto-detect.
 /// A value of `auto` (or absence) triggers project-marker detection. Lives here,
 /// with the registry and [`detect`], so plugin selection is one concern.
-pub fn resolve_plugin(arg: Option<&str>, cfg: Option<&str>, workspace: &Path) -> Result<String> {
+pub fn resolve_plugin(
+    arg: Option<&str>,
+    cfg: Option<&str>,
+    workspace: &Path,
+    config_file: Option<&str>,
+) -> Result<String> {
     if let Some(p) = arg
         && p != "auto"
     {
@@ -177,7 +194,21 @@ pub fn resolve_plugin(arg: Option<&str>, cfg: Option<&str>, workspace: &Path) ->
     {
         return Ok(p.to_string());
     }
-    detect(workspace, &PluginInput::default())
+    // Auto-detect failed (no marker / ambiguous): append a config-aware way to pin
+    // the language, so the user isn't left with only `--plugin` on every run.
+    detect(workspace, &PluginInput::default()).map_err(|e| with_config_hint(e, config_file))
+}
+
+/// Augment a failed-detection error with how to pin the language in config: add
+/// `plugin` to the discovered `code-ranker.toml`, or create one when none exists.
+fn with_config_hint(e: anyhow::Error, config_file: Option<&str>) -> anyhow::Error {
+    let how = match config_file {
+        Some(path) => format!("add `plugin = \"<name>\"` to {path}"),
+        None => format!(
+            "create a `code-ranker.toml` at the project root with:\n      version = \"{CONFIG_VERSION}\"\n      plugin = \"<name>\""
+        ),
+    };
+    anyhow::anyhow!("{e}\n  → or pin the language in config: {how}")
 }
 
 #[cfg(test)]

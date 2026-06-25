@@ -78,9 +78,10 @@ fn spec_field_mapping_is_wire_compatible() {
     // formula_pretty → formula, formula_js → calc.
     assert_eq!(vol.formula.as_deref(), Some("length × log₂(vocabulary)"));
     assert_eq!(vol.calc.as_deref(), Some("length * Math.log2(vocabulary)"));
-    // name/short fall back to label where the TOML omits them.
+    // `short` falls back to `label` where the TOML omits it (closures sets no
+    // `short`); `name` is the spec's own value.
     let clo = &specs["closures"];
-    assert_eq!(clo.name.as_deref(), Some("Closures"));
+    assert_eq!(clo.name.as_deref(), Some("Closures defined"));
     assert_eq!(clo.short.as_deref(), Some("Closures"));
     // multiline description re-encoded with <br>, no raw newlines.
     let cog = &specs["cognitive"];

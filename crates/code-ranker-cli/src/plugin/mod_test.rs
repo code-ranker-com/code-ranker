@@ -88,23 +88,52 @@ fn resolve_plugin_precedence_explicit_then_config_then_auto() {
     let d = tempfile::tempdir().unwrap();
     std::fs::write(d.path().join("pyproject.toml"), "").unwrap();
     assert_eq!(
-        resolve_plugin(Some("rust"), Some("javascript"), d.path()).unwrap(),
+        resolve_plugin(Some("rust"), Some("javascript"), d.path(), None).unwrap(),
         "rust",
         "explicit --plugin wins"
     );
     assert_eq!(
-        resolve_plugin(None, Some("rust"), d.path()).unwrap(),
+        resolve_plugin(None, Some("rust"), d.path(), None).unwrap(),
         "rust",
         "config wins over auto-detect"
     );
     assert_eq!(
-        resolve_plugin(Some("auto"), None, d.path()).unwrap(),
+        resolve_plugin(Some("auto"), None, d.path(), None).unwrap(),
         "python",
         "explicit auto -> detect"
     );
     assert_eq!(
-        resolve_plugin(None, None, d.path()).unwrap(),
+        resolve_plugin(None, None, d.path(), None).unwrap(),
         "python",
         "no plugin -> detect"
+    );
+}
+
+#[test]
+fn levels_returns_the_spec_for_a_known_plugin_and_empty_for_unknown() {
+    // A real plugin publishes its `files` level (no analysis); an unknown name is
+    // an empty list, not a panic.
+    assert!(
+        levels("rust").iter().any(|l| l.name == "files"),
+        "rust publishes a files level"
+    );
+    assert!(levels("nope").is_empty(), "unknown plugin → no levels");
+}
+
+#[test]
+fn resolve_plugin_failure_points_at_config() {
+    // No marker resolves here, so the error guides the user to pin the language —
+    // into the discovered config when one exists, else by creating `code-ranker.toml`.
+    let d = tempfile::tempdir().unwrap();
+    let with_cfg =
+        resolve_plugin(None, None, d.path(), Some("/proj/code-ranker.toml")).unwrap_err();
+    assert!(
+        format!("{with_cfg:#}").contains("add `plugin = \"<name>\"` to /proj/code-ranker.toml"),
+        "suggests editing the existing config: {with_cfg:#}"
+    );
+    let no_cfg = resolve_plugin(None, None, d.path(), None).unwrap_err();
+    assert!(
+        format!("{no_cfg:#}").contains("create a `code-ranker.toml`"),
+        "suggests creating a config: {no_cfg:#}"
     );
 }

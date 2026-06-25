@@ -1,20 +1,24 @@
-//! The `docs <subject>` command: print a reference doc to stdout. No analysis —
-//! it resolves the merged config (auto-discovered from the current directory) and
-//! the language plugin best-effort, then builds the principle + metric + category
-//! specs from config + plugin (the same specs an analyzed snapshot carries, minus
-//! the graph). Subjects:
-//!   - `ai`          → the offline AI-agent playbook (resolved plugin → full
-//!     playbook + catalog; none → a brief intro + plugin-setup guidance);
-//!   - `metrics`     → an index of every metric, grouped by category;
-//!   - `principles`  → an index of every design principle;
-//!   - `<category>`  → that category (`loc`, `complexity`, …) + its member metrics;
-//!   - `<metric>`    → that metric's spec card, plus its full doc when one exists;
-//!   - `<principle>` → its full doc (or a synthetic card for a doc-less custom one);
-//!   - anything else (or no subject) → a friendly catalog of every subject.
+//! The `docs <subject>` command: print a reference doc to stdout. No analysis — it
+//! resolves the merged config (auto-discovered from the current directory) and the
+//! language plugin, then builds the principle + metric + category specs from the
+//! config and plugin (the same specs an analyzed snapshot carries, minus the graph).
+//! A reference doc is **strictly per-language**: every subject but `ai` requires a
+//! resolved plugin and fails (same diagnostic as `check` / `report`) when none does.
+//! Subjects match separator/case-insensitively (`fan_in` = `Fan-in` = `FAN in`):
 //!
-//! Categories and metrics are read from the spec dictionaries; principle ids and
-//! custom metrics declared in the project config (`[principles.<ID>]` /
-//! `[metrics.<key>]`) are first-class subjects too.
+//! - `ai` → the offline AI-agent playbook (resolved plugin → full playbook + catalog;
+//!   none → a brief intro + how to pick a plugin — the one subject that does not
+//!   hard-fail without a plugin);
+//! - `metrics` / `principles` → an index of every metric / design principle;
+//! - `<category>` → that category (`loc`, `complexity`, …) + its member metrics;
+//! - `<metric>` → its spec card (incl. language metrics like Rust's `unsafe`), plus
+//!   its prose doc when one exists;
+//! - `<principle>` → its full doc (or a synthetic card for a doc-less custom one);
+//! - anything else (or no subject) → a catalog of every subject.
+//!
+//! Categories and metrics are read from the plugin's level specs + the central
+//! catalog; principle ids and custom metrics declared in the project config
+//! (`[principles.<ID>]` / `[metrics.<key>]`) are first-class subjects too.
 
 use anyhow::{Result, bail};
 use code_ranker_graph::version::CONFIG_VERSION;
@@ -44,12 +48,29 @@ pub(crate) fn run(
     plugin_arg: Option<&str>,
     config_entries: &[String],
 ) -> Result<()> {
-    // `ai` is special: it needs no specs and has its own resolved/unresolved modes.
+    // `docs ai` is special: the playbook stands on its own and, with no plugin
+    // resolved, prints the intro that explains how to pick one (no hard error).
     if subject.is_some_and(|s| templates::normalize_id(s) == "ai") {
         return run_ai(plugin_arg, config_entries);
     }
 
-    let specs = build_specs(plugin_arg, config_entries);
+    // Every other subject is strictly per-language — a reference doc describes one
+    // plugin's principles + metrics — so a plugin MUST resolve. When none does, fail
+    // with the same diagnostic `check` / `report` give (ambiguous / no marker → name
+    // one with `--plugin`, or set `plugin` in `code-ranker.toml`).
+    let input = std::path::Path::new(".");
+    let loaded = config::load(input, config_entries, &[], &[], &[]).ok();
+    let config_file = loaded.as_ref().and_then(|l| l.source_file.clone());
+    let cfg = loaded.map(|loaded| loaded.config);
+    let cfg_plugin = cfg.as_ref().and_then(|c| c.plugin.clone());
+    let plugin_name = plugin::resolve_plugin(
+        plugin_arg,
+        cfg_plugin.as_deref(),
+        input,
+        config_file.as_deref(),
+    )?;
+
+    let specs = build_specs(&plugin_name, cfg);
 
     let Some(subject) = subject else {
         // Bare `docs`: the catalog is the help, so exit 0.
@@ -102,9 +123,15 @@ fn run_ai(plugin_arg: Option<&str>, config_entries: &[String]) -> Result<()> {
     let cfg_plugin = config::load(input, config_entries, &[], &[], &[])
         .ok()
         .and_then(|loaded| loaded.config.plugin);
-    let md = match plugin::resolve_plugin(plugin_arg, cfg_plugin.as_deref(), input) {
+    // `docs ai` carries its own *Select a language* template, so the intro only
+    // needs the bare "why" — pass no config hint and keep just its first line.
+    let md = match plugin::resolve_plugin(plugin_arg, cfg_plugin.as_deref(), input, None) {
         Ok(_) => templates::ai_doc()?,
-        Err(reason) => fill_select(&templates::ai_doc_intro()?, &reason.to_string()),
+        Err(reason) => {
+            let reason = reason.to_string();
+            let why = reason.lines().next().unwrap_or(&reason);
+            fill_select(&templates::ai_doc_intro()?, why)
+        }
     };
     emit(md);
     Ok(())
@@ -119,26 +146,35 @@ fn fill_select(intro: &str, reason: &str) -> String {
         .replace("{config_version}", CONFIG_VERSION)
 }
 
-/// Build the doc specs from config + plugin, no analysis. Best-effort throughout:
-/// a missing config yields the built-in defaults, a *broken* one is ignored (the
-/// central catalog + plugin still answer most subjects), and an unresolved plugin
-/// just drops the language-specific principles/refinements.
-fn build_specs(plugin_arg: Option<&str>, config_entries: &[String]) -> DocSpecs {
-    let input = Path::new(".");
-
-    // Central, language-neutral metric specs + their category groups.
+/// Build the doc specs strictly for one resolved `plugin_name`, no analysis. The
+/// node-attribute dictionary is the plugin's own `files`-level specs (its
+/// `[node_attributes.*]` — e.g. Rust's `unsafe` / `items`) layered with the central
+/// complexity + coupling specs and the project's node-scope `[metrics.<key>]`;
+/// principles are the plugin catalog overlaid with `[principles.<ID>]`. Config is
+/// best-effort (a broken file degrades to the plugin's own specs).
+fn build_specs(plugin_name: &str, cfg: Option<config::model::Config>) -> DocSpecs {
+    // Central, language-neutral metric specs + their category groups, refined by
+    // the active plugin (e.g. Rust's `#[cfg(test)]` LOC nuance).
     let (default_metric_specs, metric_groups) = code_ranker_graph::metric_specs();
     let (coupling_specs, coupling_groups) = code_ranker_graph::coupling_specs();
-    let mut groups = BTreeMap::new();
+    let metric_specs = plugin::metric_specs(plugin_name, default_metric_specs);
+
+    // The plugin's own structural attribute specs + category groups, taken from the
+    // `files` level WITHOUT analysis — this is what surfaces language metrics like
+    // Rust's `unsafe` that live in `[node_attributes.*]`, not the central catalog.
+    let files_level = plugin::levels(plugin_name)
+        .into_iter()
+        .find(|l| l.name == "files");
+    let mut node_attributes = files_level
+        .as_ref()
+        .map(|l| l.node_attributes.clone())
+        .unwrap_or_default();
+    node_attributes.extend(metric_specs);
+    node_attributes.extend(coupling_specs);
+
+    let mut groups = files_level.map(|l| l.attribute_groups).unwrap_or_default();
     groups.extend(metric_groups);
     groups.extend(coupling_groups);
-
-    let cfg = config::load(input, config_entries, &[], &[], &[])
-        .ok()
-        .map(|loaded| loaded.config);
-
-    let cfg_plugin = cfg.as_ref().and_then(|c| c.plugin.clone());
-    let plugin_name = plugin::resolve_plugin(plugin_arg, cfg_plugin.as_deref(), input).ok();
 
     let pinput = cfg
         .as_ref()
@@ -150,15 +186,7 @@ fn build_specs(plugin_arg: Option<&str>, config_entries: &[String]) -> DocSpecs 
             hidden: c.ignore.hidden,
         });
 
-    // Metrics: central catalog refined by the active plugin, plus coupling and the
-    // project's node-scope declarative metrics (built-ins win a key collision).
-    let metric_specs = match &plugin_name {
-        Some(n) => plugin::metric_specs(n, default_metric_specs),
-        None => default_metric_specs,
-    };
-    let mut node_attributes: BTreeMap<String, AttributeSpec> = BTreeMap::new();
-    node_attributes.extend(metric_specs);
-    node_attributes.extend(coupling_specs);
+    // Project node-scope declarative metrics (built-ins win a key collision).
     if let Some(c) = &cfg {
         for (k, d) in &c.metrics {
             if d.scope == code_ranker_graph::Scope::Node {
@@ -170,10 +198,7 @@ fn build_specs(plugin_arg: Option<&str>, config_entries: &[String]) -> DocSpecs 
     }
 
     // Principles: plugin catalog overlaid with the project's `[principles.<ID>]`.
-    let catalog = match &plugin_name {
-        Some(n) => plugin::principles(n, &pinput),
-        None => Vec::new(),
-    };
+    let catalog = plugin::principles(plugin_name, &pinput);
     let principles = match &cfg {
         Some(c) => config::merge_project_principles(catalog, &c.principles),
         None => catalog,
@@ -271,20 +296,26 @@ fn categories_block(specs: &DocSpecs) -> String {
     let mut out = String::new();
     let cats = category_keys(specs);
     for key in &cats {
-        out.push_str(&format!("\n  {key}: {}", category_label(specs, key)));
-        if let Some(d) = specs.groups.get(key).and_then(|g| g.description.as_deref()) {
-            out.push_str(&format!(" — {d}"));
+        // Header is `<key> — <description>`: the key is what you type (`docs <key>`),
+        // the description says what the category measures. The Titlecase `label` is
+        // dropped here — it just echoes the key (`complexity` ≈ "Complexity").
+        out.push_str(&format!("\n  {key}"));
+        match specs.groups.get(key).and_then(|g| g.description.as_deref()) {
+            Some(d) => out.push_str(&format!(" — {d}")),
+            None => out.push_str(&format!(" — {}", category_label(specs, key))),
         }
         out.push('\n');
         for (k, spec) in metrics_in_category(specs, key) {
             out.push_str(&format!("    - {k}: {}\n", metric_name(spec, k)));
         }
     }
-    // Metrics with no category (e.g. the categorical `cycle`): list them too.
+    // Metrics with no category (e.g. the categorical `cycle`, Rust's `unsafe`): list
+    // them too — but only those with a description (skips bare external-node metadata
+    // like `crate` / `version` that carry no doc copy).
     let uncategorized: Vec<_> = specs
         .node_attributes
         .iter()
-        .filter(|(_, s)| s.group.is_none())
+        .filter(|(_, s)| s.group.is_none() && s.description.is_some())
         .collect();
     if !uncategorized.is_empty() {
         out.push_str("\n  (uncategorized)\n");
@@ -298,7 +329,7 @@ fn categories_block(specs: &DocSpecs) -> String {
 /// The principles section shared by `docs principles` and the catalog.
 fn principles_block(specs: &DocSpecs) -> String {
     if specs.principles.is_empty() {
-        return "  (none — no language plugin resolved here)\n".to_string();
+        return "  (none — this plugin defines no principles)\n".to_string();
     }
     specs
         .principles
@@ -323,9 +354,11 @@ fn render_principles_index(specs: &DocSpecs) -> String {
     )
 }
 
-/// `docs <category>`: the category label + description + its member metrics.
+/// `docs <category>`: the category's human label + description + its member metrics.
 fn render_category(specs: &DocSpecs, key: &str) -> String {
-    let mut out = format!("{key}: {}", category_label(specs, key));
+    // Single-category view: the human label is the title (the key was just typed),
+    // so there is no `key: Label` echo.
+    let mut out = category_label(specs, key);
     if let Some(d) = specs.groups.get(key).and_then(|g| g.description.as_deref()) {
         out.push_str(&format!("\n{d}"));
     }
@@ -416,7 +449,7 @@ fn render_catalog(specs: &DocSpecs, unknown: Option<&str>) -> String {
     out.push_str("code-ranker docs <subject> — print a reference doc to stdout (no analysis).\n");
     out.push_str(&categories_block(specs));
     // Principles render as one more group, exactly like a metric category.
-    out.push_str("\n  principles: Design principles\n");
+    out.push_str("\n  principles — SOLID & related design principles\n");
     out.push_str(
         &specs
             .principles

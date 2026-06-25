@@ -37,12 +37,15 @@ a bare invocation prints help. `main()` owns two analysis subcommands — `check
 and `report` — both taking a single polymorphic positional `[input]` (a directory
 to **analyze**, or a `.json`/`.html` snapshot to **read**, via
 `analyze_input` → `is_snapshot_input`); a third `docs` subcommand (`docs.rs`) runs **no
-analysis** and takes **no `[input]`** — it resolves the language plugin
-(`plugin::resolve_plugin`) only to pick the language, then prints the reference doc for
-the requested `<subject>` to stdout (the `ai` playbook, a metric/principle index, a
-category or metric spec card, or a principle's full doc; for `docs ai`, the full
-playbook + catalog when a plugin resolves, a brief intro + how to select one when
-none does):
+analysis** and takes **no `[input]`** — a reference doc is **strictly per-language**, so
+it resolves the language plugin (`plugin::resolve_plugin`) and, for every subject but
+`ai`, **fails** when none resolves (the same diagnostic `check` / `report` give). It
+then builds the principle + metric + category specs from the plugin's own level specs
+(`plugin::levels`, so a language metric like Rust's `unsafe` surfaces) layered with the
+central catalog — no graph — and prints the reference doc for the requested `<subject>`
+to stdout (the `ai` playbook, a metric/principle index, a category or metric spec card,
+or a principle's full doc; for `docs ai`, the full playbook + catalog when a plugin
+resolves, a brief intro + how to select one when none does):
 
 The binary is decomposed by concern — `main()` only parses and dispatches:
 `cli.rs` (the clap argument model), `analyze.rs` (input dispatch, the snapshot

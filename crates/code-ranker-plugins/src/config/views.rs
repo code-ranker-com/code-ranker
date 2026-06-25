@@ -3,7 +3,7 @@
 //! turns into its `levels()` spec, plus the `edge_kind_id` / `attr_key` lookups
 //! the structure builder tags edges/attrs with.
 
-use code_ranker_plugin_api::level::{AttributeSpec, EdgeKindSpec, NodeKindSpec};
+use code_ranker_plugin_api::level::{AttributeGroup, AttributeSpec, EdgeKindSpec, NodeKindSpec};
 use std::collections::BTreeMap;
 use toml::Table;
 
@@ -74,5 +74,16 @@ pub fn edge_attributes(cfg: &Table) -> BTreeMap<String, AttributeSpec> {
     cfg.get("edge_attributes")
         .cloned()
         .map(|v| v.try_into().expect("[edge_attributes] shape"))
+        .unwrap_or_default()
+}
+
+/// Read the `[attribute_groups]` table from a merged config as `key →
+/// AttributeGroup` (empty if absent) — the language's own metric categories (e.g.
+/// Rust groups `unsafe` / `items` under a "Rust-specific" category), the analogue
+/// of the central `[categories.*]` in `builtin.toml`.
+pub fn attribute_groups(cfg: &Table) -> BTreeMap<String, AttributeGroup> {
+    cfg.get("attribute_groups")
+        .cloned()
+        .map(|v| v.try_into().expect("[attribute_groups] shape"))
         .unwrap_or_default()
 }

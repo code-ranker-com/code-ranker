@@ -215,8 +215,10 @@ accepts any `--top N` to widen the ranked module list.
 
 ### 7.2 `docs <ID>` — print the raw principle doc ✅
 
-The `docs` command dumps the embedded principle/metric Markdown itself (composed for the
-active `--plugin`, with any `[templates.…]` override applied), no analysis and no `[input]`:
+The `docs` command dumps the embedded principle/metric Markdown itself (composed for one
+language, with any `[templates.…]` override applied), no analysis and no `[input]`. It keeps
+a **singular** `--plugin <name>` flag, since it emits a reference doc for one language; when
+omitted it defaults to the first of `plugins` (the scalar config key `plugin` does not exist):
 
 ```bash
 code-ranker docs HK        # the resolved languages/<lang>/HK.md

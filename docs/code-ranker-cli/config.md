@@ -5,7 +5,7 @@
 Every `code-ranker.toml` MUST declare the config-schema version it targets:
 
 ```toml
-version = "4.0"
+version = "5.0"
 ```
 
 It is the **config + CLI** format version (app `major.minor`). The loader rejects a
@@ -20,8 +20,8 @@ Settings are merged from multiple sources. **Higher priority wins** for the same
 
 | Priority | Source | Example |
 |---|---|---|
-| 1 | CLI flags | `--ignore '**/tests/**'` |
-| 2 | `--config KEY=VALUE` inline override | `--config rules.thresholds.file.hk=200000` |
+| 1 | CLI flags | `--ignore '**/tests/**'`, `--plugins rust,markdown` |
+| 2 | `--config KEY=VALUE` inline override | `--config rules.thresholds.file.hk=200000`, `--config languages.rust.metrics.unsafe.warning=5` |
 | 3 | `--config <file>` (**repeatable** — see below) | `--config base.toml --config over.toml` |
 | 4 | `code-ranker.toml` in cwd | `./code-ranker.toml` |
 | 5 | `code-ranker.toml` in the analyzed target directory | `<target>/code-ranker.toml` |
@@ -61,18 +61,29 @@ Run [`--export-full-config`](#--export-full-config-path) to see every effective 
 
 Config arrives in **two independent stacks**, both compiled into the binary as the
 base and then overridable. `--export-full-config` dumps the effective result of
-both (`[plugin]` = the language stack, `[project]` = the project stack).
+both (one `[languages.<lang>]` section per active language = the language stacks,
+`[project]` = the project stack).
 
 **1. Language stack** — the node-kind vocabulary, per-language metric specs,
-default thresholds, and `[report]` view overrides. Selected by `--plugin` (or
-auto-detected). Built by `config::load_chain` as
-`base ⊕ [family] ⊕ <lang>`, each layer deep-merged over the last:
+default thresholds, and `[report]` view overrides. Built **per active language**
+(every language `code-ranker` runs in a multi-language run gets its own stack), then
+overlaid with the user's `[languages.<lang>]` blocks. The built-in chain is
+`base ⊕ [family] ⊕ <lang>`, each layer deep-merged over the last, with the user
+layers on top:
 
 | Layer | Applies to | Source (GitHub `main`) |
 |---|---|---|
 | **base** — common vocabulary & defaults | every language | [`crates/code-ranker-plugins/src/defaults.toml`](https://github.com/ffedoroff/code-ranker/blob/main/crates/code-ranker-plugins/src/defaults.toml) |
 | **family** (optional middle layer) | JS/TS → [`ecmascript/config.toml`](https://github.com/ffedoroff/code-ranker/blob/main/crates/code-ranker-plugins/src/languages/ecmascript/config.toml) · C/C++ → [`cfamily/config.toml`](https://github.com/ffedoroff/code-ranker/blob/main/crates/code-ranker-plugins/src/languages/cfamily/config.toml) | the shared engine vocab |
-| **`<lang>`** — only what differs | the chosen plugin | [`languages/<lang>/config.toml`](https://github.com/ffedoroff/code-ranker/tree/main/crates/code-ranker-plugins/src/languages) — e.g. [`rust`](https://github.com/ffedoroff/code-ranker/blob/main/crates/code-ranker-plugins/src/languages/rust/config.toml), [`python`](https://github.com/ffedoroff/code-ranker/blob/main/crates/code-ranker-plugins/src/languages/python/config.toml), [`go`](https://github.com/ffedoroff/code-ranker/blob/main/crates/code-ranker-plugins/src/languages/go/config.toml) |
+| **`<lang>`** — only what differs | one plugin | [`languages/<lang>/config.toml`](https://github.com/ffedoroff/code-ranker/tree/main/crates/code-ranker-plugins/src/languages) — e.g. [`rust`](https://github.com/ffedoroff/code-ranker/blob/main/crates/code-ranker-plugins/src/languages/rust/config.toml), [`python`](https://github.com/ffedoroff/code-ranker/blob/main/crates/code-ranker-plugins/src/languages/python/config.toml), [`go`](https://github.com/ffedoroff/code-ranker/blob/main/crates/code-ranker-plugins/src/languages/go/config.toml) |
+| **`[languages.base]`** (user) — shared overrides for every language | every language | your `code-ranker.toml` / `--config` |
+| **`[languages.<lang>]`** (user) — overrides for one language | that plugin | your `code-ranker.toml` / `--config` |
+
+A `[languages.<lang>]` block (and the virtual `[languages.base]`) overrides **any**
+key of that language's built-in config — not just metrics and levels but
+`extensions`, `detect_markers`, `skip_dirs`, `edge_kinds`, `node_attributes`,
+`[[principles]]`, `metrics`, `levels`, … — deep-merged onto the effective config.
+See [`[languages.<lang>]`](#languageslang--per-language-plugin-overrides).
 
 The shared **metric catalog** (built-in derived metrics, aggregates, the default
 `[report]` columns/card/size/filter) is layered under the language `[report]`:
@@ -90,11 +101,13 @@ The shared **metric catalog** (built-in derived metrics, aggregates, the default
 | ⊕ | `--config KEY=VALUE` inline | after all files |
 | ⊕ | CLI flags (`--threshold`, `--cycle-rule`, `--ignore`) | last |
 
-So the **complete order**, base → most-specific: language `base` ⊕ `[family]` ⊕
-`<lang>` for the plugin side; project `defaults.toml` ⊕ discovered/`--config`
-files (in order) ⊕ inline ⊕ CLI flags for the rules side. A project `[report]`
-patch layers on top of the language `[report]`, which layers on the catalog — so
-the three `[report]` sources compose (catalog → language → project).
+So the **complete order**, base → most-specific: per language `base` ⊕ `[family]` ⊕
+`<lang>` ⊕ user `[languages.base]` ⊕ user `[languages.<lang>]` ⊕
+`--config languages.base.*` ⊕ `--config languages.<lang>.*` for the plugin side;
+project `defaults.toml` ⊕ discovered/`--config` files (in order) ⊕ inline ⊕ CLI
+flags for the rules side. A project `[report]` patch layers on top of the language
+`[report]`, which layers on the catalog — so the three `[report]` sources compose
+(catalog → language → project).
 
 ---
 
@@ -114,8 +127,11 @@ the three `[report]` sources compose (catalog → language → project).
 >   the options — you would never write all of it.
 
 ```toml
-# Default plugin. Overridden by --plugin.
-plugin = "rust"
+version = "5.0"          # required config-schema version
+
+# Active languages. Overridden by --plugins. Omit (or leave empty) to auto-detect
+# every language present in the workspace.
+plugins = ["rust", "markdown"]
 
 [ignore]
 paths = [
@@ -154,6 +170,14 @@ when    = "tloc > 100 && !is_test_file"   # node values + path/deps/files + help
 message = "{tloc} lines of inline test code in a production file"
 group   = "TST"              # free-form concern label (default "LNT")
 # why / fix / title          # optional diagnostic copy; {key} interpolated
+
+[languages.base]             # shared overrides applied to EVERY active language
+skip_dirs = ["vendor"]       # deep-merged onto each language's built-in config
+
+[languages.rust]             # overrides for ONE language (deep-merged, base wins under it)
+extensions = ["rs"]          # any plugin-config key is overridable here, not just metrics
+[languages.rust.metrics.unsafe]
+warning = 5                  # tune a language-specific metric's advisory tier
 
 [output.json]                # `report` JSON snapshot artifact
 path = "{project-dir}-{ts}.json"   # default if unset: .code-ranker/{ts}-{git-hash-3}.json
@@ -233,7 +257,8 @@ the `files` level is always emitted. Function nodes have `parent` = their file
 node id and a per-language `kind` (e.g. `fn`/`method`/`closure`,
 `function`/`arrow`/`generator`). No call graph is built (no `Calls` edges). The
 HTML viewer surfaces the extra level through a **level switcher** (Files /
-Functions tabs); the JSON snapshot carries it under `graphs.functions`.
+Functions tabs); the JSON snapshot carries it under
+`languages.<lang>.graphs.functions`.
 
 ### `[metrics.<key>]` — declarative metrics
 
@@ -286,6 +311,43 @@ prompt      = "Move inline test modules into sibling test files…"
 Only `sort_metric` is essential. See the worked example in
 [`docs/customization/`](../customization/README.md#17-prompt-generator-principles--principlesid).
 
+### `[languages.<lang>]` — per-language plugin overrides
+
+A `[languages.<lang>]` block overrides the **effective plugin config** for one
+language. It can set **any** key the language's built-in config defines — not just
+`metrics` and `levels`, but `extensions`, `detect_markers`, `skip_dirs`,
+`edge_kinds`, `node_attributes`, `[[principles]]`, and so on. The block is
+**deep-merged** onto the language's built-in chain, so it need only spell out what
+it changes; list keys can be patched with the same op-tables (`add`/`remove`/…) as
+everywhere else.
+
+```toml
+[languages.rust]
+extensions   = ["rs"]                     # which files the rust plugin claims
+detect_markers = ["Cargo.toml"]           # what makes auto-detect pick rust
+skip_dirs    = ["target", "vendor"]
+
+[languages.rust.metrics.unsafe]
+warning      = 5                           # a language-specific metric's tiers
+```
+
+`[languages.base]` is a **virtual base language**: it is not a real plugin, and its
+overrides apply to **every** active language as a shared base. A specific
+`[languages.<lang>]` block then wins over `[languages.base]` per key. The full
+per-language precedence is:
+
+```
+defaults ⊕ plugin-base ⊕ <lang>.toml          (built-in, embedded)
+  ⊕ [languages.base] ⊕ [languages.<lang>]      (user TOML)
+  ⊕ --config languages.base.* ⊕ --config languages.<lang>.*   (CLI, highest)
+```
+
+Because `detect_markers` / `extensions` participate in this merge, overriding them
+changes **auto-detection** too: a plugin is auto-selected when its *effective*
+`detect()` matches. Scalars and comma-lists can also be set inline with
+`--config languages.<lang>.<key>=value`; deep nested tables and arrays-of-tables go
+through the `[languages.<lang>]` TOML block.
+
 ### `[output.json]` / `[output.html]` / `[output.sarif]` / `[output.codequality]` — report artifacts
 
 Each table configures one `code-ranker report` artifact: `path` is the destination
@@ -333,16 +395,40 @@ hk = 500_000
 
 All config values can be set or overridden from the command line.
 
-### `--plugin <NAME|auto>`
+### `--plugins <a,b,…>`
 
-Select the built-in plugin (`rust`, `python`, or `javascript`).
-Default is `auto`: resolved from `plugin` in the config file, then by project
-markers (`Cargo.toml`→rust, `pyproject.toml`/`setup.py`→python,
-`package.json`/`tsconfig.json`→javascript). Ambiguous or no marker → error.
+Select the active languages (`rust`, `python`, `javascript`, …) — comma-separated
+and/or repeatable. It overrides the config `plugins` array. With neither set
+anywhere, `code-ranker` auto-detects **every** language present in the workspace and
+analyzes them all in one run. See [Plugin resolution](CLI.md#plugin-resolution).
 
 ```bash
-code-ranker check .                   # auto-detect (or config.plugin)
-code-ranker check . --plugin python   # always uses python
+code-ranker check .                          # auto-detect every language present
+code-ranker check . --plugins python         # only python
+code-ranker check . --plugins rust,markdown  # exactly these two
+```
+
+### `--language <name>`
+
+For `report` / `recommend` (the scorecard + prompt): focus the scorecard and
+fix-prompt on **one** language. Not required when only one language is present. If a
+`--prompt <ID>` or `--focus <METRIC|PRINCIPLE>` resolves in two or more languages
+and `--language` is omitted, the command errors and lists the languages to choose
+from.
+
+```bash
+code-ranker report . --language rust --output.scorecard
+```
+
+### `--config languages.<lang>.<key>=value`
+
+The generic inline override of any plugin-config key, for scalars and comma-lists
+(deep nested tables / arrays-of-tables go through a `[languages.<lang>]` TOML
+block). `languages.base.*` targets the virtual base language shared by all.
+
+```bash
+code-ranker check . --config languages.rust.metrics.unsafe.warning=5
+code-ranker check . --config languages.base.skip_dirs=vendor,build
 ```
 
 ### `--config <FILE>`
@@ -357,12 +443,14 @@ code-ranker check . --config ci/strict.toml
 ### `--export-full-config <PATH>`
 
 A `report` flag: instead of analyzing, write the **full effective configuration**
-to `PATH` and exit. The file has two sections — `[project]` (built-in defaults ⊕
-your `--config`) and `[plugin]` (the `--plugin` language's merged config: principles,
-thresholds, vocab). A diagnostic view of every value you can override.
+to `PATH` and exit. The file has a `[project]` section (built-in defaults ⊕ your
+`--config`) plus one `[languages.<lang>]` section for **every registered language**
+(not only the active ones) — each language's merged config: principles, thresholds,
+vocab, with your `[languages.base]` / `[languages.<lang>]` overrides folded in. A
+diagnostic view of every value you can override, for every language the tool knows.
 
 ```bash
-code-ranker report . --plugin python --config ci/strict.toml \
+code-ranker report . --plugins python --config ci/strict.toml \
   --export-full-config /tmp/effective.toml
 ```
 

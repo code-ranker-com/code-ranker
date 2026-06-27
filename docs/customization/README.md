@@ -13,7 +13,7 @@ There are two places config lives — know which one you want:
 
 | Layer | File | Who edits it | What it controls |
 |---|---|---|---|
-| **Project** | `code-ranker.toml` (in your repo) | you, per project | custom `[metrics]`, `[rules]` thresholds/cycles/**checks**, `[report]` views, `[principles]`, `[ignore]`, `[levels]`, plugin/output |
+| **Project** | `code-ranker.toml` (in your repo) | you, per project | custom `[metrics]`, `[rules]` thresholds/cycles/**checks**, `[report]` views, `[principles]`, `[ignore]`, `[levels]`, `plugins`, `[languages.<lang>]` / `[languages.base]` overrides, output |
 | **Language** | `<lang>.toml` (shipped in the binary) | a language plugin author | the node-kind vocabulary, principles, and the **report list overrides** (`[report]`) |
 
 Custom metrics and thresholds are **project** config (runtime). The report
@@ -237,7 +237,11 @@ line below it.
 ### 1.5 Other project keys (brief)
 
 ```toml
-plugin = "rust"                    # or "auto" (marker detection)
+plugins = ["rust"]                 # or omit for auto-detect-all
+[languages.rust]                   # per-language override of ANY plugin key
+metrics.unsafe_density = { formula_cel = "items > 0.0 ? unsafe / items : 0.0" }
+[languages.base]                   # shared base applied to every language first
+metrics.comment_ratio = { formula_cel = "sloc > 0.0 ? cloc / sloc * 100.0 : 0.0" }
 [ignore]
 paths = ["generated/**"]           # globs pruned before metrics/cycles
 tests = true                       # drop the language's test files
@@ -245,6 +249,15 @@ dev_only_crates = true             # (rust) drop dev-only dependency nodes
 [levels]
 functions = true                   # also emit the per-function level
 ```
+
+`plugins` is the array of active languages; omit it (or leave it empty) to
+auto-detect every language present in the workspace. Each `[languages.<lang>]`
+block overrides **any** key from that language's built-in TOML — not just metrics:
+`extensions`, `detect_markers`, `skip_dirs`, `edge_kinds`, `node_attributes`,
+`[[principles]]`, `metrics`, `levels`, … — deep-merged onto the language's
+effective config. `[languages.base]` is a **virtual** base language: its overrides
+apply to every real language first, then a specific `[languages.<lang>]` wins over
+it. See [config-resolution.md](config-resolution.md) for the full precedence.
 
 ### 1.6 Report views — `[report]` (surface a custom metric in the table / card / stats)
 

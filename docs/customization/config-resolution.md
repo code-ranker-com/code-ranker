@@ -55,7 +55,7 @@ What it carries today:
 
 | Section | Default |
 |---|---|
-| `plugin` | unset → `auto` (marker detection) |
+| `plugins` | unset / empty → auto-detect every language present |
 | `[ignore]` | `paths = []`, `tests = true`, `dev_only_crates = false`, `gitignore/ignore_files/hidden = true` |
 | `[rules.cycles]` | `mutual = true`, `chain = true` (strict) |
 | `[rules.thresholds.file]` | empty — **no per-file limits by default** |
@@ -95,6 +95,33 @@ files the log shows the merge order: `a.toml ⊕ b.toml`.
 > (`{add,remove,replace,clear,prepend}`) composes across file layers too — a later
 > `--config` file can *patch* a list an earlier one set, not just replace it.
 
+### The per-language overlay — `[languages.<lang>]` and `[languages.base]`
+
+A project's `code-ranker.toml` can override **any** key of a language's built-in
+config — not just `[metrics]` — through two per-language layers:
+
+- **`[languages.base]`** — a **virtual** base language. It is not a real plugin;
+  its overrides apply to **every** active language as a shared base.
+- **`[languages.<lang>]`** — overrides for one specific language. It wins over
+  `[languages.base]`.
+
+Either block overrides any key the language's TOML carries (`extensions`,
+`detect_markers`, `skip_dirs`, `edge_kinds`, `node_attributes`, `[[principles]]`,
+`metrics`, `levels`, …), deep-merged onto that language's effective config with the
+[same merge semantics](#merge-semantics) (the list-op DSL composes here too). The
+**effective per-language plugin config** therefore resolves low→high:
+
+```
+  defaults.toml  ⊕  [family base.toml]  ⊕  <lang>.toml      (built-in, embedded)
+      ⊕  [languages.base]  ⊕  [languages.<lang>]            (user, project config)
+      ⊕  --config languages.base.*  ⊕  --config languages.<lang>.*   (CLI)
+```
+
+So the built-in language chain (§4) is the base, the user's `[languages.base]`
+then `[languages.<lang>]` overlay it, and the matching inline `--config` flags ride
+highest. An overridden `detect_markers` / `extensions` feeds back into
+auto-detection — a language is auto-detected against its **effective** config.
+
 ### Layers 4 & 5 — the transient per-run flag overrides
 
 After the file layers are merged and deserialized into the `Config`, two more
@@ -117,9 +144,10 @@ Every CLI flag below overrides the corresponding TOML key for the current run.
 
 | Console flag | Overrides TOML key | Notes |
 |---|---|---|
-| `--plugin rust\|python\|…\|auto` | `plugin` | beats both the config value and auto-detection |
+| `--plugins <a,b,…>` (comma-separated / repeatable) | `plugins` | the active-language list; replaces config `plugins` and beats auto-detection |
+| `--language <name>` | *(no TOML key)* | `report` / `recommend` only — picks which single language the scorecard + prompt focus on; required only when a `--prompt <ID>` / `--focus` resolves in 2+ languages |
 | `--config FILE` (repeatable) | *(whole file layer)* | layered in CLI order, later wins; skips auto-discovery |
-| `--config KEY=VALUE` (repeatable) | the named key | allowlisted keys only — see §3 |
+| `--config KEY=VALUE` (repeatable) | the named key | allowlisted keys + `languages.<lang>.<key>` — see §3 |
 | `--ignore GLOB` (repeatable) | `[ignore] paths` | **appends** to the configured globs |
 | `--cycle-rule KIND=on\|off\|N` | `[rules.cycles] mutual\|chain` | `on`/`0` = strict, `off` = disabled, `N` = allow up to N |
 | `--threshold file.METRIC=N` | `[rules.thresholds.file] METRIC` | `N` accepts `_` separators + `K/M/G` suffixes |
@@ -148,7 +176,8 @@ this list (e.g. a custom `[metrics.<key>]`, a `[report]` view, a `[rules.checks]
 
 | Inline key | Type | Effect |
 |---|---|---|
-| `plugin` | string | pin the plugin |
+| `plugins` | csv | set the active-language list (same as `--plugins`) |
+| `languages.<lang>.<key>` | scalar / csv | override any plugin key for one language (or `languages.base.<key>` for the shared base); scalars and comma-lists only — deep nested tables / arrays-of-tables need the `[languages.<lang>]` TOML block |
 | `ignore.tests` (alias `ignore.test_modules`) | on/off | drop test files |
 | `ignore.dev_only_crates` | on/off | (rust) drop dev-only dependency nodes |
 | `ignore.gitignore` / `ignore.ignore_files` / `ignore.hidden` | on/off | walk filters |
@@ -248,12 +277,14 @@ principle catalog or edge-kind vocab.
 Don't guess what won — dump it:
 
 ```bash
-# layers 1–3 for [project] + the merged [plugin] config, to a file
+# layers 1–3 for [project] + the merged [languages.<lang>] config (every language), to a file
 code-ranker report . --export-full-config effective.toml
 ```
 
 `--export-full-config` writes `[project]` (built-in defaults ⊕ `--config` files)
-plus `[plugin]` (the merged language config for the active `--plugin`). It does
+plus a `[languages.<lang>]` block for **every registered language** (not only the
+active ones — the merged effective config for each, including its
+`[languages.<lang>]` / `[languages.base]` overlay). It does
 **not** include the transient layer-4/5 flag overrides — those are per-run only.
 
 See also: [customization guide](README.md) · [CLI reference](../code-ranker-cli/CLI.md).

@@ -189,6 +189,14 @@ formula_cel = "agg('cognitive', 'p90', 'not_empty')"
 > Strings/paths are **not** in scope in a metric formula — only numbers. Path and
 > string predicates belong in `[rules.checks]`.
 
+> **Per-language metrics.** A `[metrics.<key>]` set at the top level applies to
+> every language. To define a metric for one language only, put it under
+> `[languages.<lang>].metrics` (e.g. `[languages.rust].metrics.unsafe_density`);
+> to share one across all languages as a base, use `[languages.base].metrics`. The
+> CEL, scope, and field semantics are identical — only the scope of the override
+> differs. (See [config-resolution.md](config-resolution.md) for the full
+> per-language precedence.)
+
 ### 4.2 `[rules.checks.<id>]` predicates
 
 **Node attributes** — every attribute on the file node, under its own key, in its

@@ -38,7 +38,8 @@ and `report` — both taking a single polymorphic positional `[input]` (a direct
 to **analyze**, or a `.json`/`.html` snapshot to **read**, via
 `analyze_input` → `is_snapshot_input`); a third `docs` subcommand (`docs.rs`) runs **no
 analysis** and takes **no `[input]`** — a reference doc is **strictly per-language**, so
-it resolves the language plugin (`plugin::resolve_plugin`) and, for every subject but
+it resolves **one** language (the singular `--plugin <name>` > the first of `plugins` >
+auto-detect, via `plugin::resolve_docs_language`) and, for every subject but
 `ai`, **fails** when none resolves (the same diagnostic `check` / `report` give). It
 then builds the principle + metric + category specs from the plugin's own level specs
 (`plugin::levels`, so a language metric like Rust's `unsafe` surfaces) layered with the
@@ -63,7 +64,7 @@ the plugins alike — honours it; stdout artifacts are never affected.
 
 The shared analysis core (`analyze_input`, used by both `check` and `report`)
 either reads an embedded snapshot (`.json`/`.html` input — `analyze_from_snapshot`,
-which rejects `--plugin`/`--ignore` since there is nothing to analyze) or
+which rejects `--plugins`/`--ignore` since there is nothing to analyze) or
 analyzes a directory (`analyze_directory`, in `pipeline.rs`). For a directory it
 loads layered config (the `config/` module): the **built-in defaults** — the
 embedded `config/defaults.toml`, the single source of every default value — are
@@ -75,10 +76,14 @@ overrides on top. Merging reuses `code_ranker_plugin_api::toml_merge::deep_merge
 inherits the rest, and op-table list overrides — `{add,remove,replace,clear,…}` —
 apply to arrays); `Config::default()` itself is just `defaults.toml` parsed, so no
 default value is hardcoded in Rust. It then
-resolves the plugin name (`plugin::resolve_plugin`: CLI `--plugin` → config
-`plugin` → marker auto-detect, all under `auto`); invokes the selected built-in plugin
-(`rust` / `python` / `javascript` / `typescript` / `go` / `c` / `cpp` / `csharp`
-/ `markdown`) via `plugin::analyze`, getting
+resolves the **active language set** (`plugin::resolve_plugins`, precedence low→high,
+each level replacing the lower: auto-detect → config `plugins` → CLI `--plugins`;
+auto-detect runs every plugin whose `detect()` matches its **effective** config, so
+multiple matches are normal and there is no "ambiguous project" error). Before analysis
+it asserts the active plugins' file sets are **disjoint** (one file ↔ one language) and
+errors on an extension claimed by two. For **each** active language it invokes the
+built-in plugin (`rust` / `python` / `javascript` / `typescript` / `go` / `c` / `cpp`
+/ `csharp` / `markdown`) via `plugin::analyze`, getting
 a structural `api::Graph` + the plugin's `Level`s. It then runs the orchestrator
 pipeline (see [§3.6 in the main DESIGN](../DESIGN.md#36-interactions--sequences)):
 the plugin's `metrics()` step (per-language complexity metrics, computed by the
@@ -93,8 +98,9 @@ tests during the walk, since what counts as a test is language-specific), then
 graph-derived `hk`) and `compute_stats` over the level's flow edges. Finally it assembles the `LevelGraph` — merging the plugin's
 structural attribute specs with `code_ranker_graph::metric_specs` and
 `code_ranker_graph::coupling_specs`, then **pruning** the node/edge attribute
-dictionaries, edge kinds and groups to what is actually present — and wraps it in
-the snapshot's `graphs` map under `"files"`.
+dictionaries, edge kinds and groups to what is actually present — and stores it under
+that language's entry in the snapshot's `languages.<lang>.graphs` map under `"files"`.
+A language that yields an empty graph is dropped from the map.
 
 - **`check`** (the linter): runs the shared analysis core, then
   `config::check_violations` over cycle checks (`--cycle-rule <KIND=on|off|N>`,
@@ -142,7 +148,9 @@ the snapshot's `graphs` map under `"files"`.
   annotations / locationless results. Each `sarif` result also carries a
   `partialFingerprints` entry (`codeRankerRuleLocation/v1` = `<rule>:<location>`,
   line-independent) — the same `(rule, location)` signature the `--baseline` gate
-  matches on — so a consumer dedupes the finding across runs when code shifts. With
+  matches on. Every `Violation` carries a `language` field, and the
+  diagnostics / SARIF / codequality dedup key is `(language, graph, rule, location)`,
+  so a consumer dedupes the finding across runs when code shifts. With
   `--suggest-config`, `human` output then calls `print_current_values` — the
   current per-kind cycle counts and the per-file metric maxima
   as paste-ready `code-ranker.toml` blocks for baselining (off by default;
@@ -305,33 +313,33 @@ snapshot to the path selected by `--output.json[.path]` (default
 
 ```bash
 # 1. Default snapshot only: .code-ranker/20260522-112233-a3f.json ({ts}-{git-hash-3})
-code-ranker report . --plugin rust --output.json
+code-ranker report . --plugins rust --output.json
 
 # 2. Explicit path — for a named state
-code-ranker report . --plugin rust --output.json.path=.code-ranker/before-refactor.json
+code-ranker report . --plugins rust --output.json.path=.code-ranker/before-refactor.json
 ```
 
 **Python (built-in)**
 
 ```bash
 # 1. Default dated snapshot
-code-ranker report ~/projects/my-lib --plugin python --output.json
+code-ranker report ~/projects/my-lib --plugins python --output.json
 
 # 2. Explicit path for a named state
-code-ranker report . --plugin python --output.json.path=.code-ranker/v2.4.0.json
+code-ranker report . --plugins python --output.json.path=.code-ranker/v2.4.0.json
 
 # 3. Snapshot to stdout for a pipe
-code-ranker report . --plugin python --output.json.path=stdout | jq '.plugin'
+code-ranker report . --plugins python --output.json.path=stdout | jq '.plugins'
 ```
 
 **JavaScript / TypeScript (built-in)**
 
 ```bash
 # 1. Default dated snapshot
-code-ranker report ~/projects/frontend --plugin javascript --output.json
+code-ranker report ~/projects/frontend --plugins javascript --output.json
 
 # 2. Named snapshot, ignoring node_modules and dist
-code-ranker report . --plugin javascript \
+code-ranker report . --plugins javascript \
     --output.json.path=.code-ranker/src-only.json \
     --ignore node_modules --ignore dist
 ```
@@ -345,14 +353,14 @@ HTML viewer together into `.code-ranker/`.
 
 ```bash
 # 1. Snapshot + viewer side by side, in .code-ranker/ (default: both json + html)
-code-ranker report . --plugin rust
+code-ranker report . --plugins rust
 open .code-ranker/20260522-112233-a3f.html   # default {ts}-{git-hash-3}.html
 
 # 2. Only the HTML viewer, to docs/ for sharing with the team
-code-ranker report . --plugin rust --output.html.path=docs/coupling.html
+code-ranker report . --plugins rust --output.html.path=docs/coupling.html
 
 # 3. CI: artifacts into the CI folder
-code-ranker report . --plugin rust \
+code-ranker report . --plugins rust \
     --output.html.path=/artifacts/code-ranker/report-pr-1234.html
 ```
 
@@ -385,7 +393,7 @@ code-ranker check . --baseline /artifacts/code-ranker/main.json --output-format 
 
 ```bash
 # Step 1+2: snapshot the baseline + open the viewer (report writes both)
-code-ranker report . --plugin rust --output.json.path=.code-ranker/before.json
+code-ranker report . --plugins rust --output.json.path=.code-ranker/before.json
 open .code-ranker/20260522-112233-a3f.html   # {ts}-{git-hash-3}.html, inspect the heavy nodes
 
 # -- Step 3: the user makes changes (by hand or with an AI) --
@@ -394,7 +402,7 @@ open .code-ranker/20260522-112233-a3f.html   # {ts}-{git-hash-3}.html, inspect t
 code-ranker check . --baseline .code-ranker/before.json --output-format json
 
 # Step 4b: render the HTML diff against the baseline in one run
-code-ranker report . --plugin rust --baseline .code-ranker/before.json
+code-ranker report . --plugins rust --baseline .code-ranker/before.json
 open .code-ranker/my-crate-20260522-112233-diff.html   # --baseline names it -diff.html; a diff view + verdict
 ```
 

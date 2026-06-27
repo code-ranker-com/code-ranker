@@ -1,9 +1,11 @@
 # Node JSON Schema
 
 Reference for the node objects emitted in code-ranker snapshot files
-(`.code-ranker/{ts}-{git-hash-3}.json`, `schema_version: "4.0"`), under
-`graphs.files.nodes`. There is a single graph level — `files` — so every node is
-either a source `file` or a third-party `external` library.
+(`.code-ranker/{ts}-{git-hash-3}.json`, `schema_version: "5.0"`), under
+`languages.<lang>.graphs.files.nodes`. The snapshot carries one entry per analyzed
+language under `languages`; each language has its own `graphs` map with one level —
+`files` — (optionally also `functions`), so every node is either a source `file` or
+a third-party `external` library.
 
 The model is a **generic property graph**: a node has a free-form string `kind`,
 a `name`, and a **flat attribute map** (no nested `complexity` / `coupling` /
@@ -195,9 +197,6 @@ The matching SCC is also listed in the level's `cycles` array.
 | `"mutual"` | two nodes that directly depend on each other (SCC size = 2) |
 | `"chain"` | cycle involving three or more nodes (SCC size ≥ 3) |
 
-> **Renamed.** This attribute was `cycle_kind` in the old nested schema; in
-> schema `"3"` it is the flat key `cycle`.
-
 ---
 
 ## Metric attributes (flat)
@@ -284,7 +283,7 @@ Non-flow edges (`contains`, `reexports`, `super`) are excluded from all of these
 
 ## Edges
 
-Edges live in `graphs.files.edges`, each a flat object:
+Edges live in `languages.<lang>.graphs.files.edges`, each a flat object:
 
 ```json
 { "source": "<node-id>", "kind": "uses | reexports | contains | super", "target": "<node-id>", "line": 12 }

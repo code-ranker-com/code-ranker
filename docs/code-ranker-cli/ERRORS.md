@@ -43,6 +43,25 @@ raise its threshold rather than downgrading it.
 `--top N` limits only how many findings are *reported* (worst-first by breach
 severity); it never changes the exit code.
 
+## Language resolution errors
+
+These are operational errors (exit `1`), reported as a plain message — not a rule
+id. `code-ranker` analyzes every relevant language in one run, so a project with
+several languages is **normal** and never an error; resolution fails only in these
+cases:
+
+| Error | When | Fix |
+|-------|------|-----|
+| **could not determine any language** | Auto-detect matches no plugin in the workspace (no `Cargo.toml` / `pyproject.toml` / `package.json` / … marker, or all overridden markers miss). | Name the language(s) explicitly: `plugins = ["<name>"]` in `code-ranker.toml`, or `--plugins <name>`. |
+| **legacy `plugin` key** | The old scalar `plugin = "..."` key appears in `code-ranker.toml` / `Cargo.toml` metadata. | Replace it with the array `plugins = ["<name>", …]`. |
+| **extension claimed by two plugins** | Two active plugins claim the same file extension (e.g. `.h` by both `c` and `cpp`). Raised at startup, before analysis — one file maps to exactly one language. | Drop one language from `plugins`, or override `extensions` in `[languages.<lang>]` so the file sets are disjoint. |
+| **invalid `--plugins`** | A name in `--plugins` (or the config `plugins` array) is not a known language. | Use a built-in language name (`rust`, `python`, `javascript`, …). |
+
+For `report` the `scorecard` / `prompt` are **per language**: when a `--focus
+<METRIC\|PRINCIPLE>` or `--prompt <ID>` selector resolves in two or more languages
+and `--language` is omitted, the command errors and lists the matching languages —
+pass `--language <name>` to choose one.
+
 ## Threshold scopes
 
 A threshold rule id is `threshold.file.<metric>`. There is a single graph
@@ -132,7 +151,7 @@ group are present in every format.
 | Format | Identifies the rule as | Notes |
 |--------|------------------------|-------|
 | `human` (default) | the block header | Rich, self-contained blocks as shown above. |
-| `json` | `"rule"` + `"group"` fields | Array of `{rule, group, graph, location, message, weight}`. |
+| `json` | `"rule"` + `"group"` fields | Array of `{rule, group, language, graph, location, message, weight}`. |
 | `github` | annotation title (`code-ranker threshold.file.loc`) | GitHub Actions `::error` workflow commands. |
 | `sarif` | `ruleId` | SARIF 2.1.0; the rules that fired are described under `tool.driver.rules` (id, group, rationale, helpUri). For GitHub code scanning / GitLab ≥18.11. |
 | `codequality` | `check_name` | GitLab Code Quality (CodeClimate) array; each issue has `description`, `severity`, `location.path` + `lines.begin`, and a stable `fingerprint` (`rule:location`). For the GitLab MR widget (GA). |

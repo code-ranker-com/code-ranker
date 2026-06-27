@@ -24,7 +24,7 @@ exact command per entry (triage, CI gates, focused checks, baselines, AI prompts
 |---|---|
 | [`check`](#check) | A **verdict**: evaluates thresholds, cycle rules, and (with `--baseline`) regressions, prints diagnostics, and **exits non-zero** on violation. Writes no files. |
 | [`report`](#report) | **Artifacts**: an HTML viewer and/or a JSON snapshot. With `--baseline`, the HTML becomes a diff with a verdict. Can also emit a console **scorecard** triage and an AI **prompt** (see [Recommendations](#recommendations-scorecard--prompt)). Always exits `0`. |
-| [`docs`](#docs) | A reference doc for a `<subject>` to stdout. Never analyzes, always exits `0` (an unknown subject exits non-zero). Resolves a language plugin (explicit `--plugin` > the `plugin` config key > none) to choose what to print; serves the AI playbook (`docs ai`), metric/principle indexes, category and metric spec cards, and full principle docs. |
+| [`docs`](#docs) | A reference doc for a `<subject>` to stdout. Never analyzes, always exits `0` (an unknown subject exits non-zero). Resolves a single language (explicit `--plugin` > the first of `plugins` > auto-detect) to choose what to print; serves the AI playbook (`docs ai`), metric/principle indexes, category and metric spec cards, and full principle docs. |
 
 There are two analysis commands, split by *what they emit*: `check` produces an exit
 code (a CI gate), `report` produces files (a snapshot and a viewer). Both take the same
@@ -90,14 +90,16 @@ code-ranker check  snap.json --baseline main.json
 
 ## Common analysis options
 
-`--plugin` and `--ignore` govern analysis itself and apply **only when `[input]` is a
+`--plugins` and `--ignore` govern analysis itself and apply **only when `[input]` is a
 directory** — they are rejected with a snapshot input. `--config` is always accepted:
-its rule and output keys apply to snapshots too, while analysis-only keys (e.g. `plugin`)
-are ignored when reading one.
+its rule and output keys apply to snapshots too, while analysis-only keys (e.g.
+`plugins`) are ignored when reading one.
 
 | Flag | Meaning |
 |---|---|
-| `--plugin <name\|auto>` | Plugin to use: `rust`, `python`, or `javascript` (covers TypeScript). `auto` (default) resolves the language automatically — see [Plugin resolution](#plugin-resolution). |
+| `--plugins <a,b,…>` | Active languages, comma-separated and/or repeatable: `rust`, `python`, `javascript` (covers TypeScript), … . Overrides the config `plugins` array. Omitted everywhere ⇒ auto-detect **every** language present and analyze them all in one run — see [Plugin resolution](#plugin-resolution). |
+| `--language <name>` | (`report` only) Focus the `scorecard` / `prompt` on one language. Not required when only one language is present; required when a `--prompt`/`--focus` selector resolves across several. See [Recommendations](#recommendations-scorecard--prompt). |
+| `--config languages.<lang>.<key>=value` | Inline override of any plugin-config key (scalars / comma-lists). `languages.base.*` targets the shared base language. Deep tables go through a `[languages.<lang>]` TOML block — see [Config](#config). |
 | `--config <PATH \| KEY=VALUE>` | Repeatable. Load config from a file path, **or** override one setting inline (`KEY=VALUE`). Multiple files layer in command-line order (**last wins**) over the built-in defaults; inline `KEY=VALUE` applies after all files; passing any file disables auto-discovery of `code-ranker.toml`. See [Config](#config). |
 | `--ignore <glob>` | Repeatable. Glob to exclude paths from analysis. Merged with config-file globs. |
 | `--git.<field> <VALUE>` | Override one of the snapshot's git metadata fields instead of reading it from `git`. See [Git metadata overrides](#git-metadata-overrides). |
@@ -211,7 +213,7 @@ code-ranker check . --focus-path crates/code-ranker-graph --focus TST
 code-ranker check
 
 # Python project: per-file budgets — cap any single file
-code-ranker check ./api --plugin python \
+code-ranker check ./api --plugins python \
   --threshold file.cognitive=25 --threshold file.loc=300
 
 # CI gate with machine-readable annotations; allow up to 7 chain cycles
@@ -313,23 +315,26 @@ no analysis runs — as one TOML document with two top-level sections:
   baked into the binary) **deep-merged** with the discovered / `--config` file. Shows
   every effective `ignore` / `rules` / `output` / `levels` value, including the ones you
   did not set (inherited from the defaults).
-- `[plugin]` — the active plugin's fully-merged language config (its inheritance chain
-  `defaults.toml ⊕ [base] ⊕ <lang>.toml`): principles, node/edge
-  kinds, the metric-engine role tables, etc.
+- one `[languages.<lang>]` section for **every registered language** (not only the
+  active ones) — that language's fully-merged config (its inheritance chain
+  `defaults.toml ⊕ [base] ⊕ <lang>.toml`, then your `[languages.base]` /
+  `[languages.<lang>]` overrides): principles, node/edge kinds, the metric-engine role
+  tables, etc.
 
-It honours `--plugin` and `--config`, so you can preview any combination:
+It honours `--plugins` and `--config`, so you can preview any combination:
 
 ```sh
 # what `report` would use here, with my overrides folded in
 code-ranker report . --config ci/strict.toml --export-full-config /tmp/full.toml
 
 # the full Python plugin config (principles, vocab)
-code-ranker report . --plugin python --export-full-config /tmp/python.toml
+code-ranker report . --plugins python --export-full-config /tmp/python.toml
 ```
 
-It is a **diagnostic view** of every parameter you can override — because the two
-sections use different schemas (and `principles` differs between the project and plugin
-shapes), the file is not meant to be fed back as a single `--config`.
+It is a **diagnostic view** of every parameter you can override — because the
+project and language sections use different schemas (and `principles` differs
+between the project and language shapes), the file is not meant to be fed back as a
+single `--config`.
 
 ```sh
 # default: snapshot + viewer in .code-ranker/
@@ -457,6 +462,13 @@ Both rank modules with the same engine. The `scorecard` is steered by `--focus`
 a principle); without it the prompt auto-targets the single worst module. Both **require
 `--top 1`** for the `prompt`.
 
+Both are **per language**: in a multi-language report use `--language <name>` to pick
+which language the scorecard/prompt covers. It is optional when only one language is
+present. When a `--focus <METRIC|PRINCIPLE>` or `--prompt <ID>` selector resolves in
+two or more languages and `--language` is omitted, the command errors and lists the
+matching languages (e.g. *"`HK` found in languages rust, markdown — pass `--language
+<name>`"*).
+
 > **Advisory, not a gate.** Unlike [`check`](#check), these never fail the build and carry
 > no exit code. They surface the worst hotspots against **the same thresholds `check`
 > enforces** — the `[rules.thresholds.file]` limits *you* configure — so the report shows
@@ -578,7 +590,9 @@ code-ranker report . --output.prompt --top 1
 `--prompt <ID>` is the **named** counterpart of `--output.prompt`: it prints that
 principle/metric's fix-prompt to stdout and exits (shape the module list with `--top N` /
 `--focus-path`). It accepts a principle id (`SRP`, `ADP`) or a metric key (`hk`,
-`cyclomatic`), case-insensitive, and writes no artifacts.
+`cyclomatic`), case-insensitive, and writes no artifacts. If the `<ID>` resolves in
+more than one active language, pass `--language <name>` to pick one (the command
+otherwise errors and lists the candidates).
 
 ```sh
 code-ranker report . --prompt HK --top 1   # HK fix-prompt for the worst module
@@ -591,16 +605,16 @@ e.g. `code-ranker docs HK` or `code-ranker docs ai`.
 ## `docs`
 
 ```
-code-ranker docs <subject> [--plugin <name|auto>] [--config <PATH|KEY=VALUE>]
+code-ranker docs <subject> [--plugin <name>] [--config <PATH|KEY=VALUE>]
 ```
 
 `code-ranker docs <subject>` prints a reference doc to stdout. It **never analyzes** and
 takes **no `[input]` positional** — config is auto-discovered from the current directory,
-and `--plugin` (explicit `--plugin` > the `plugin` config key > auto-detect from cwd
-markers) resolves which language's docs to serve. A reference doc is **strictly
-per-language**, so every subject but `ai` **requires a resolved plugin**: with none (no
-marker, or ambiguous markers) the command fails with the same diagnostic `check` /
-`report` give. An unknown subject exits non-zero. Subject matching is
+and the **singular** `--plugin <name>` flag (explicit `--plugin` > the first of the
+`plugins` config/CLI list > auto-detect from cwd markers) resolves the **one** language
+whose docs to serve. A reference doc is **strictly per-language**, so every subject but
+`ai` **requires a resolved language**: with none detected the command fails with the same
+diagnostic `check` / `report` give. An unknown subject exits non-zero. Subject matching is
 **separator/case-insensitive** — `fan_in`, `Fan-in`, and `FAN in` all resolve the same
 metric.
 
@@ -608,7 +622,7 @@ metric.
 
 | `<subject>` | What it prints |
 |---|---|
-| `ai` | The offline **AI-agent playbook** (from the embedded `base/AI.md`). With a plugin resolved → the full playbook **plus** the principle/metric catalog; with none → a brief intro and how to pick a plugin. |
+| `ai` | The offline **AI-agent playbook** (from the embedded `base/AI.md`). With a language resolved → the full playbook **plus** the principle/metric catalog; with none → a brief intro and how to pick a language. |
 | `metrics` | An **index of every metric**, grouped by category. |
 | `principles` | An **index of every design principle**. |
 | a metric **category** (`loc`, `complexity`, `halstead`, `maintainability`, `coupling`) | The category's label/description **plus** its member metrics. |
@@ -616,16 +630,16 @@ metric.
 | a **principle** id (`SRP`, `ADP`, … including project-defined `[principles.<ID>]`) | The principle's **full doc** (or a synthetic card for a doc-less custom principle). |
 | *(none, or an unknown subject)* | A **catalog of every subject**. No subject exits `0`; an unknown subject exits non-zero. |
 
-`docs ai` always succeeds — even where `report` / `check` would stop with *"ambiguous
-project … pass --plugin to choose"*: with a plugin resolved it prints the full playbook +
-catalog (the full project-free playbook); with none it prints a
+`docs ai` always succeeds — even where `report` / `check` would stop with *"could not
+determine any language … pass --plugins to choose"*: with a language resolved it prints
+the full playbook + catalog (the full project-free playbook); with none it prints a
 brief product intro **plus** a *Select a language* section (how to choose one with
-`--plugin <name>` or the `plugin` key in `code-ranker.toml`, and the built-ins), withholding
-the catalog until a language is chosen.
+`--plugin <name>` or the `plugins` array in `code-ranker.toml`, and the built-ins),
+withholding the catalog until a language is chosen.
 
 ```sh
-code-ranker docs                # the catalog of every subject (needs a resolved plugin)
-code-ranker docs ai             # auto-detect: full playbook, or how to pick a plugin
+code-ranker docs                # the catalog of every subject (needs a resolved language)
+code-ranker docs ai             # auto-detect: full playbook, or how to pick a language
 code-ranker docs ai --plugin rust   # force a language → the full playbook + catalog
 code-ranker docs hk             # the HK metric card + its full doc, to stdout
 code-ranker docs metrics        # the metric index, grouped by category
@@ -676,28 +690,61 @@ without re-analyzing anything — the JSON/HTML snapshot stands in for the code.
 
 ## Plugin resolution
 
-With `--plugin auto` (the default), the plugin is resolved in this order (applies only
-when `[input]` is a directory):
+`code-ranker` analyzes **all** relevant languages in one run. The set of active
+languages is resolved by this precedence (low → high), where each level **fully
+replaces** the lower one (no merge):
 
-1. **Explicit `--plugin <name>`** on the command line (any value other than `auto`) wins.
-2. Otherwise the **`plugin` key in the config file** (`code-ranker.toml` /
-   `Cargo.toml#metadata.code-ranker`), if set and not `auto`.
-3. Otherwise **auto-detect by project markers** in the workspace root:
-   - `Cargo.toml` → `rust`
-   - `pyproject.toml` / `setup.py` / `setup.cfg` → `python`
-   - `package.json` / `tsconfig.json` → `javascript`
-4. If **more than one** marker matches, `code-ranker` errors and asks you to disambiguate
-   with an explicit `--plugin`. If **no** marker matches, it errors with the same hint.
+1. **Auto-detect** (lowest) — every plugin whose `detect()` matches the workspace.
+2. **Config `plugins`** — the `plugins = [...]` array in `code-ranker.toml` /
+   `Cargo.toml#metadata.code-ranker`.
+3. **Console `--plugins`** (highest) — the comma list / repeated flag.
+
+So a list set in config **or** on the console is used verbatim; auto-detect runs
+only when no list is set anywhere; if both config and console set one, the console
+wins (applies only when `[input]` is a directory).
+
+**Auto-detect** runs every plugin whose `detect()` matches, evaluated against its
+**effective** config — so an overridden `detect_markers` / `extensions` (via
+`[languages.<lang>]` or `--config languages.<lang>.*`) changes what is detected. The
+default markers are:
+
+- `Cargo.toml` → `rust`
+- `pyproject.toml` / `setup.py` / `setup.cfg` → `python`
+- `package.json` / `tsconfig.json` → `javascript`
+
+**Multiple matches are normal** — they are all analyzed and merged into one report;
+there is no "ambiguous project" error. A language that yields an empty graph is
+silently dropped.
+
+**Invariant: one file ↔ exactly one language.** The active plugins' file sets are
+disjoint.
+
+Errors:
+
+- **No language detected** — auto-detect matches nothing: *"could not determine any
+  language in `<workspace>`; specify `plugins = ["<name>"]` in code-ranker.toml or
+  `--plugins <name>`"*.
+- **Legacy `plugin` key** — the scalar `plugin = "..."` config key is not recognized;
+  the error points to `plugins = [...]`.
+- **Extension conflict** — two active plugins claim the same file extension; a startup
+  error (before analysis), e.g. *"extension `.h` is claimed by both `c` and `cpp` —
+  adjust `extensions`/`plugins`"*.
+- **Invalid `--plugins`** — an unknown language name in the list.
+
+See [ERRORS.md](ERRORS.md) for the full diagnostics.
 
 ## HTML viewer
 
 The HTML report is **self-contained**: the viewer app (Dagre graph layout, pan/zoom,
 a sortable node table for the single Files view, and the prompt-generator panel whose
-principle buttons are read from `snapshot.principles` — the 13 design principles ADP / SRP /
-OCP / LSP / ISP / DIP / DRY / KISS / LoD / MISU / CoI / YAGNI / CPX) **and the snapshot
-data** are all embedded in
-the one file. External library nodes render in a distinct amber colour with dashed
-edges. No network, no telemetry — `open` it straight from disk.
+principle buttons are read from `snapshot.languages.<lang>.principles` — the 13 design
+principles ADP / SRP / OCP / LSP / ISP / DIP / DRY / KISS / LoD / MISU / CoI / YAGNI /
+CPX) **and the snapshot data** are all embedded in
+the one file. A **language switcher** in the header (above the Files/Functions level
+switcher) shows the active language and switches the whole report; it is hidden when
+the report covers a single language. External library nodes render in a distinct
+amber colour with dashed edges. No network, no telemetry — `open` it straight from
+disk.
 
 The data is embedded as `<script type="application/json">` tags (`cs-baseline` /
 `cs-current`), which the viewer reads on load and which `--baseline` can extract back out —
@@ -734,8 +781,8 @@ source on the git host in a new tab.
 
 Settings merge from several sources; **higher priority wins**:
 
-1. CLI flags (`--threshold`, `--ignore`, `--output.<fmt>.path`, …)
-2. `--config KEY=VALUE` inline overrides
+1. CLI flags (`--plugins`, `--threshold`, `--ignore`, `--output.<fmt>.path`, …)
+2. `--config KEY=VALUE` inline overrides (including `--config languages.<lang>.<key>=value`)
 3. `--config <file>` — repeatable; multiple files layer in command-line order
    (last wins), and any file disables the `code-ranker.toml` auto-discovery below
 4. `code-ranker.toml` (cwd, then workspace root)
@@ -761,7 +808,7 @@ code-ranker report --config output.html.path=dist/report.html
 | Code | Meaning |
 |---|---|
 | 0 | `check` passed (no violations, or `--exit-zero`); `report` completed successfully. |
-| 1 | Any failure — a `check` violation (cycle, threshold, or regression, without `--exit-zero`) **or** a runtime error (IO / plugin failure, ambiguous-or-undetected plugin under `auto`, malformed config, analysis flags passed with a snapshot input). |
+| 1 | Any failure — a `check` violation (cycle, threshold, or regression, without `--exit-zero`) **or** a runtime error (IO / plugin failure, no language detected, an extension claimed by two plugins, a cross-language `--prompt`/`--focus` needing `--language`, malformed config, analysis flags passed with a snapshot input). |
 | 2 | Argument-parsing error (unknown flag, missing required option, bad value) — emitted by the CLI parser before any work runs. |
 
 `check` does **not** use a distinct exit code for "violation found" vs "tool

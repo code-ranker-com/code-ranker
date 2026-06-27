@@ -355,13 +355,31 @@ code-ranker report . --export-full-config .code-ranker/effective.toml
 **Analyze a Python project with a complexity budget.**
 
 ```sh
-code-ranker check ./api --plugin python --threshold file.cognitive=25
+code-ranker check ./api --plugins python --threshold file.cognitive=25
 ```
 
 **Triage a JavaScript/TypeScript project.**
 
 ```sh
-code-ranker report ./web --plugin javascript --output.scorecard
+code-ranker report ./web --plugins javascript --output.scorecard
+```
+
+**Analyze several languages in one run (every language present is auto-detected).**
+
+```sh
+code-ranker report .
+```
+
+**Restrict a mixed repo to exactly two languages.**
+
+```sh
+code-ranker check . --plugins rust,markdown
+```
+
+**Triage one language in a multi-language report.**
+
+```sh
+code-ranker report . --language rust --output.scorecard
 ```
 
 **Re-check an existing snapshot with no re-analysis (fast, offline).**

@@ -34,17 +34,18 @@ an exit code (a CI gate), `report` produces files (a snapshot and a
 viewer) — plus a small project-free `docs` command (below):
 
 ```
-code-ranker check  [input] [--plugin <name|auto>] [--baseline <snapshot>] [options]
-code-ranker report [input] [--plugin <name|auto>] [--baseline <snapshot>] [--output.<fmt>.path <path>] [options]
-code-ranker docs   <subject> [--plugin <name|auto>] [--config <PATH|KEY=VALUE>]   # reference docs (no analysis)
+code-ranker check  [input] [--plugins <a,b,…>] [--baseline <snapshot>] [options]
+code-ranker report [input] [--plugins <a,b,…>] [--language <name>] [--baseline <snapshot>] [--output.<fmt>.path <path>] [options]
+code-ranker docs   <subject> [--plugin <name>] [--config <PATH|KEY=VALUE>]   # reference docs (no analysis)
 ```
 
 The single positional `[input]` (default `.`) is **polymorphic**: a
-**directory** is analyzed in-process (run the plugin, build the graph,
+**directory** is analyzed in-process (run every active plugin, build the graphs,
 compute metrics), while a **`.json` snapshot** or **`.html` report** is
 read for its embedded snapshot — no analysis, source tree, or toolchain
-required. Analysis-only flags (`--plugin`, `--ignore`) are rejected with a
-snapshot input.
+required. Analysis-only flags (`--plugins`, `--ignore`) are rejected with a
+snapshot input. A single run analyzes **all** relevant languages and produces one
+report covering every language.
 
 - `check` is the linter: it evaluates cycle rules, thresholds, and custom
   `[rules.checks]` predicates, prints diagnostics, exits non-zero on any
@@ -59,11 +60,12 @@ snapshot input.
   view with a verdict, named `…-diff.html`.
 - `docs <subject>` prints a reference doc to stdout (an unknown subject exits
   non-zero). It runs **no analysis** and takes **no `[input]`** — config is
-  auto-discovered from the current directory, and `--plugin` (explicit > the `plugin`
-  config key > auto-detect from cwd markers) resolves which language's docs to serve.
+  auto-discovered from the current directory, and the **singular** `--plugin <name>`
+  flag (explicit > the first of `plugins` > auto-detect from cwd markers) resolves the
+  **one** language whose docs to serve.
   A reference doc is **strictly per-language**, so every subject but `ai` **requires a
-  resolved plugin**: with none (no marker, or ambiguous markers) the command fails with
-  the same diagnostic `check` / `report` give — name one with `--plugin` or set `plugin`
+  resolved language**: with none detected the command fails with the same diagnostic
+  `check` / `report` give — name one with `--plugin` or set `plugins`
   in `code-ranker.toml`. The `<subject>` selects the output: `metrics` / `principles`
   (the metric / principle index), a metric **category** (`loc`, `complexity`,
   `halstead`, `maintainability`, `coupling` → its label + member metrics), a **metric**
@@ -72,8 +74,8 @@ snapshot input.
   doc), or no/unknown subject (a catalog of every subject). Subject matching is
   separator/case-insensitive (`fan_in` = `Fan-in` = `FAN in`). The one exception is
   **`docs ai`** (the offline AI-agent playbook from the embedded `base/AI.md`): with a
-  plugin resolved it prints the full playbook **plus** the principle/metric catalog;
-  with none resolvable it prints a brief product intro **plus** how to select a plugin
+  language resolved it prints the full playbook **plus** the principle/metric catalog;
+  with none resolvable it prints a brief product intro **plus** how to select a language
   and **omits** the catalog — so `docs ai` always succeeds and guides the user to a
   working setup.
 
@@ -108,9 +110,12 @@ snapshot, never a diff. The `scorecard` default is `stdout` and the `prompt`
 default is `.code-ranker/{ts}-{git-hash-3}-{principle}.md`. No additional registry
 is created.
 
-Each snapshot is a **single self-contained `.json` file** combining
-metadata (command, versions, git state) and the one `files` graph. See
-`cpt-code-ranker-fr-snapshot-meta` (main [PRD](../PRD.md)) for the full schema.
+Each snapshot is a **single self-contained `.json` file** combining top-level
+metadata (`schema_version = "5.0"`, command, `plugins`, versions, git state) and a
+`languages` map — one entry per analyzed language, each carrying its
+`graphs.files` graph (and `graphs.functions` when that level is on), `principles`,
+and `prompt`. See `cpt-code-ranker-fr-snapshot-meta` (main [PRD](../PRD.md)) for the
+full schema.
 
 The snapshot is written as **canonical JSON**: every object key is emitted
 in alphabetical order and the `nodes` / `edges` arrays are sorted by a
@@ -144,8 +149,8 @@ scalars; `ignore.paths` is merged):
 
 | Priority | Source |
 |---|---|
-| 1 | CLI flags (`--ignore`, `--cycle-rule`, `--threshold`, `--plugin`, `--output.<fmt>.path`) |
-| 2 | `--config KEY=VALUE` inline overrides (dotted key into the config schema) |
+| 1 | CLI flags (`--ignore`, `--cycle-rule`, `--threshold`, `--plugins`, `--output.<fmt>.path`) |
+| 2 | `--config KEY=VALUE` inline overrides (dotted key into the config schema, e.g. `languages.<lang>.<key>=value`) |
 | 3 | `--config <file>` |
 | 4 | `code-ranker.toml` in cwd, then in target directory |
 | 5 | `Cargo.toml` `[workspace.metadata.code-ranker]` / `[package.metadata.code-ranker]` |
@@ -154,7 +159,14 @@ scalars; `ignore.paths` is merged):
 **Config file keys** (`code-ranker.toml` or `Cargo.toml` metadata section):
 
 ```toml
-plugin = "auto"          # default plugin; "auto" detects by project markers, overridden by --plugin
+version = "5.0"          # required config-schema version
+plugins = ["rust", "markdown"]   # active languages; omit/empty ⇒ auto-detect all, overridden by --plugins
+
+[languages.base]         # virtual base: overrides applied to EVERY active language
+skip_dirs = ["vendor"]
+
+[languages.rust]         # per-language overrides: ANY plugin-config key, deep-merged
+extensions = ["rs"]      # base wins under it; this wins over [languages.base]
 
 [ignore]
 paths        = ["**/generated/**"]  # glob patterns matched against node path
@@ -187,7 +199,12 @@ enabled = true
 
 **CLI flags**:
 
-- `--plugin <NAME|auto>` — override default plugin (`auto` detects by markers)
+- `--plugins <a,b,…>` — set the active languages (comma list / repeatable); overrides
+  the config `plugins`. Omitted everywhere ⇒ auto-detect every language present
+- `--language <name>` (`report`) — focus the `scorecard` / `prompt` on one language;
+  required only when a `--prompt`/`--focus` selector resolves across several languages
+- `--config languages.<lang>.<key>=value` — inline override of any plugin-config key
+  (scalars / comma-lists); `languages.base.*` targets the shared base language
 - `--output.<fmt>.path <PATH>` (`report`; `<fmt>` is `json`, `html`, `prompt`, or
   `scorecard`) — select
   that artifact format and set its destination (a path, a name template with
@@ -304,7 +321,7 @@ JSON summary — a `verdict` wrapper around the new-violations list:
 {
   "verdict": "degraded",
   "violations": [
-    { "rule": "threshold.file.hk", "group": "CPL", "graph": "files",
+    { "rule": "threshold.file.hk", "group": "CPL", "language": "rust", "graph": "files",
       "location": "{target}/src/a.rs", "message": "…", "weight": 2.1 }
   ]
 }
@@ -363,11 +380,11 @@ command; every action is an explicit subcommand.
 
 ```
 # Lint — gate on cycle rules & thresholds; writes no files
-code-ranker check  [input] [--plugin <name|auto>] [--threshold ...] [--cycle-rule ...] [--baseline <snapshot>] [--output-format <human|json|github|sarif|codequality>] [--exit-zero]
+code-ranker check  [input] [--plugins <a,b,…>] [--threshold ...] [--cycle-rule ...] [--baseline <snapshot>] [--output-format <human|json|github|sarif|codequality>] [--exit-zero]
 
 # Steps 1+2 — analyze (or read) the input and write a snapshot and/or HTML viewer
 # (also the AI prompt / console scorecard via --output.prompt / --output.scorecard)
-code-ranker report [input] [--plugin <name|auto>] [--output.<fmt>.path <path>] [--baseline <snapshot>] [--focus <NAME>] [--focus-path <PATH>] [--severity <tier>] [--top <N>]
+code-ranker report [input] [--plugins <a,b,…>] [--language <name>] [--output.<fmt>.path <path>] [--baseline <snapshot>] [--focus <NAME>] [--focus-path <PATH>] [--severity <tier>] [--top <N>]
 ```
 
 The positional `[input]` (default `.`) is polymorphic: a directory is

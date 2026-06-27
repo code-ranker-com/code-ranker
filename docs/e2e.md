@@ -1,7 +1,8 @@
 # e2e fixtures & golden snapshots
 
 Nine tiny projects (one per language) exercise the `code-ranker` analyzer in the
-**files** level of the generic graph model: nodes of `kind` `"file"` /
+**files** level of the generic graph model, carried per language under
+`languages.<lang>.graphs.files`: nodes of `kind` `"file"` /
 `"external"`, connected by `uses` (flow) and `reexports` / `contains` / `super`
 (non-flow, structural) edges — the last being the Rust `use super::*` /
 `use crate::<ancestor>::*` namespace pull.
@@ -98,10 +99,11 @@ bumps; that is why a single shared version is safe.
 ## How it works
 
 - `crates/code-ranker-plugins/src/<lang>/tests/sample/code-ranker.toml` — a self-contained
-  config (plugin pinned, `ignore.tests = false` to override the **on-by-default**
+  config (`plugins` pinned, `ignore.tests = false` to override the **on-by-default**
   test skipping so test files stay in the graph and the fixture exercises them).
 - `crates/code-ranker-plugins/src/<lang>/tests/sample/code-ranker-report.json` — the **golden**
-  JSON report (`schema_version: "4.0"`). The graph is already relativized to the
+  JSON report (`schema_version: "5.0"`). The per-language graphs (under
+  `languages.<lang>.graphs`) are already relativized to the
   `{target}` placeholder (machine-independent). The header (`generated_at`,
   `command`, `git`, versions, absolute paths, `timings`) is kept frozen /
   anonymized in the committed file, and normalized only at comparison time.

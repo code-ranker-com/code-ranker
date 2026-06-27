@@ -252,11 +252,11 @@ fn string_table_reads_structure_node_kinds() {
 /// be transcribed exactly (the e2e goldens depend on them).
 #[test]
 fn string_list_reads_data_lists_verbatim() {
-    let js = load(include_str!("../languages/javascript/config.toml"));
+    let js = load(include_str!("../languages/js/config.toml"));
     assert_eq!(string_list(&js, "extensions"), ["js", "jsx", "mjs", "cjs"]);
     assert_eq!(string_list(&js, "detect_markers"), ["package.json"]);
 
-    let ts = load(include_str!("../languages/typescript/config.toml"));
+    let ts = load(include_str!("../languages/ts/config.toml"));
     assert_eq!(string_list(&ts, "extensions"), ["ts", "tsx", "mts", "cts"]);
     // resolution_order is significant: TS-first, then JS fallbacks.
     assert_eq!(
@@ -336,7 +336,7 @@ fn resolved_principles_inherit_catalog_and_resolve_doc_urls() {
     assert_eq!(cpx.label, "CPX");
     assert_eq!(
         cpx.doc_url.as_deref(),
-        Some("https://github.com/ffedoroff/code-ranker/blob/main/languages/rust/CPX.md")
+        Some("https://github.com/ffedoroff/code-ranker/blob/main/plugins/rust/CPX.md")
     );
 
     // Languages with no own principles inherit the full 13-entry catalog, and JS
@@ -344,9 +344,9 @@ fn resolved_principles_inherit_catalog_and_resolve_doc_urls() {
     let py = resolved_principles(&load(include_str!("../languages/python/config.toml")));
     assert_eq!(py.len(), 13);
     assert!(py[0].doc_url.as_deref().unwrap().contains("/python/"));
-    let js = resolved_principles(&load(include_str!("../languages/javascript/config.toml")));
+    let js = resolved_principles(&load(include_str!("../languages/js/config.toml")));
     assert_eq!(js.len(), 13);
-    assert!(js[0].doc_url.as_deref().unwrap().contains("/typescript/"));
+    assert!(js[0].doc_url.as_deref().unwrap().contains("/ts/"));
 
     // A language with no own corpus (no `doc_overrides`) inherits every doc from
     // the shared `base/` fallback — fixing what used to be a dead `/go/` link.
@@ -354,7 +354,7 @@ fn resolved_principles_inherit_catalog_and_resolve_doc_urls() {
     assert_eq!(go.len(), 13);
     assert_eq!(
         go[0].doc_url.as_deref(),
-        Some("https://github.com/ffedoroff/code-ranker/blob/main/languages/base/CPX.md")
+        Some("https://github.com/ffedoroff/code-ranker/blob/main/plugins/base/CPX.md")
     );
     assert!(
         go.iter()
@@ -461,6 +461,47 @@ fn registry_extensions_are_unique_across_plugins() {
     assert!(
         conflicts.is_empty(),
         "extension(s) claimed by multiple plugins (built-in default configs): {}",
+        conflicts.join(", ")
+    );
+}
+
+/// Static regression guard for language **aliases** (`aliases = [...]`): an alias
+/// must be unambiguous everywhere a language is named. So no alias may be claimed
+/// by two plugins, collide with any plugin's canonical `name()`, or shadow a
+/// reserved `[plugins]` key (`base` / `enabled`).
+#[test]
+fn registry_aliases_are_unique_and_reserved_safe() {
+    use std::collections::HashMap;
+    let reg = code_ranker_plugin_api::plugin::registry();
+    let canonical: Vec<String> = reg.iter().map(|p| p.name().to_string()).collect();
+
+    let mut alias_to_plugins: HashMap<String, Vec<String>> = HashMap::new();
+    for plugin in &reg {
+        for alias in string_list(&plugin.config(), "aliases") {
+            assert!(
+                !["base", "enabled"].contains(&alias.as_str()),
+                "{}: alias {alias:?} shadows a reserved [plugins] key",
+                plugin.name()
+            );
+            assert!(
+                !canonical.contains(&alias),
+                "{}: alias {alias:?} collides with a canonical language name",
+                plugin.name()
+            );
+            alias_to_plugins
+                .entry(alias)
+                .or_default()
+                .push(plugin.name().to_string());
+        }
+    }
+    let conflicts: Vec<String> = alias_to_plugins
+        .iter()
+        .filter(|(_, plugins)| plugins.len() > 1)
+        .map(|(alias, plugins)| format!("{alias}: {plugins:?}"))
+        .collect();
+    assert!(
+        conflicts.is_empty(),
+        "alias(es) claimed by multiple plugins: {}",
         conflicts.join(", ")
     );
 }

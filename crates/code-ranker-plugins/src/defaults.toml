@@ -33,7 +33,7 @@
 # the shared fallback corpus a language inherits when it has no own doc, mirroring
 # how config inherits this `defaults.toml`. A language ships its own corpus by
 # setting `doc_lang` + `doc_overrides` (see `rust/config.toml`).
-doc_base = "https://github.com/ffedoroff/code-ranker/blob/main/languages"
+doc_base = "https://github.com/ffedoroff/code-ranker/blob/main/plugins"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Field-omission defaults for the metric engine's role config — the fallbacks a

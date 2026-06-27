@@ -167,7 +167,7 @@ step pull the same prompt/triage non-interactively.
 
 The HTML report SHOULD support a principles-audit prompt mode that maps
 the top coupling findings to the canonical principle corpus under
-`languages/<language>/` (full corpora: `rust/`, `python/`, `typescript/`;
+`plugins/<language>/` (full corpora: `rust/`, `python/`, `ts/`;
 other languages fall back to the language-neutral `base/` corpus)
 and instructs the LLM to audit the codebase against each principle.
 

@@ -93,11 +93,11 @@ fn doc_rel_path(
     })
 }
 
-/// Extract the `<lang>/<ID>.md` tail of a corpus URL (`…/languages/base/HK.md`
+/// Extract the `<lang>/<ID>.md` tail of a corpus URL (`…/plugins/base/HK.md`
 /// → `base/HK.md`). A `remediation` value is free prose ending in the URL, so the
-/// match is anchored on the `/languages/` segment, not the string start.
+/// match is anchored on the `/plugins/` segment, not the string start.
 fn url_tail(url: &str) -> Option<String> {
-    let after = url.rsplit_once("/languages/")?.1;
+    let after = url.rsplit_once("/plugins/")?.1;
     // Stop at whitespace in case the URL is embedded in a sentence.
     Some(after.split_whitespace().next()?.to_string())
 }
@@ -345,13 +345,13 @@ fn lang_display(lang: &str) -> &str {
     match lang {
         "rust" => "Rust",
         "python" => "Python",
-        "typescript" => "TypeScript",
-        "javascript" => "JavaScript",
+        "ts" => "TypeScript",
+        "js" => "JavaScript",
         "go" => "Go",
         "c" => "C",
         "cpp" => "C++",
         "csharp" => "C#",
-        "markdown" => "Markdown",
+        "md" => "Markdown",
         other => other,
     }
 }

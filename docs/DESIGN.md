@@ -231,7 +231,7 @@ as external nodes — are defined scope, kept out by design rather than missed.
 **Changing a metric — adding one or fixing a bug — follow the runbook
 [`docs/metric-correctness.md`](metric-correctness.md):** it maps where
 each metric is computed (which crate), the per-task checklist, the normative spec
-to define "correct" against (`languages/<lang>/metrics.md`), and which tests
+to define "correct" against (`plugins/<lang>/metrics.md`), and which tests
 prove it where (the metamorphic / generative / anchor / differential / mutation
 layers and the ≤ 20 s budget). Do not change a detector without going through it —
 that runbook is how this principle and the Metric Accuracy NFR stay enforced
@@ -639,7 +639,7 @@ dev-dependency, so the enrichment crate never leaks into the plugin library.
 
 A **thin adapter** implemented in the `javascript` module of the
 `code-ranker-plugins` crate (`code-ranker-plugins/src/javascript/mod.rs`,
-`name = "javascript"`, `detect` = a `package.json` marker). It binds the
+`name = "js"`, `detect` = a `package.json` marker). It binds the
 `tree-sitter-javascript` grammar to `.js`/`.jsx`/`.mjs`/`.cjs` and delegates all
 real work to the shared **`ecmascript`** module's engine (the walker /
 import-specifier extractor / resolver / `ecmascript_level` / metric helper). The
@@ -693,7 +693,7 @@ ECMAScript `Dialect` + `code_ranker_graph::write_metrics`) for each
 - [x] `p3` - **ID**: `cpt-code-ranker-component-ts-plugin`
 
 In-process TypeScript plugin (the `typescript` module of the
-`code-ranker-plugins` crate; `name = "typescript"`, scans
+`code-ranker-plugins` crate; `name = "ts"`, scans
 `.ts`/`.tsx`/`.mts`/`.cts`, `detect` = a `tsconfig.json` marker). Like the JS
 plugin, it is a thin adapter over the shared **`ecmascript`** module's
 engine: it drives `analyze_ecmascript`, passing the `tree-sitter-typescript`
@@ -1251,7 +1251,7 @@ code-ranker/
   crates/
     code-ranker-graph/             # Rust — graph types, JSON schema, StageTime, cycles/hk/stats + language-neutral metric scaffolding (write_metrics, metric_specs; metrics/builtin.toml catalog)
     code-ranker-plugin-api/        # Rust — the LanguagePlugin trait (+ PluginInput) & its self-registering plugin registry (PluginRegistration/registry, inventory) in plugin.rs, the Principle DTO (principle.rs), the detect_with_marker helper (detection.rs), MetricInputs/FunctionUnit; shared TOML config utilities (toml_merge deep-merge, list_override DSL)
-    code-ranker-plugins/           # Rust — all language plugins: languages/{rust,python,javascript,typescript,go,c,cpp,csharp,markdown} (+ shared languages/ecmascript & languages/cfamily) over one generic engine/ (tree-sitter metric walker); src/config/ (parse/views/specs/lookup facade) + src/defaults.toml; #[cfg(test)] test_support helpers
+    code-ranker-plugins/           # Rust — all language plugins: languages/{rust,python,js,ts,go,c,cpp,csharp,md} (+ shared languages/ecmascript & languages/cfamily) over one generic engine/ (tree-sitter metric walker); src/config/ (parse/views/specs/lookup facade) + src/defaults.toml; #[cfg(test)] test_support helpers
     code-ranker-viewer/            # Rust — HTML viewer: assets + render_html_viewer
     code-ranker-cli/               # Rust — orchestrator, plugin dispatch (over the plugin-api self-registered registry), check linter, report
       src/
@@ -1289,15 +1289,15 @@ code-ranker/
     DESIGN.md              # Product technical design (architecture, domain model, plugins)
     code-ranker-cli/        # CLI component docs: PRD, DESIGN, CLI.md, config.md, ERRORS.md
     code-ranker-viewer/     # HTML viewer component docs: PRD, DESIGN
-  languages/              # Principle corpus (used at P3 for prompt generation)
-    base/                  # Language-neutral fallback corpus (inherited when a language has no own doc)
+  plugins/                # Principle corpus (used at P3 for prompt generation)
+    base/                  # Language-neutral fallback corpus (inherited when a language has no own corpus)
     rust/                  # Rust-specific principle docs
     python/                # Python-specific principle docs
-    typescript/            # TypeScript/JavaScript principle docs
+    ts/                    # TypeScript/JavaScript principle docs
 ```
 
-A principle's `doc_url` resolves to `languages/<doc_lang>/<id>.md` for the principles
-a language overrides (its `doc_overrides`), and to `languages/base/<id>.md`
+A principle's `doc_url` resolves to `plugins/<doc_lang>/<id>.md` for the principles
+a language overrides (its `doc_overrides`), and to `plugins/base/<id>.md`
 otherwise — so a language without its own corpus inherits `base/`.
 
 **Out of scope for this revision (deferred to P2/P3)**:

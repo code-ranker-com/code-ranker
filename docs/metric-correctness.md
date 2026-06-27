@@ -31,7 +31,7 @@ impossible to ship.
 ## The source of truth: the metric spec
 
 "Count correctly" is undefined without a written rule for *what counts*. Each
-metric's counting rules live in the normative spec `languages/<lang>/metrics.md`
+metric's counting rules live in the normative spec `plugins/<lang>/metrics.md`
 (per language — the semantics differ; e.g. whether `?` is a branch, whether a
 tail expression is an exit).
 
@@ -296,7 +296,7 @@ actually present, so no further wiring is needed.
    test that pins the bug: a metamorphic case (inject the keyword in a comment /
    string / identifier and assert the count does **not** change → false positive;
    or add one real construct and assert the exact increment → false negative /
-   magnitude). If `languages/<lang>/metrics.md` lacks the rule, write it first.
+   magnitude). If `plugins/<lang>/metrics.md` lacks the rule, write it first.
 2. **Fix the detector** in that crate.
 3. **Lock the regression** — the new test now fails on the old behaviour and
    passes on the new.
@@ -446,6 +446,6 @@ part of a single metric slice.
 
 - **Goal:** PRD §6.1 `cpt-code-ranker-nfr-metric-accuracy`, §9 acceptance;
   DESIGN §2.1 `cpt-code-ranker-principle-metric-accuracy`.
-- **Spec (what "correct" means):** `languages/<lang>/metrics.md`.
+- **Spec (what "correct" means):** `plugins/<lang>/metrics.md`.
 - **Schema, attribute specs, `omit_at`:** `node_schema.md`.
 - **Fixtures, goldens, coverage invariant, regeneration:** `e2e.md`.

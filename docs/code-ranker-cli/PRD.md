@@ -154,7 +154,7 @@ scalars; `ignore.paths` is merged):
 version = "5.0"          # required config-schema version
 
 [plugins]
-enabled = ["rust", "markdown"]   # active languages; omit/empty ⇒ auto-detect all, overridden by --plugins
+enabled = ["rust", "md"]   # active languages; omit/empty ⇒ auto-detect all, overridden by --plugins
 
 [plugins.base]           # virtual base: overrides applied to EVERY active language
 skip_dirs = ["vendor"]

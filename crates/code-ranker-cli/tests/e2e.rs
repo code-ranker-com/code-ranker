@@ -988,12 +988,12 @@ fn python_sample_matches_golden() {
 
 #[test]
 fn javascript_sample_matches_golden() {
-    assert_sample_matches("javascript");
+    assert_sample_matches("js");
 }
 
 #[test]
 fn typescript_sample_matches_golden() {
-    assert_sample_matches("typescript");
+    assert_sample_matches("ts");
 }
 
 #[test]
@@ -1021,7 +1021,7 @@ fn csharp_sample_matches_golden() {
 // by its golden but is NOT in `LANGS` (the all-central-metrics invariant).
 #[test]
 fn markdown_sample_matches_golden() {
-    assert_sample_matches("markdown");
+    assert_sample_matches("md");
 }
 
 /// Read a committed golden SARIF document for a language's `check` output.
@@ -1075,12 +1075,12 @@ fn python_sample_check_sarif_matches_golden() {
 
 #[test]
 fn javascript_sample_check_sarif_matches_golden() {
-    assert_check_sarif_matches_golden("javascript");
+    assert_check_sarif_matches_golden("js");
 }
 
 #[test]
 fn typescript_sample_check_sarif_matches_golden() {
-    assert_check_sarif_matches_golden("typescript");
+    assert_check_sarif_matches_golden("ts");
 }
 
 /// `check --output-format codequality` must match the committed golden for the
@@ -1116,25 +1116,16 @@ fn python_sample_check_codequality_matches_golden() {
 
 #[test]
 fn javascript_sample_check_codequality_matches_golden() {
-    assert_check_codequality_matches_golden("javascript");
+    assert_check_codequality_matches_golden("js");
 }
 
 #[test]
 fn typescript_sample_check_codequality_matches_golden() {
-    assert_check_codequality_matches_golden("typescript");
+    assert_check_codequality_matches_golden("ts");
 }
 
 /// Every language whose golden is committed.
-const LANGS: &[&str] = &[
-    "rust",
-    "python",
-    "javascript",
-    "typescript",
-    "go",
-    "c",
-    "cpp",
-    "csharp",
-];
+const LANGS: &[&str] = &["rust", "python", "js", "ts", "go", "c", "cpp", "csharp"];
 
 /// Central metrics (`metric_specs` + `coupling_specs`) the analyzer does NOT
 /// produce for a given language, so they are legitimately absent from that
@@ -1145,18 +1136,7 @@ const LANGS: &[&str] = &[
 const COVERAGE_EXCEPTIONS: &[(&str, &[&str])] = &[
     // `tloc` is genuinely 0 for non-Rust: only the Rust pass strips `#[cfg(test)]`
     // items, so there are no test lines to count elsewhere.
-    (
-        "tloc",
-        &[
-            "python",
-            "javascript",
-            "typescript",
-            "go",
-            "c",
-            "cpp",
-            "csharp",
-        ],
-    ),
+    ("tloc", &["python", "js", "ts", "go", "c", "cpp", "csharp"]),
     // C has no closures/lambdas, so the `closures` counter is always 0.
     ("closures", &["c"]),
 ];
@@ -1630,20 +1610,20 @@ fn multi_language_run_covers_every_detected_language() {
     let v: Value = serde_json::from_str(&std::fs::read_to_string(&out).unwrap()).unwrap();
     assert_eq!(
         v["plugins"].as_array().unwrap(),
-        &vec![Value::from("javascript"), Value::from("markdown")],
+        &vec![Value::from("js"), Value::from("md")],
         "both languages active and sorted"
     );
     assert!(
-        v["languages"]["javascript"]["graphs"]["files"]["nodes"]
+        v["languages"]["js"]["graphs"]["files"]["nodes"]
             .as_array()
             .is_some_and(|n| !n.is_empty()),
-        "javascript graph present and non-empty"
+        "js graph present and non-empty"
     );
     assert!(
-        v["languages"]["markdown"]["graphs"]["files"]["nodes"]
+        v["languages"]["md"]["graphs"]["files"]["nodes"]
             .as_array()
             .is_some_and(|n| !n.is_empty()),
-        "markdown graph present and non-empty"
+        "md graph present and non-empty"
     );
 }
 
@@ -1671,11 +1651,11 @@ fn empty_graph_language_is_dropped() {
     let v: Value = serde_json::from_str(&std::fs::read_to_string(&out).unwrap()).unwrap();
     assert_eq!(
         v["plugins"].as_array().unwrap(),
-        &vec![Value::from("markdown")],
-        "the empty-graph language (javascript) is dropped"
+        &vec![Value::from("md")],
+        "the empty-graph language (js) is dropped"
     );
     assert!(
-        v["languages"].get("javascript").is_none(),
+        v["languages"].get("js").is_none(),
         "dropped language has no snapshot entry"
     );
 }

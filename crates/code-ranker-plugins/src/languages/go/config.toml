@@ -13,6 +13,8 @@ doc_lang = "go"
 # File-collection extensions, project-detect markers, and walk skip-dirs — DATA.
 extensions = ["go"]
 detect_markers = ["go.mod"]
+# Short aliases accepted anywhere a language is named. Unique across languages.
+aliases = ["golang"]
 skip_dirs = ["vendor", "testdata", "node_modules"]
 
 # Test-path conventions — DATA (the predicate LOGIC stays in `structure.rs`).

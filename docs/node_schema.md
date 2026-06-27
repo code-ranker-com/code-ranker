@@ -219,7 +219,7 @@ the same way. Coupling and `cycle` are added by `code-ranker-graph`.
 
 | key | metric | notes |
 |-----|--------|-------|
-| `cyclomatic` | **Cyclomatic complexity** (McCabe) — per function `branches + 1`, summed over the file's functions plus the file unit's own base path (the analyzer-of-record whole-file value; see `languages/<lang>/metrics.md §cyclomatic`). | A function-less file (pure declarations) is omitted (`omit_at` 1) rather than shown as a bare `1`. |
+| `cyclomatic` | **Cyclomatic complexity** (McCabe) — per function `branches + 1`, summed over the file's functions plus the file unit's own base path (the analyzer-of-record whole-file value; see `plugins/<lang>/metrics.md §cyclomatic`). | A function-less file (pure declarations) is omitted (`omit_at` 1) rather than shown as a bare `1`. |
 | `cognitive` | **Cognitive complexity** (SonarSource) — penalises nesting, summed over the file's functions. | Omitted when `0` (no functions, or none with cognitive load). |
 | `exits` | Number of exit points (`return` / `throw`). | |
 | `args` | Number of function / closure arguments. | |

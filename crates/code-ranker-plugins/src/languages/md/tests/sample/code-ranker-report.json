@@ -1,6 +1,6 @@
 {
-  "command": "code-ranker report crates/code-ranker-plugins/src/languages/markdown/tests/sample --config crates/code-ranker-plugins/src/languages/markdown/tests/sample/code-ranker.toml --output.json.path=crates/code-ranker-plugins/src/languages/markdown/tests/sample/code-ranker-report.json",
-  "config_file": "crates/code-ranker-plugins/src/languages/markdown/tests/sample/code-ranker.toml",
+  "command": "code-ranker report /home/user/code-ranker/crates/code-ranker-plugins/src/languages/md/tests/sample --config /home/user/code-ranker/crates/code-ranker-plugins/src/languages/md/tests/sample/code-ranker.toml --output.json.path=/home/user/code-ranker/crates/code-ranker-plugins/src/languages/md/tests/sample/code-ranker-report.json",
+  "config_file": "/home/user/code-ranker/crates/code-ranker-plugins/src/languages/md/tests/sample/code-ranker.toml",
   "generated_at": "1970-01-01T00:00:00Z",
   "git": {
     "branch": "main",
@@ -9,7 +9,7 @@
     "origin": "git@example.com:org/repo.git"
   },
   "languages": {
-    "markdown": {
+    "md": {
       "graphs": {
         "files": {
           "attribute_groups": {
@@ -250,28 +250,28 @@
     }
   },
   "plugins": [
-    "markdown"
+    "md"
   ],
   "roots": {
-    "target": "/home/user/code-ranker/crates/code-ranker-plugins/src/languages/markdown/tests/sample"
+    "target": "/home/user/code-ranker/crates/code-ranker-plugins/src/languages/md/tests/sample"
   },
   "schema_version": "5.0",
-  "target": "/home/user/code-ranker/crates/code-ranker-plugins/src/languages/markdown/tests/sample",
+  "target": "/home/user/code-ranker/crates/code-ranker-plugins/src/languages/md/tests/sample",
   "timings": [
     {
       "detail": "3 nodes from 3 files",
       "ms": 0,
-      "stage": "markdown: parse"
+      "stage": "md: parse"
     },
     {
       "detail": "0 nodes annotated",
       "ms": 0,
-      "stage": "markdown: complexity"
+      "stage": "md: complexity"
     },
     {
       "detail": "nodes=3 edges=6",
       "ms": 0,
-      "stage": "markdown: projection"
+      "stage": "md: projection"
     }
   ],
   "versions": {

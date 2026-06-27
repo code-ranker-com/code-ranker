@@ -11,7 +11,7 @@
 # Principle-corpus language for doc links (`doc_base` inherited from defaults).
 # TypeScript ships a full own corpus, so `doc_overrides = "*"` routes every
 # principle to `typescript/` instead of the shared `base/` fallback.
-doc_lang = "typescript"
+doc_lang = "ts"
 doc_overrides = "*"
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -27,3 +27,5 @@ doc_overrides = "*"
 extensions = ["ts", "tsx", "mts", "cts"]
 resolution_order = ["ts", "tsx", "mts", "cts", "js", "jsx"]
 detect_markers = ["tsconfig.json"]
+# Short aliases accepted anywhere a language is named. Unique across languages.
+aliases = ["typescript"]

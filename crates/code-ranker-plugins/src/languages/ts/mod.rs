@@ -36,19 +36,19 @@ static CONFIG: LazyLock<toml::Table> = LazyLock::new(|| {
 // Self-register this plugin (collected by `code_ranker_plugin_api::registry`); no
 // central list anywhere names a language.
 inventory::submit! {
-    code_ranker_plugin_api::PluginRegistration(&TypescriptPlugin)
+    code_ranker_plugin_api::PluginRegistration(&TsPlugin)
 }
 
 /// The TypeScript language plugin (handles .ts / .tsx / .mts / .cts).
-pub struct TypescriptPlugin;
+pub struct TsPlugin;
 
-impl LanguagePlugin for TypescriptPlugin {
+impl LanguagePlugin for TsPlugin {
     fn config(&self) -> toml::Table {
         CONFIG.clone()
     }
 
     fn name(&self) -> &str {
-        "typescript"
+        "ts"
     }
 
     fn detect(&self, cfg: &toml::Table, workspace: &Path, _input: &PluginInput) -> bool {

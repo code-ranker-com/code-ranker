@@ -124,7 +124,7 @@ Built-in plugins for all nine supported languages (`rust` uses cargo + syn; Rust
 - [PRD](docs/PRD.md) — product requirements
 - [DESIGN](docs/DESIGN.md) — technical design
 - [Why structure matters](docs/why-structure-matters.md) — the empirical evidence (studies, books, statistics) behind the signals code-ranker measures
-- [Principles corpus](languages/) — Rust / Python / TypeScript principle catalogues used by the prompt generator
+- [Principles corpus](plugins/) — Rust / Python / TypeScript principle catalogues used by the prompt generator
 
 ## Try it now
 

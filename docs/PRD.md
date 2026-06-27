@@ -223,7 +223,7 @@ required.
 | Step | Scope |
 |------|-------|
 | Step 1 | Additional language plugins: Python, JavaScript, Go, C#, PHP; framework-specific plugins (Django, WordPress, etc.) with domain-specific metadata |
-| Step 2 | AI prompt generation for principles review using the `languages/` corpus (per-language: `languages/rust/`, `languages/python/`, `languages/typescript/`) |
+| Step 2 | AI prompt generation for principles review using the `plugins/` corpus (per-language: `plugins/rust/`, `plugins/python/`, `plugins/ts/`) |
 
 ### 4.2 Out of Scope (All Versions)
 
@@ -380,7 +380,7 @@ workspaces. The plugin MUST:
   (not language-calibrated), so the report shows exactly what fails `check`.
   The recommendation catalog is the shared 13 design principles (from
   `defaults.toml`); each coupling/complexity **metric** carries its own
-  fix-prompt doc under `languages/base/` (`HK`, `Fan-in`, `Fan-out`, `Cognitive`,
+  fix-prompt doc under `plugins/base/` (`HK`, `Fan-in`, `Fan-out`, `Cognitive`,
   `Cyclomatic`; the cycle metric reuses `ADP`), resolved from the metric key
   (`hk`→`HK`, `fan_in`→`Fan-in`) — separator/case-insensitive
 
@@ -462,7 +462,7 @@ shared generic engine via the Python `Dialect` (`engine::compute` → a
 `MetricInputs`); the orchestrator writes the derived metrics onto each `File`
 node via `code_ranker_graph::write_metrics`.
 
-**JavaScript / TypeScript plugin** (`--plugins javascript`) is shipped as a
+**JavaScript / TypeScript plugin** (`--plugins js`) is shipped as a
 built-in in `code-ranker-cli`; one plugin handles `.js`, `.jsx`, `.ts`, and
 `.tsx`. It uses `tree-sitter-javascript` and `tree-sitter-typescript` to
 emit one `File` node per source file and resolve ES `import` statements

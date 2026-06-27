@@ -23,7 +23,8 @@ use std::path::Path;
 
 mod resolve;
 pub use resolve::{
-    detect_all, effective_plugin_config, resolve_plugins, validate_extension_uniqueness,
+    detect_all, effective_plugin_config, names_with_aliases, resolve_plugins, to_canonical,
+    validate_extension_uniqueness,
 };
 
 /// Every self-registered language plugin (see `code_ranker_plugin_api::registry`).
@@ -31,14 +32,6 @@ pub use resolve::{
 /// are used elsewhere), so every plugin's `inventory::submit!` is collected here.
 pub fn registry() -> Vec<&'static dyn LanguagePlugin> {
     code_ranker_plugin_api::registry()
-}
-
-/// Comma-separated canonical plugin names (sorted for stable help/error output;
-/// the registry's link order is not significant).
-pub fn names() -> String {
-    let mut names: Vec<&str> = registry().iter().map(|p| p.name()).collect();
-    names.sort_unstable();
-    names.join(", ")
 }
 
 /// Parse the workspace with the named plugin at the `"files"` level, returning
@@ -56,7 +49,10 @@ pub fn analyze(
             let graph = p.analyze(cfg, workspace, input)?;
             Ok((graph, p.levels(cfg)))
         }
-        None => bail!("unknown plugin {name:?}; built-in plugins are: {}", names()),
+        None => bail!(
+            "unknown plugin {name:?}; built-in languages are: {}",
+            names_with_aliases()
+        ),
     }
 }
 

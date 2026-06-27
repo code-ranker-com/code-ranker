@@ -235,11 +235,11 @@ A principle's `doc_url` inherits from a shared corpus the same way config inheri
 `defaults.toml`. It resolves (in [`specs.rs`](../../crates/code-ranker-plugins/src/config/specs.rs))
 to `{doc_base}/{doc_lang}/{id}.md` for the ids a language **overrides**, and to
 `{doc_base}/base/{id}.md` otherwise — `base/` is the language-neutral fallback
-corpus under [`languages/`](../../languages/). Which ids a language overrides is
+corpus under [`plugins/`](../../plugins/). Which ids a language overrides is
 declared by `doc_overrides` in its `<lang>.toml`:
 
 - `doc_overrides = "*"` — a full own corpus; every principle routes to the
-  language's own folder (rust / python / typescript; javascript shares typescript).
+  language's own folder (rust / python / ts; js shares ts).
 - `doc_overrides = ["SRP", …]` — a partial corpus; only those ids route to the
   language's folder, the rest fall back to `base/`.
 - absent — no own corpus; every `doc_url` resolves to `base/` (e.g. go, c, cpp,
@@ -247,7 +247,7 @@ declared by `doc_overrides` in its `<lang>.toml`:
 
 So adding a language needs no doc authoring to get working links (it inherits
 `base/`); a language ships its own docs incrementally by dropping files in
-`languages/<lang>/` and listing their ids in `doc_overrides`.
+`plugins/<lang>/` and listing their ids in `doc_overrides`.
 
 Authoring a `<lang>.toml`, including the report list overrides, is covered in
 [§2 of the customization guide](README.md#2-language-config-langtoml--for-plugin-authors).

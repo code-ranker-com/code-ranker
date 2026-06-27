@@ -19,6 +19,10 @@
 doc_lang = "python"
 doc_overrides = "*"
 
+# Short aliases accepted anywhere a language is named (see `../README.md`). DATA,
+# not code; must stay unique across languages.
+aliases = ["py"]
+
 # ──────────────────────────────────────────────────────────────────────────────
 # File-collection extensions, project-detect markers and walk skip-dirs — DATA,
 # not code (see `../README.md` §3). `extensions` is the source-file extension the

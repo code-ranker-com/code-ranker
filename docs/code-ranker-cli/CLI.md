@@ -97,8 +97,8 @@ its rule and output keys apply to snapshots too, while analysis-only keys (e.g.
 
 | Flag | Meaning |
 |---|---|
-| `--plugins <a,b,…>` | Active languages, comma-separated and/or repeatable: `rust`, `python`, `javascript` (covers TypeScript), … . Overrides the `[plugins].enabled` list. Omitted everywhere ⇒ auto-detect **every** language present and analyze them all in one run — see [Plugin resolution](#plugin-resolution). |
-| `--language <name>` | (`report` only) Focus the `scorecard` / `--prompt <ID>` on one language. Not required when only one language is present; required when a `--prompt`/`--focus` selector resolves across several. See [Recommendations](#recommendations-scorecard--prompt). |
+| `--plugins <a,b,…>` | Active languages, comma-separated and/or repeatable: `rust`, `python`, `js` (covers TypeScript), … . A canonical name **or an alias** (`javascript`, `py`, `rs`, …). Overrides the `[plugins].enabled` list. Omitted everywhere ⇒ auto-detect **every** language present and analyze them all in one run — see [Plugin resolution](#plugin-resolution). |
+| `--language <name>` | (`report` only) Focus the `scorecard` / `--prompt <ID>` on one language (canonical name or alias). Not required when only one language is present; required when a `--prompt`/`--focus` selector resolves across several. See [Recommendations](#recommendations-scorecard--prompt). |
 | `--config plugins.<lang>.<key>=value` | Inline override of any plugin-config key (scalars / comma-lists). `plugins.base.*` targets the shared base language. `plugins.enabled=a,b` overrides the active language list. Deep tables go through a `[plugins.<lang>]` TOML block — see [Config](#config). |
 | `--config <PATH \| KEY=VALUE>` | Repeatable. Load config from a file path, **or** override one setting inline (`KEY=VALUE`). Multiple files layer in command-line order (**last wins**) over the built-in defaults; inline `KEY=VALUE` applies after all files; passing any file disables auto-discovery of `code-ranker.toml`. See [Config](#config). |
 | `--ignore <glob>` | Repeatable. Glob to exclude paths from analysis. Merged with config-file globs. |
@@ -571,7 +571,7 @@ principle's intent and summary, how to read the full principle (the offline
 modules annotated with their metric value, and the relevant **flow** connection lists
 (`uses` — structural `contains`/`reexports` are excluded). A metric id (`hk`, `cycle`, …)
 frames the prompt by the **metric itself** — its own name, description, and `remediation`
-doc (e.g. `languages/base/HK.md`), with **no** SOLID design-principle wrapper.
+doc (e.g. `plugins/base/HK.md`), with **no** SOLID design-principle wrapper.
 
 ```sh
 code-ranker report . --prompt HK --top 1     # HK fix-prompt, top module
@@ -690,6 +690,15 @@ replaces** the lower one (no merge):
 So a list set in config **or** on the console is used verbatim; auto-detect runs
 only when no list is set anywhere; if both config and console set one, the console
 wins (applies only when `[input]` is a directory).
+
+**Aliases.** Anywhere a language is named — `--plugins`, `--language`, the
+`[plugins].enabled` list, a `[plugins.<lang>]` block key, and `docs <lang>` — you
+may use a short **alias** instead of the canonical name; it resolves to the
+canonical name (and the snapshot always records the canonical). Built-in aliases:
+`rs`→`rust`, `py`→`python`, `javascript`→`js`, `typescript`→`ts`, `markdown`→`md`,
+`golang`→`go`, `c++`/`cxx`→`cpp`, `cs`/`c#`→`csharp`. So `report --plugins javascript
+--prompt hk` is the same as `--plugins js`. Run `code-ranker docs` to see
+every language with its aliases.
 
 **Auto-detect** runs every plugin whose `detect()` matches, evaluated against its
 **effective** config — so an overridden `detect_markers` / `extensions` (via
@@ -815,7 +824,7 @@ Built-in (no install needed):
   (`ext:<name>`) at depth 1. Fast (seconds) — no rust-analyzer dependency.
 - `python` — tree-sitter-python, native parser. Emits `file` nodes, file→file
   `uses` edges, and one `external` node per top-level package.
-- `javascript` — tree-sitter-javascript / tree-sitter-typescript; one plugin handles
+- `js` — tree-sitter-javascript / tree-sitter-typescript; one plugin handles
   `.js`, `.jsx`, `.ts`, `.tsx`. Same file + external model as Python.
 
 All plugins are built into the `code-ranker` binary — there is nothing to install and no

@@ -333,10 +333,10 @@ code-ranker report . --plugins python --output.json.path=stdout | jq '.plugins'
 
 ```bash
 # 1. Default dated snapshot
-code-ranker report ~/projects/frontend --plugins javascript --output.json
+code-ranker report ~/projects/frontend --plugins js --output.json
 
 # 2. Named snapshot, ignoring node_modules and dist
-code-ranker report . --plugins javascript \
+code-ranker report . --plugins js \
     --output.json.path=.code-ranker/src-only.json \
     --ignore node_modules --ignore dist
 ```

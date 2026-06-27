@@ -55,7 +55,7 @@ cases:
 | **could not determine any language** | Auto-detect matches no plugin in the workspace (no `Cargo.toml` / `pyproject.toml` / `package.json` / … marker, or all overridden markers miss). | Name the language(s) explicitly: `[plugins] enabled = ["<name>"]` in `code-ranker.toml`, or `--plugins <name>`. |
 | **legacy `plugin` key** | The old scalar `plugin = "..."` key appears in `code-ranker.toml` / `Cargo.toml` metadata. | Replace it with `[plugins] enabled = ["<name>", …]`. |
 | **extension claimed by two plugins** | Two active plugins claim the same file extension (e.g. `.h` by both `c` and `cpp`). Raised at startup, before analysis — one file maps to exactly one language. | Drop one language from `[plugins].enabled`, or override `extensions` in `[plugins.<lang>]` so the file sets are disjoint. |
-| **invalid `--plugins`** | A name in `--plugins` (or the config `[plugins].enabled` list) is not a known language. | Use a built-in language name (`rust`, `python`, `javascript`, …). |
+| **invalid `--plugins`** | A name in `--plugins` (or the config `[plugins].enabled` list) is not a known language or alias. | Use a built-in language name (`rust`, `python`, `js`, …) or an alias (`rs`, `py`, `javascript`, …); `code-ranker docs` lists all with their aliases. |
 | **`docs`: subject without a language** | A subject was given to `docs` without a language (e.g. `docs hk`, `docs ai`). | Use `code-ranker docs <lang> <subject>` — bare `docs` lists the available languages. |
 
 For `report` the `scorecard` and `--prompt <ID>` are **per language**: when a `--focus

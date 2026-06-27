@@ -80,6 +80,7 @@ pub fn load(
 
     apply_inline_overrides(&mut config, &inline)?;
     apply_cli_overrides(&mut config, ignore_paths, cycle_rules, thresholds)?;
+    normalize_plugin_aliases(&mut config);
     validate_thresholds(&config)?;
     validate_schema_version(&config, &source_file)?;
     Ok(LoadedConfig {
@@ -87,6 +88,38 @@ pub fn load(
         source_file,
         merged,
     })
+}
+
+/// Normalize language aliases (e.g. `js` → `javascript`) to canonical names across
+/// the config, so every downstream lookup — the active `enabled` set and the
+/// per-language `[plugins.<lang>]` blocks (read by `effective_plugin_config` /
+/// `language_config`) — sees only canonical keys. Unknown tokens are left as-is
+/// (resolution / dispatch reports them with the proper hint). The reserved `base`
+/// key is never an alias, so it passes through; a block that collides with an
+/// already-canonical block is deep-merged into it.
+fn normalize_plugin_aliases(config: &mut Config) {
+    for name in &mut config.plugins.enabled {
+        *name = crate::plugin::to_canonical(name);
+    }
+    let blocks = std::mem::take(&mut config.plugins.languages);
+    for (key, block) in blocks {
+        let canon = if key == "base" {
+            key
+        } else {
+            crate::plugin::to_canonical(&key)
+        };
+        match config.plugins.languages.remove(&canon) {
+            Some(existing) => {
+                config
+                    .plugins
+                    .languages
+                    .insert(canon, deep_merge(existing, block));
+            }
+            None => {
+                config.plugins.languages.insert(canon, block);
+            }
+        }
+    }
 }
 
 /// The built-in default config as a raw table — the merge base every discovered

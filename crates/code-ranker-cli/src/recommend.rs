@@ -38,9 +38,11 @@ pub fn resolve_language_snap<'a>(
     language: Option<&str>,
     id: Option<&str>,
 ) -> Result<&'a LanguageSnapshot> {
-    // Explicit `--language` always wins.
+    // Explicit `--language` always wins. Resolve an alias (`js` → `javascript`)
+    // to the canonical key the snapshot stores under.
     if let Some(lang) = language {
-        return snap.languages.get(lang).with_context(|| {
+        let canon = crate::plugin::to_canonical(lang);
+        return snap.languages.get(&canon).with_context(|| {
             let available: Vec<&str> = snap.languages.keys().map(String::as_str).collect();
             format!(
                 "language {lang:?} not found in snapshot; available: {}",

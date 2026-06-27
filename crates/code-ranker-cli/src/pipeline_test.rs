@@ -151,8 +151,8 @@ fn detect_plugin_by_single_marker() {
         ("Cargo.toml", "rust"),
         ("pyproject.toml", "python"),
         ("setup.py", "python"),
-        ("package.json", "javascript"),
-        ("tsconfig.json", "typescript"),
+        ("package.json", "js"),
+        ("tsconfig.json", "ts"),
     ];
     let empty_overrides = BTreeMap::new();
     for (marker, expected) in cases {
@@ -213,7 +213,7 @@ fn detect_all_multi_and_empty() {
         "rust detected: {detected:?}"
     );
     assert!(
-        detected.contains(&"javascript".to_string()),
+        detected.contains(&"js".to_string()),
         "javascript detected: {detected:?}"
     );
     // Sorted.

@@ -20,6 +20,10 @@
 doc_lang = "rust"
 doc_overrides = "*"
 
+# Short aliases accepted anywhere a language is named (`--plugins` / `--language` /
+# `docs` / `[plugins.<lang>]`). DATA, not code; must stay unique across languages.
+aliases = ["rs"]
+
 # Project-detect marker filenames — DATA, not code (see `../README.md` §3). Rust
 # detects a workspace by its `Cargo.toml` manifest; `detect()` reads this list.
 # (Rust collects sources via `cargo metadata` + `syn`, not by walking a file

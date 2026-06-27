@@ -58,6 +58,11 @@ pub(crate) fn run(
         return Ok(());
     };
 
+    // Resolve an alias (`js` → `javascript`) to the canonical name so every lookup
+    // below works on it; `base` and unknown tokens pass through unchanged.
+    let language = plugin::to_canonical(language);
+    let language = language.as_str();
+
     // The first argument is the language — a registered plugin or `base`. A value
     // that is not a language is almost always a subject typed without one (e.g.
     // `docs hk`, `docs ai`); point the user at the per-language form.
@@ -148,7 +153,7 @@ fn languages_hint(cfg: Option<&config::model::Config>, input: &Path) -> String {
     if detected.is_empty() {
         format!(
             "Available languages: {} (or `base` for the language-agnostic docs).",
-            plugin::names()
+            plugin::names_with_aliases()
         )
     } else {
         format!(

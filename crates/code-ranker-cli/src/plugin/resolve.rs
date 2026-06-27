@@ -11,6 +11,49 @@ use code_ranker_plugin_api::{plugin::PluginInput, toml_merge::deep_merge};
 use std::collections::BTreeMap;
 use std::path::Path;
 
+/// Resolve a user-supplied language token — a canonical plugin `name()` **or** one
+/// of a plugin's declared `aliases` (e.g. `js` → `javascript`) — to the canonical
+/// name. `None` when it matches neither. Aliases are read from each plugin's static
+/// config (`aliases = [...]` in its `config.toml`); a canonical name wins outright.
+pub fn canonical_name(token: &str) -> Option<String> {
+    let reg = registry();
+    if let Some(p) = reg.iter().find(|p| p.name() == token) {
+        return Some(p.name().to_string());
+    }
+    reg.iter()
+        .find(|p| {
+            toml_string_list(&p.config(), "aliases")
+                .iter()
+                .any(|a| a == token)
+        })
+        .map(|p| p.name().to_string())
+}
+
+/// Resolve an alias to its canonical name, leaving an unknown token untouched so a
+/// downstream lookup reports it as unknown with the proper hint. Idempotent on an
+/// already-canonical name.
+pub fn to_canonical(token: &str) -> String {
+    canonical_name(token).unwrap_or_else(|| token.to_string())
+}
+
+/// Canonical names with their aliases, for "unknown language" error hints —
+/// e.g. `c, cpp (c++, cxx), … , javascript (js), …` (sorted).
+pub fn names_with_aliases() -> String {
+    let mut entries: Vec<String> = registry()
+        .iter()
+        .map(|p| {
+            let aliases = toml_string_list(&p.config(), "aliases");
+            if aliases.is_empty() {
+                p.name().to_string()
+            } else {
+                format!("{} ({})", p.name(), aliases.join(", "))
+            }
+        })
+        .collect();
+    entries.sort_unstable();
+    entries.join(", ")
+}
+
 /// Read a top-level string array from a TOML table (e.g. `extensions = ["rs"]`).
 /// Returns an empty `Vec` when the key is absent or is not a string array.
 fn toml_string_list(cfg: &toml::Table, key: &str) -> Vec<String> {
@@ -111,13 +154,14 @@ pub fn resolve_plugins(
     input: &PluginInput,
     config_file: Option<&str>,
 ) -> Result<Vec<String>> {
-    // Console wins outright.
+    // Console wins outright. Resolve aliases (`js` → `javascript`) so the active
+    // set — and therefore the snapshot keys — are always canonical.
     if !arg.is_empty() {
-        return Ok(arg.to_vec());
+        return Ok(arg.iter().map(|t| to_canonical(t)).collect());
     }
     // Config wins over auto-detect.
     if !cfg_plugins.is_empty() {
-        return Ok(cfg_plugins.to_vec());
+        return Ok(cfg_plugins.iter().map(|t| to_canonical(t)).collect());
     }
     // Auto-detect: error on empty result.
     let detected = detect_all(eff_cfgs, workspace, input);

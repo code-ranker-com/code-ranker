@@ -132,9 +132,10 @@ layers on top of the language `[report]`, which layers on the catalog — so the
 version = "5.0"          # required config-schema version
 
 # Active languages. Overridden by --plugins. Omit (or leave empty) to auto-detect
-# every language present in the workspace.
+# every language present in the workspace. Each entry (and every `[plugins.<lang>]`
+# block key) may be a canonical name or an alias (`js`, `py`, `rs`, …).
 [plugins]
-enabled = ["rust", "markdown"]
+enabled = ["rust", "md"]
 
 [output.json]                # `report` JSON snapshot artifact — GLOBAL
 path = "{project-dir}-{ts}.json"   # default if unset: .code-ranker/{ts}-{git-hash-3}.json
@@ -407,21 +408,25 @@ All config values can be set or overridden from the command line.
 
 ### `--plugins <a,b,…>`
 
-Select the active languages (`rust`, `python`, `javascript`, …) — comma-separated
-and/or repeatable. It overrides the `[plugins].enabled` list. With neither set
-anywhere, `code-ranker` auto-detects **every** language present in the workspace and
-analyzes them all in one run. See [Plugin resolution](CLI.md#plugin-resolution).
+Select the active languages (`rust`, `python`, `js`, …) — comma-separated
+and/or repeatable. A canonical name **or an alias** (`javascript`, `py`, `rs`, `typescript`, `markdown`,
+`golang`, `c++`/`cxx`, `cs`/`c#`) — aliases resolve to the canonical name. It
+overrides the `[plugins].enabled` list. With neither set anywhere, `code-ranker`
+auto-detects **every** language present in the workspace and analyzes them all in
+one run. See [Plugin resolution](CLI.md#plugin-resolution).
 
 ```bash
 code-ranker check .                          # auto-detect every language present
 code-ranker check . --plugins python         # only python
+code-ranker check . --plugins javascript,py  # aliases → js, python
 code-ranker check . --plugins rust,markdown  # exactly these two
 ```
 
 ### `--language <name>`
 
 For `report` / `recommend` (the scorecard + prompt): focus the scorecard and
-fix-prompt on **one** language. Not required when only one language is present. If a
+fix-prompt on **one** language (canonical name or alias, e.g. `--language js`).
+Not required when only one language is present. If a
 `--prompt <ID>` or `--focus <METRIC|PRINCIPLE>` resolves in two or more languages
 and `--language` is omitted, the command errors and lists the languages to choose
 from.

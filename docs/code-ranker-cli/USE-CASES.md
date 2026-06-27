@@ -362,7 +362,7 @@ code-ranker check ./api --plugins python --threshold file.cognitive=25
 **Triage a JavaScript/TypeScript project.**
 
 ```sh
-code-ranker report ./web --plugins javascript --output.scorecard
+code-ranker report ./web --plugins js --output.scorecard
 ```
 
 **Analyze several languages in one run (every language present is auto-detected).**

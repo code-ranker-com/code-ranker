@@ -6,23 +6,23 @@ use tempfile::TempDir;
 
 #[test]
 fn plugin_name_is_typescript() {
-    assert_eq!(TypescriptPlugin.name(), "typescript");
+    assert_eq!(TsPlugin.name(), "ts");
 }
 
 #[test]
 fn detect_requires_tsconfig() {
     let tmp = TempDir::new().unwrap();
     let input = PluginInput::default();
-    let cfg = TypescriptPlugin.config();
-    assert!(!TypescriptPlugin.detect(&cfg, tmp.path(), &input));
+    let cfg = TsPlugin.config();
+    assert!(!TsPlugin.detect(&cfg, tmp.path(), &input));
     fs::write(tmp.path().join("tsconfig.json"), "{}").unwrap();
-    assert!(TypescriptPlugin.detect(&cfg, tmp.path(), &input));
+    assert!(TsPlugin.detect(&cfg, tmp.path(), &input));
 }
 
 #[test]
 fn levels_returns_files_and_functions() {
-    let cfg = TypescriptPlugin.config();
-    let levels = TypescriptPlugin.levels(&cfg);
+    let cfg = TsPlugin.config();
+    let levels = TsPlugin.levels(&cfg);
     assert_eq!(levels.len(), 2);
     assert_eq!(levels[0].name, "files");
     assert!(levels[0].edge_kinds.contains_key("uses"));
@@ -53,8 +53,8 @@ fn function_units_extracts_per_function_nodes() {
         nodes: vec![node(&ts, "a.ts"), node(&tsx, "w.tsx")],
         edges: vec![],
     };
-    let cfg = TypescriptPlugin.config();
-    let units: Vec<_> = TypescriptPlugin
+    let cfg = TsPlugin.config();
+    let units: Vec<_> = TsPlugin
         .function_units(&cfg, &graph)
         .into_iter()
         .map(|(n, _)| n)
@@ -91,8 +91,8 @@ fn metrics_measures_ts_and_tsx_file_nodes() {
         nodes: vec![node(&ts, "a.ts"), node(&tsx, "w.tsx")],
         edges: vec![],
     };
-    let cfg = TypescriptPlugin.config();
-    let inputs = TypescriptPlugin.metrics(&cfg, &graph);
+    let cfg = TsPlugin.config();
+    let inputs = TsPlugin.metrics(&cfg, &graph);
     // Both the `.ts` and `.tsx` arms map to a grammar, so both files are measured.
     assert_eq!(inputs.len(), 2, "both ts and tsx files measured");
     // The orchestrator writes; mirror it to confirm the `.ts` file has complexity.
@@ -119,9 +119,9 @@ fn metrics_skip_unreadable_and_unsupported_files() {
         nodes: vec![n("/no/such/missing.ts"), n("/x/readme.txt")],
         edges: vec![],
     };
-    let cfg = TypescriptPlugin.config();
-    assert!(TypescriptPlugin.metrics(&cfg, &graph).is_empty());
-    assert!(TypescriptPlugin.function_units(&cfg, &graph).is_empty());
+    let cfg = TsPlugin.config();
+    assert!(TsPlugin.metrics(&cfg, &graph).is_empty());
+    assert!(TsPlugin.function_units(&cfg, &graph).is_empty());
 }
 
 #[test]
@@ -143,10 +143,10 @@ fn analyze_builds_ts_graph_with_imports_and_externals() {
     );
 
     let input = PluginInput::default();
-    let cfg = TypescriptPlugin.config();
-    let graph = TypescriptPlugin
+    let cfg = TsPlugin.config();
+    let graph = TsPlugin
         .analyze(&cfg, root, &input)
-        .expect("TypescriptPlugin.analyze should succeed");
+        .expect("TsPlugin.analyze should succeed");
 
     let a_id = root.join("src/a.ts").to_string_lossy().into_owned();
     let b_id = root.join("src/b.ts").to_string_lossy().into_owned();
@@ -195,10 +195,10 @@ fn import_path_in_comment_or_string_is_not_an_edge() {
     );
 
     let input = PluginInput::default();
-    let cfg = TypescriptPlugin.config();
-    let graph = TypescriptPlugin
+    let cfg = TsPlugin.config();
+    let graph = TsPlugin
         .analyze(&cfg, root, &input)
-        .expect("TypescriptPlugin.analyze should succeed");
+        .expect("TsPlugin.analyze should succeed");
 
     let a_id = root.join("src/a.ts").to_string_lossy().into_owned();
     let b_id = root.join("src/b.ts").to_string_lossy().into_owned();
@@ -218,8 +218,8 @@ fn uses_edges_from_a(a_rel: &str, a_src: &str) -> usize {
     let root = tmp.path();
     write_file(root, a_rel, a_src);
     write_file(root, "src/b.ts", "export const g: number = 1;\n");
-    let cfg = TypescriptPlugin.config();
-    let g = TypescriptPlugin
+    let cfg = TsPlugin.config();
+    let g = TsPlugin
         .analyze(&cfg, root, &PluginInput::default())
         .expect("analyze should succeed");
     let a_id = root.join(a_rel).to_string_lossy().into_owned();
@@ -324,10 +324,10 @@ fn edges_scale_with_real_imports() {
         a.push_str("export const y = 1;\n");
         write_file(root, "src/a.ts", &a);
 
-        let cfg = TypescriptPlugin.config();
-        let graph = TypescriptPlugin
+        let cfg = TsPlugin.config();
+        let graph = TsPlugin
             .analyze(&cfg, root, &PluginInput::default())
-            .expect("TypescriptPlugin.analyze should succeed");
+            .expect("TsPlugin.analyze should succeed");
 
         let a_id = root.join("src/a.ts").to_string_lossy().into_owned();
         let got = graph

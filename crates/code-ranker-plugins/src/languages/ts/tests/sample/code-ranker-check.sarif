@@ -9,46 +9,19 @@
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "index.md"
+                  "uri": "src/chain1.ts"
                 },
                 "region": {
-                  "startLine": 1
+                  "startLine": 2
                 }
               }
             }
           ],
           "message": {
-            "text": "{target}/index.md: broken links 1 exceeds limit 0 (inf× over budget)"
+            "text": "{target}/src/chain1.ts: chain cycle: {target}/src/chain1.ts → {target}/src/chain3.ts → {target}/src/chain2.ts → (back to start)"
           },
           "partialFingerprints": {
-            "codeRankerRuleLocation/v1": "markdown:threshold.file.broken_links:{target}/index.md"
-          },
-          "properties": {
-            "graph": "files",
-            "group": "CPX",
-            "weight": null
-          },
-          "ruleId": "threshold.file.broken_links"
-        },
-        {
-          "level": "error",
-          "locations": [
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "api.md"
-                },
-                "region": {
-                  "startLine": 1
-                }
-              }
-            }
-          ],
-          "message": {
-            "text": "{target}/api.md: chain cycle: {target}/api.md → {target}/index.md → {target}/guide.md → (back to start)"
-          },
-          "partialFingerprints": {
-            "codeRankerRuleLocation/v1": "markdown:cycle.chain:{target}/api.md"
+            "codeRankerRuleLocation/v1": "ts:cycle.chain:{target}/src/chain1.ts"
           },
           "properties": {
             "graph": "files",
@@ -56,6 +29,33 @@
             "weight": 3.0
           },
           "ruleId": "cycle.chain"
+        },
+        {
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/a.ts"
+                },
+                "region": {
+                  "startLine": 6
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "{target}/src/a.ts: mutual cycle between {target}/src/a.ts ↔ {target}/src/b.ts"
+          },
+          "partialFingerprints": {
+            "codeRankerRuleLocation/v1": "ts:cycle.mutual:{target}/src/a.ts"
+          },
+          "properties": {
+            "graph": "files",
+            "group": "CYC",
+            "weight": 2.0
+          },
+          "ruleId": "cycle.mutual"
         }
       ],
       "tool": {
@@ -63,19 +63,6 @@
           "informationUri": "https://github.com/ffedoroff/code-ranker",
           "name": "code-ranker",
           "rules": [
-            {
-              "fullDescription": {
-                "text": "Links to a local file (not a URL or `#anchor`) that does not exist on disk. A documentation-quality signal — gate it to zero in `check`."
-              },
-              "helpUri": "https://github.com/ffedoroff/code-ranker/blob/main/docs/code-ranker-cli/ERRORS.md#group-cpx",
-              "id": "threshold.file.broken_links",
-              "properties": {
-                "group": "CPX"
-              },
-              "shortDescription": {
-                "text": "Broken links"
-              }
-            },
             {
               "fullDescription": {
                 "text": "Three or more units form a strongly-connected component (A → B → C → A); the whole component must be loaded and changed together, defeating modular boundaries."
@@ -88,9 +75,22 @@
               "shortDescription": {
                 "text": "Chain"
               }
+            },
+            {
+              "fullDescription": {
+                "text": "Two units import each other (A ↔ B), so neither can be built, tested, or understood in isolation — the tightest possible coupling."
+              },
+              "helpUri": "https://github.com/ffedoroff/code-ranker/blob/main/docs/code-ranker-cli/ERRORS.md#group-cyc",
+              "id": "cycle.mutual",
+              "properties": {
+                "group": "CYC"
+              },
+              "shortDescription": {
+                "text": "Mutual"
+              }
             }
           ],
-          "version": "4.0.0"
+          "version": "5.0.0"
         }
       }
     }

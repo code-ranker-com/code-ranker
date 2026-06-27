@@ -8,10 +8,12 @@
 
 # No own principle corpus yet: with no `doc_overrides`, every `doc_url` inherits
 # the shared `base/` corpus. `doc_lang` names the folder a future own corpus would use.
-doc_lang = "markdown"
+doc_lang = "md"
 
 extensions = ["md", "markdown"]
 skip_dirs = ["node_modules", "target", "vendor"]
+# Short aliases accepted anywhere a language is named. Unique across languages.
+aliases = ["markdown"]
 
 # Multi-char Markdown syntax markers the line scanner keys on — DATA (the scan
 # LOGIC stays in `structure.rs`; single-char tokens like `#`/`)` stay inline as

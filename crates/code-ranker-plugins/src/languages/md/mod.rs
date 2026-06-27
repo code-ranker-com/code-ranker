@@ -24,19 +24,19 @@ static CONFIG: LazyLock<toml::Table> =
 // Self-register this plugin (collected by `code_ranker_plugin_api::registry`); no
 // central list anywhere names a language.
 inventory::submit! {
-    code_ranker_plugin_api::PluginRegistration(&MarkdownPlugin)
+    code_ranker_plugin_api::PluginRegistration(&MdPlugin)
 }
 
 /// The Markdown language plugin (registered by the CLI).
-pub struct MarkdownPlugin;
+pub struct MdPlugin;
 
-impl LanguagePlugin for MarkdownPlugin {
+impl LanguagePlugin for MdPlugin {
     fn config(&self) -> toml::Table {
         CONFIG.clone()
     }
 
     fn name(&self) -> &str {
-        "markdown"
+        "md"
     }
 
     fn detect(&self, _cfg: &toml::Table, workspace: &Path, input: &PluginInput) -> bool {

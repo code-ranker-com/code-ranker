@@ -13,7 +13,7 @@
 # Principle-corpus language for doc links (`doc_base` inherited from defaults).
 # JavaScript shares the TypeScript corpus; `doc_overrides = "*"` routes every
 # principle to `typescript/` instead of the shared `base/` fallback.
-doc_lang = "typescript"
+doc_lang = "ts"
 doc_overrides = "*"
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -28,3 +28,5 @@ doc_overrides = "*"
 
 extensions = ["js", "jsx", "mjs", "cjs"]
 detect_markers = ["package.json"]
+# Short aliases accepted anywhere a language is named. Unique across languages.
+aliases = ["javascript"]

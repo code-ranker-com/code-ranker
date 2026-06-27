@@ -18,7 +18,7 @@ and overrides them, and the CLI surface that prints a prompt or a doc directly.
 
 | Family | What it is | Source today | Rendered by |
 |---|---|---|---|
-| **Docs corpus** | per-principle / per-metric Markdown (`SRP.md`, `HK.md`, …) | `languages/<lang>/<ID>.md` | embedded in the binary (§3) and addressed by `doc_url`; no longer served live (§5) |
+| **Docs corpus** | per-principle / per-metric Markdown (`SRP.md`, `HK.md`, …) | `plugins/<lang>/<ID>.md` | embedded in the binary (§3) and addressed by `doc_url`; no longer served live (§5) |
 | **Prompt scaffolding** | the framing prose around a principle in an AI prompt (intro, task protocol, …) | `code-ranker-graph/metrics/prompt.md` → `PromptTemplate` | `compose_prompt` (CLI), `composePrompt` (viewer) |
 
 They are converging on **one composition engine** (§4) and one override mechanism
@@ -52,7 +52,7 @@ A language doc avoids duplicating `base/`'s language-neutral content (theory,
 algorithm, history, references) by being a **manifest** rather than a full copy:
 
 ```
-languages/
+plugins/
   base/<ID>.md     SOURCE — language-neutral content as `## ` sections; also the
                    served fallback for languages with no own corpus.
   <lang>/<ID>.md   Either a MANIFEST (assembled from base) or a full standalone doc.
@@ -84,7 +84,7 @@ absent — the language owns the full structure); the H1 + preamble is inherited
 to a line start; a `doc:base` naming a missing section — or a `from`/`to` phrase not
 found — is a hard error.
 
-Worked example — `languages/rust/ADP.md`:
+Worked example — `plugins/rust/ADP.md`:
 
 ```markdown
 <!-- doc:base "The principle" -->
@@ -97,14 +97,14 @@ Cargo models crates as a DAG; a dependency cycle between crates does not compile
 <!-- doc:base "References" -->
 ```
 
-`compose(rust/ADP.md manifest, base/ADP.md)` → the served `languages/rust/ADP.md`.
+`compose(rust/ADP.md manifest, base/ADP.md)` → the served `plugins/rust/ADP.md`.
 
 ---
 
 ## 3. Embedding in the binary ✅
 
 The corpus is embedded into the binary at build time (dependency-free — a
-[`build.rs`](../crates/code-ranker-cli/build.rs) walks `languages/**/*.md` and
+[`build.rs`](../crates/code-ranker-cli/build.rs) walks `plugins/**/*.md` and
 generates an `include_str!`-backed `CORPUS` slice; see
 [`templates.rs`](../crates/code-ranker-cli/src/templates.rs)), so the tool can
 **use the doc text itself**, not only link a URL:
@@ -150,11 +150,11 @@ the `docs <lang> <ID>` command / inline prompt text. The Pages workflow still pu
 ## 6. Per-file override — `[templates.…]` ✅
 
 A user can substitute any single corpus fragment with their own file, and the binary
-treats it **as if it were that file in `languages/`**:
+treats it **as if it were that file in `plugins/`**:
 
 ```toml
 [templates.languages.base]
-HK = "custom-hk.md"          # use ./custom-hk.md as languages/base/HK.md
+HK = "custom-hk.md"          # use ./custom-hk.md as plugins/base/HK.md
 ```
 
 or inline on the command line:
@@ -218,7 +218,7 @@ language is the **first positional argument** — there is no `--plugin` flag. B
 lists available languages; `docs <lang>` lists that language's subject catalog:
 
 ```bash
-code-ranker docs rust HK   # the resolved languages/rust/HK.md
+code-ranker docs rust HK   # the resolved plugins/rust/HK.md
 code-ranker docs base HK   # the language-agnostic base doc
 ```
 
@@ -245,7 +245,7 @@ project may substitute its own via `prompt_template_from()`), and is carried in 
 snapshot as [`PromptTemplate`](../crates/code-ranker-plugin-api/src/principle.rs) so the
 CLI and the viewer render identical text from one source. Unlike the principle/metric
 corpus, `prompt.md` is **internal template prose**: it sits next to `builtin.toml`
-(not under `languages/`) and is not a `<lang>/<ID>` doc.
+(not under `plugins/`) and is not a `<lang>/<ID>` doc.
 
 | Field | Role |
 |---|---|
@@ -279,7 +279,7 @@ and JS.
 | Piece | State |
 |---|---|
 | `doc_url` base-fallback resolution (`doc_overrides`) | ✅ |
-| `base/` corpus + `doc_base = .../languages` | ✅ |
+| `base/` corpus + `doc_base = .../plugins` | ✅ |
 | `PromptTemplate` prose in `metrics/prompt.md` (internal; parsed by `prompt_template`) | ✅ |
 | `compose_prompt` / `render_prompt` / viewer `composePrompt` | ✅ |
 | `check --output-format prompt` | ✅ |

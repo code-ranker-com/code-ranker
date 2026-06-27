@@ -38,19 +38,19 @@ static CONFIG: LazyLock<toml::Table> = LazyLock::new(|| {
 // Self-register this plugin (collected by `code_ranker_plugin_api::registry`); no
 // central list anywhere names a language.
 inventory::submit! {
-    code_ranker_plugin_api::PluginRegistration(&JavascriptPlugin)
+    code_ranker_plugin_api::PluginRegistration(&JsPlugin)
 }
 
 /// The JavaScript language plugin (handles .js / .jsx / .mjs / .cjs).
-pub struct JavascriptPlugin;
+pub struct JsPlugin;
 
-impl LanguagePlugin for JavascriptPlugin {
+impl LanguagePlugin for JsPlugin {
     fn config(&self) -> toml::Table {
         CONFIG.clone()
     }
 
     fn name(&self) -> &str {
-        "javascript"
+        "js"
     }
 
     fn detect(&self, cfg: &toml::Table, workspace: &Path, _input: &PluginInput) -> bool {

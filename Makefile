@@ -25,7 +25,7 @@ fmt-check:
 	cargo fmt --all --check
 
 lint-md:
-	lychee --offline --no-progress --exclude-path languages/_overlay 'docs/**/*.md' 'contrib/**/*.md' 'languages/**/*.md' 'AGENTS.md' 'CLAUDE.md'
+	lychee --offline --no-progress --exclude-path plugins/_overlay 'docs/**/*.md' 'contrib/**/*.md' 'plugins/**/*.md' 'AGENTS.md' 'CLAUDE.md'
 	npx --yes markdownlint-cli2
 
 # Unused-dependency check (fast, stable toolchain). FAILS the build on any unused
@@ -96,13 +96,13 @@ bump:
 	  echo "bumping $$CURRENT -> $(VERSION)"; \
 	  LC_ALL=C sed -i '' "s/$$CURRENT/$(VERSION)/g" Cargo.toml README.md; \
 	  RE=$$(printf '%s' "$$CURRENT" | sed 's/[.]/\\./g'); \
-	  for f in $$(grep -rlF "$$CURRENT" docs AGENTS.md CLAUDE.md languages 2>/dev/null || true); do \
+	  for f in $$(grep -rlF "$$CURRENT" docs AGENTS.md CLAUDE.md plugins 2>/dev/null || true); do \
 	    LC_ALL=C sed -i '' -E "/code-ranker|--version/ s/$$RE/$(VERSION)/g" "$$f" && echo "  ✓ fixed doc version refs in $$f"; \
 	  done
 	cargo build --workspace
 	@echo
 	@echo "  remaining stale version mentions in docs (auto-fix only touches code-ranker/--version lines):"
-	@hits=$$(grep -rnE -- '--version[ =]+v?[0-9]+\.[0-9]+\.[0-9]+|[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta|rc)|code-ranker[@:" ]+v?[0-9]+\.[0-9]+\.[0-9]+' docs README.md AGENTS.md CLAUDE.md languages 2>/dev/null | grep -vF "$(VERSION)" || true); \
+	@hits=$$(grep -rnE -- '--version[ =]+v?[0-9]+\.[0-9]+\.[0-9]+|[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta|rc)|code-ranker[@:" ]+v?[0-9]+\.[0-9]+\.[0-9]+' docs README.md AGENTS.md CLAUDE.md plugins 2>/dev/null | grep -vF "$(VERSION)" || true); \
 	  if [ -n "$$hits" ]; then echo "$$hits" | sed 's/^/      /'; echo "      ^ not at $(VERSION) — review (bare numbers off code-ranker/--version lines are left alone on purpose)"; else echo "      (none — all at $(VERSION))"; fi
 	@echo
 	@echo "  ✓ bumped to $(VERSION) — review and commit:"

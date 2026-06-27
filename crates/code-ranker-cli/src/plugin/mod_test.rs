@@ -54,15 +54,7 @@ fn every_registered_plugin_has_committed_goldens() {
 #[test]
 fn registry_holds_exactly_the_expected_plugins() {
     const EXPECTED: &[&str] = &[
-        "c",
-        "cpp",
-        "csharp",
-        "go",
-        "javascript",
-        "markdown",
-        "python",
-        "rust",
-        "typescript",
+        "c", "cpp", "csharp", "go", "js", "md", "python", "rust", "ts",
     ];
 
     let mut found: Vec<&str> = registry().iter().map(|p| p.name()).collect();
@@ -176,6 +168,32 @@ fn resolve_plugins_precedence() {
         result.contains(&"python".to_string()),
         "auto-detect picks up pyproject.toml"
     );
+}
+
+/// Language aliases resolve to the canonical name everywhere a language is named;
+/// an unknown token is left untouched (a downstream lookup reports it).
+#[test]
+fn aliases_resolve_to_canonical() {
+    assert_eq!(to_canonical("javascript"), "js");
+    assert_eq!(to_canonical("ts"), "ts", "canonical name is idempotent");
+    assert_eq!(to_canonical("py"), "python");
+    assert_eq!(to_canonical("rs"), "rust");
+    assert_eq!(to_canonical("c#"), "csharp");
+    assert_eq!(to_canonical("rust"), "rust", "canonical name is idempotent");
+    assert_eq!(to_canonical("nope"), "nope", "unknown token is left as-is");
+
+    // `--plugins js,py` resolves to canonical names (→ canonical snapshot keys).
+    let d = tempfile::tempdir().unwrap();
+    let result = resolve_plugins(
+        &["js".to_string(), "py".to_string()],
+        &[],
+        &BTreeMap::new(),
+        d.path(),
+        &PluginInput::default(),
+        None,
+    )
+    .unwrap();
+    assert_eq!(result, vec!["js", "python"]);
 }
 
 /// `resolve_plugins` errors on zero detection (with a config hint).

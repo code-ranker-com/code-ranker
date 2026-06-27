@@ -12,6 +12,8 @@ doc_lang = "csharp"
 # no single universal manifest, so there are no `detect_markers`.
 extensions = ["cs"]
 skip_dirs = ["bin", "obj", "node_modules"]
+# Short aliases accepted anywhere a language is named. Unique across languages.
+aliases = ["cs", "c#"]
 
 test_dirs = ["test", "tests"]
 test_suffixes = ["Tests.cs", "Test.cs"]

@@ -67,15 +67,15 @@ of these and rebuild (see Setup) — all are baked into the binary:
 - **scaffolding** (intro / doc-note / task / focus prose) —
   `crates/code-ranker-graph/metrics/prompt.md`.
 - **the full reference doc** the agent reads via `docs <FOCUS>` —
-  `languages/<lang>/<FOCUS>.md` (e.g. `ADP.md`), and the offline entry point
-  `languages/base/AI.md` (`docs ai`).
+  `plugins/<lang>/<FOCUS>.md` (e.g. `ADP.md`), and the offline entry point
+  `plugins/base/AI.md` (`docs ai`).
 
 Change the **smallest** lever that fixes the observed failure.
 
 **Respect the base / per-language boundary.** Language-specific content (Rust
-`pub(in …)`, a Python import idiom, …) belongs ONLY in `languages/<lang>/` (its
+`pub(in …)`, a Python import idiom, …) belongs ONLY in `plugins/<lang>/` (its
 `<FOCUS>.md` doc) or the per-language `config.toml` prompt override — **never** in the
-language-neutral `languages/base/AI.md` or the neutral `defaults.toml` prompt. When a
+language-neutral `plugins/base/AI.md` or the neutral `defaults.toml` prompt. When a
 cheaper tier fails for want of a language-specific remedy, the base lever stays generic
 ("read `docs <principle>` — it has the cause and smallest fix for *your* language") and
 the specifics live in the per-language doc it points at. Putting a Rust example in

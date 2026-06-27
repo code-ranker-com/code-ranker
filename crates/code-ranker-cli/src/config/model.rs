@@ -103,31 +103,6 @@ pub(crate) const LANG_SECTION_KEYS: &[&str] = &[
     "principles",
 ];
 
-impl Config {
-    /// Resolve the per-language orchestrator config for `lang`: the reserved
-    /// `[plugins.base]` block deep-merged with `[plugins.<lang>]`, restricted to the
-    /// orchestrator sections ([`LANG_SECTION_KEYS`]). Built-in defaults live under
-    /// `[plugins.base]` in `defaults.toml`, so the result always carries them.
-    pub fn language_config(&self, lang: &str) -> Result<LangConfig> {
-        let pick = |block: &toml::Table| -> toml::Table {
-            block
-                .iter()
-                .filter(|(k, _)| LANG_SECTION_KEYS.contains(&k.as_str()))
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect()
-        };
-        let mut overlay = toml::Table::new();
-        for key in ["base", lang] {
-            if let Some(block) = self.plugins.languages.get(key) {
-                overlay = code_ranker_plugin_api::toml_merge::deep_merge(overlay, pick(block));
-            }
-        }
-        toml::Value::Table(overlay)
-            .try_into()
-            .with_context(|| format!("building the effective config for language {lang:?}"))
-    }
-}
-
 /// Doc-corpus override map (`[templates.languages.<lang>.<ID>]`): `lang → (ID →
 /// file path)`. A configured path is read from disk in place of the embedded
 /// `languages/<lang>/<ID>.md` (see `crate::templates`). Empty by default — its
@@ -463,92 +438,6 @@ pub(crate) fn parse_number(s: &str) -> Result<f64> {
         format!("invalid number {s:?} (expected e.g. 500000, 5_000_000, 5K, 1.5M)")
     })?;
     Ok(n * mult)
-}
-
-/// TOML rejects a bare `300K` (a `K`/`M`/`G` suffix makes it neither a number nor
-/// a string), so without help a user must write `hk = "300K"`. This pre-pass lets
-/// them write `hk = 300K` by quoting bare suffixed numbers **only inside a
-/// `*thresholds*` table**, before the text reaches the TOML parser. Plain and
-/// underscored integers stay native; already-quoted values and everything outside
-/// a thresholds table are left untouched. The matching CLI form (`--threshold
-/// file.hk=300K`) needs no help — it goes straight through [`parse_number`].
-pub(crate) fn quote_suffixed_thresholds(text: &str) -> String {
-    let mut out = String::with_capacity(text.len() + 16);
-    let mut in_thresholds = false;
-    for line in text.lines() {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with('[') {
-            // Section header (`[t]` or `[[t]]`): a thresholds table enables quoting.
-            let name = trimmed.trim_start_matches('[');
-            in_thresholds = name
-                .split(']')
-                .next()
-                .is_some_and(|s| s.contains("thresholds"));
-        } else if in_thresholds && let Some(quoted) = quote_suffixed_value_line(line) {
-            out.push_str(&quoted);
-            out.push('\n');
-            continue;
-        }
-        out.push_str(line);
-        out.push('\n');
-    }
-    out
-}
-
-/// If `line` is a `key = <bare-suffixed-number>` assignment, return it with the
-/// value quoted (formatting and any trailing comment preserved); else `None`.
-fn quote_suffixed_value_line(line: &str) -> Option<String> {
-    let eq = line.find('=')?;
-    let key = line[..eq].trim();
-    if key.is_empty()
-        || !key
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-    {
-        return None;
-    }
-    let after = &line[eq + 1..];
-    let (val_seg, comment) = match after.find('#') {
-        Some(h) => after.split_at(h),
-        None => (after, ""),
-    };
-    if !is_bare_suffixed_number(val_seg.trim()) {
-        return None;
-    }
-    let lead: String = val_seg.chars().take_while(|c| c.is_whitespace()).collect();
-    let trail: String = val_seg
-        .chars()
-        .rev()
-        .take_while(|c| c.is_whitespace())
-        .collect();
-    Some(format!(
-        "{}={lead}\"{}\"{trail}{comment}",
-        &line[..eq],
-        val_seg.trim()
-    ))
-}
-
-/// Does `v` look like a bare `K`/`M`/`G`-suffixed number (`300K`, `1.5M`,
-/// `5_000K`)? Already-quoted values and plain numbers return `false`.
-fn is_bare_suffixed_number(v: &str) -> bool {
-    let Some(last) = v.chars().last() else {
-        return false;
-    };
-    if !matches!(last, 'k' | 'K' | 'm' | 'M' | 'g' | 'G') {
-        return false;
-    }
-    let body = &v[..v.len() - 1];
-    let mut seen_digit = false;
-    let mut seen_dot = false;
-    for c in body.chars() {
-        match c {
-            '0'..='9' => seen_digit = true,
-            '_' => {}
-            '.' if !seen_dot => seen_dot = true,
-            _ => return false,
-        }
-    }
-    seen_digit
 }
 
 #[cfg(test)]

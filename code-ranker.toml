@@ -29,21 +29,26 @@ path = ".code-ranker/{project-dir}.html"
 #
 # `hk` (`sloc × (fan_in × fan_out)²`) is a *regression ratchet*, not an active
 # shortlist: the worst module is the `LanguagePlugin` trait
-# `code-ranker-plugin-api/src/plugin.rs` (~0.30M, fan_in 12 × fan_out 6) — an
-# irreducible hub whose `fan_in` grows with each new language, so HK climbs
-# quadratically (+1 language ≈ 0.35M, +2 ≈ 0.40M). Reducing it would be
-# metric-gaming, so it is accepted by design. The orchestrator
-# `code-ranker-cli/src/pipeline.rs` (~0.18M, high fan_out) is likewise accepted.
+# `code-ranker-plugin-api/src/plugin.rs` (~0.44M, fan_in 14 × fan_out 6) — an
+# irreducible hub whose `fan_in` grows with each new language and each subsystem
+# that talks to the trait, so HK climbs quadratically (+1 in-edge ≈ 0.51M). The
+# v5.0 multi-language work raised it from ~0.33M (fan_in 12): the per-language
+# effective-config injection added one in-edge, and splitting the CLI plugin facade
+# into method-dispatch (`plugin/mod.rs`) + selection-policy (`plugin/resolve.rs`)
+# added another (both now import `PluginInput`). Reducing the trait's own coupling
+# would be metric-gaming, so it is accepted by design. The orchestrator
+# `code-ranker-cli/src/pipeline.rs` (~0.27M, high fan_out) is likewise accepted.
 # Because plugin.rs is BOTH the largest and accepted, no ceiling can flag a
 # smaller file without also failing it — so this gate is green by design and only
 # trips on a genuinely new/worse hub. (`builtin.rs` ~0.25M, sloc 248, is the one
 # real split candidate, but it sits below plugin.rs — chase it via the scorecard
-# ranking, not the gate.) The 350K ceiling sits just above plugin.rs with ~1
+# ranking, not the gate.) The 500K ceiling sits just above plugin.rs with ~1
 # language of growth headroom; when a new language legitimately pushes plugin.rs
-# past it, bump deliberately (or split a genuinely-too-big module, as the former
-# ~1.15M `config.rs` hub was split into the `config/` concern facade).
+# past it, bump deliberately (or split a genuinely-too-big module — as the former
+# ~1.15M `config.rs` hub became the `config/` facade, and the v5.0 multi-language
+# `plugin/mod.rs` facade was split into `mod.rs` + `resolve.rs`).
 [plugins.base.rules.thresholds.file]
-hk = 350000
+hk = 500000
 cyclomatic = 100
 cognitive = 70
 sloc = 400

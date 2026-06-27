@@ -9,6 +9,7 @@ pub mod load;
 pub mod metrics;
 pub mod model;
 pub mod rules;
+pub mod thresholds;
 pub mod violations;
 
 pub use ignore::apply_ignore;

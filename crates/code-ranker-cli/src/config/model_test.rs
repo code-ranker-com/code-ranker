@@ -123,25 +123,12 @@ hk = 300K
 cyclomatic = 200      # plain int stays native
 sloc = 1.5M           # fractional + suffix
 ";
-    let cfg: Config = toml::from_str(&quote_suffixed_thresholds(src)).unwrap();
+    let cfg: Config =
+        toml::from_str(&crate::config::thresholds::quote_suffixed_thresholds(src)).unwrap();
     let lc = cfg.language_config("base").unwrap();
     assert_eq!(lc.rules.thresholds.file.get("hk"), Some(300_000.0));
     assert_eq!(lc.rules.thresholds.file.get("cyclomatic"), Some(200.0));
     assert_eq!(lc.rules.thresholds.file.get("sloc"), Some(1_500_000.0));
-}
-
-#[test]
-fn suffix_quoting_is_scoped_to_thresholds_tables() {
-    // A bare-suffixed value outside a thresholds table is NOT touched (it would
-    // still be invalid TOML there — we only help where suffixes are meaningful).
-    let outside = quote_suffixed_thresholds("[other]\nx = 300K\n");
-    assert!(outside.contains("x = 300K"), "untouched outside: {outside}");
-    let inside = quote_suffixed_thresholds("[plugins.base.rules.thresholds.file]\nhk = 300K\n");
-    assert!(inside.contains("hk = \"300K\""), "quoted inside: {inside}");
-    // Already-quoted and plain values are left as-is.
-    let q =
-        quote_suffixed_thresholds("[plugins.base.rules.thresholds.file]\na = \"5M\"\nb = 200\n");
-    assert!(q.contains("a = \"5M\"") && q.contains("b = 200"), "{q}");
 }
 
 #[test]

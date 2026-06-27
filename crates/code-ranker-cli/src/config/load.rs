@@ -1,7 +1,8 @@
 //! Config loading: discover `code-ranker.toml` (or `Cargo.toml` metadata),
 //! apply inline `KEY=VALUE` and `--cycle-rule` / `--threshold` CLI overrides.
 
-use super::model::{Config, DEFAULTS, quote_suffixed_thresholds};
+use super::model::{Config, DEFAULTS, LANG_SECTION_KEYS, LangConfig};
+use super::thresholds::quote_suffixed_thresholds;
 use anyhow::{Context, Result};
 use code_ranker_plugin_api::log;
 use code_ranker_plugin_api::toml_merge::deep_merge;
@@ -95,6 +96,33 @@ fn builtin_table() -> Table {
     DEFAULTS
         .parse()
         .expect("embedded defaults.toml parses as a table")
+}
+
+impl Config {
+    /// Resolve the per-language orchestrator config for `lang`: the reserved
+    /// `[plugins.base]` block deep-merged with `[plugins.<lang>]`, restricted to the
+    /// orchestrator sections ([`LANG_SECTION_KEYS`]). Built-in defaults live under
+    /// `[plugins.base]` in `defaults.toml`, so the result always carries them.
+    /// Lives here, next to the loader's merge machinery, rather than in `model`
+    /// (the data-shape module), keeping config *resolution* out of the data model.
+    pub fn language_config(&self, lang: &str) -> Result<LangConfig> {
+        let pick = |block: &toml::Table| -> toml::Table {
+            block
+                .iter()
+                .filter(|(k, _)| LANG_SECTION_KEYS.contains(&k.as_str()))
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect()
+        };
+        let mut overlay = toml::Table::new();
+        for key in ["base", lang] {
+            if let Some(block) = self.plugins.languages.get(key) {
+                overlay = deep_merge(overlay, pick(block));
+            }
+        }
+        toml::Value::Table(overlay)
+            .try_into()
+            .with_context(|| format!("building the effective config for language {lang:?}"))
+    }
 }
 
 /// Validate every configured threshold key once the full config is known: a key

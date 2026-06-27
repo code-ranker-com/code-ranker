@@ -118,8 +118,9 @@ function switchToLevel(target) {
 // Persists `lang` in the URL; uses replaceState (no extra history entry).
 function switchToLang(target) {
   if (typeof setLang === 'function') setLang(target);
-  // Highlight the selected tab in the language switcher.
-  document.querySelectorAll('#lang-switch a').forEach(a => a.classList.toggle('selected', a.dataset.lang === target));
+  // Reflect the active language in the header dropdown.
+  const langSel = document.getElementById('lang-switch');
+  if (langSel) langSel.value = target;
   // Rebuild level sections / diff / cycles for the new language.
   if (typeof updateFilesTab === 'function') updateFilesTab();
   if (typeof recomputeAll  === 'function') recomputeAll();

@@ -146,6 +146,15 @@ label = "External"
 # the end, matching the rendered output exactly).
 # ──────────────────────────────────────────────────────────────────────────────
 
+# Halstead total-count specs (N₁ / N₂) are language-AGNOSTIC prose, so they
+# live in the base; η₁ / η₂ list each language’s token set and stay per-language.
+[specs.n1]
+description = "Total operators (N₁): every operator occurrence counted with repetition (the η₁ tokens, not deduplicated)."
+
+[specs.n2]
+description = "Total operands (N₂): every operand occurrence counted with repetition (the η₂ texts, not deduplicated)."
+
+
 [[principles]]
 id = "CPX"
 title = "CPX — Reduce Complexity"

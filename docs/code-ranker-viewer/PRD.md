@@ -197,11 +197,11 @@ diff between the baseline snapshot and the current `[input]`: nodes and
 edges added, removed, or affected. The diff includes an overall
 verdict: `improved`, `degraded`, or `neutral`. The interactive
 diff HTML uses Graphviz WASM (bundled in the binary) for client-side
-DOT→SVG layout. The report covers every analyzed language; a **language switcher**
-in the report header — sitting **above** the level switcher — shows the active
-language and switches the whole report to it (its map, node table, summary, and
-Prompt Generator). The language switcher is hidden when the report covers only one
-language, so single-language reports look unchanged. The viewer shows the `files`
+DOT→SVG layout. The report covers every analyzed language; a **language dropdown**
+in the report header shows the active language and switches the whole report to it
+(its map, node table, summary, and Prompt Generator). It opens on the **largest**
+language (most nodes + edges) by default. The dropdown is hidden when the report
+covers only one language, so single-language reports look unchanged. The viewer shows the `files`
 level by default; when the snapshot
 carries extra levels (e.g. `functions`, emitted by `[plugins.base.levels] functions = true`) a
 **level switcher** (Files / Functions tabs above the map) selects which level's

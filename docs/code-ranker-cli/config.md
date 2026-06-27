@@ -484,7 +484,9 @@ code-ranker check . --ignore '**/tests/**' --ignore '**/generated/**'
 Configure a cycle check. `KIND`: `mutual` | `chain`. Value: `on`
 (strict — any cycle fails), `off` (ignored), or an integer `N` (allow up to `N`
 cycles of that kind, fail on the `N+1`-th). Defaults: `mutual` and `chain` on
-(= strict). Repeatable.
+(= strict) for every language **except `md`**, which ships them **off** by default
+(cross-document link cycles are normal for documentation, not a defect — re-enable
+under `[plugins.md.rules.cycles]` if you want them gated). Repeatable.
 
 ```bash
 # allow up to 7 chain cycles (forbid an 8th); keep mutual strict

@@ -16,6 +16,25 @@ function langKeys(snap) {
   return Object.keys((snap || {}).languages || {});
 }
 
+// The language to open by default: the one with the most graph elements
+// (nodes + edges, summed across all its levels) — i.e. the biggest/most relevant
+// language in the report. Ties resolve to the earlier (sorted) key. Falls back to
+// the first key when there is nothing to weigh.
+function defaultLang(snap) {
+  const langs = langKeys(snap);
+  if (langs.length <= 1) return langs[0] || null;
+  let best = langs[0], bestW = -1;
+  for (const l of langs) {
+    const graphs = (snap.languages[l] || {}).graphs || {};
+    let w = 0;
+    for (const g of Object.values(graphs)) {
+      w += (g.nodes ? g.nodes.length : 0) + (g.edges ? g.edges.length : 0);
+    }
+    if (w > bestW) { bestW = w; best = l; }
+  }
+  return best;
+}
+
 // ── Snapshot sub-object accessors ────────────────────────────────────────────
 
 // Which snapshot the diagrams / tables / modal show: 'baseline' or 'current'.
@@ -29,7 +48,7 @@ function activeSnap() {
     ? (window.BASELINE ?? window.CURRENT)
     : (window.CURRENT ?? window.BASELINE);
   if (!snap) return null;
-  const lang = currentLang() || langKeys(snap)[0];
+  const lang = currentLang() || defaultLang(snap);
   return lang ? (snap.languages?.[lang] ?? null) : null;
 }
 

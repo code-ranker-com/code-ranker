@@ -35,11 +35,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     window._ntSelected[epState.level] = new Set(epState.sel);
   }
   // Restore active language from the URL before building level sections; default
-  // to the first language key in the snapshot (BTreeMap order = alphabetical).
+  // to the biggest language (most nodes + edges) when the URL pins none.
   const snap = window.CURRENT ?? window.BASELINE;
   const urlLang = getNavParams().lang;
-  const firstLang = (typeof langKeys === 'function' && snap) ? langKeys(snap)[0] : null;
-  const initialLang = urlLang || firstLang || null;
+  const fallbackLang = (typeof defaultLang === 'function' && snap) ? defaultLang(snap) : null;
+  const initialLang = urlLang || fallbackLang || null;
   if (initialLang && typeof setLang === 'function') setLang(initialLang);
 
   // Build any extra level views (e.g. `functions`) + the level/language switchers

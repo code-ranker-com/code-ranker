@@ -37,6 +37,14 @@ chain = true
 # K/M/G suffixes.
 [plugins.base.rules.thresholds.file]
 
+# Markdown is documentation, not code: it ships NO gate by default — cross-document
+# link cycles are perfectly normal, and there are no per-file thresholds. So `md`
+# turns the strict base cycle rules OFF (a project can still opt back in under
+# `[plugins.md]`). Thresholds inherit the empty base set (no limits).
+[plugins.md.rules.cycles]
+mutual = false
+chain = false
+
 # ── Output artifacts (`report`) ──────────────────────────────────────────────
 # One section per format: `path` is a filename template; `enabled` forces the
 # format on/off. `--output.<fmt>[.path]` flags override these. Placeholders:

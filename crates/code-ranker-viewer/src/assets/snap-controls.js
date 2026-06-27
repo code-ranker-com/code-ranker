@@ -111,7 +111,8 @@ function updateFilesTab() {
   // Determine the active language; default to the first key.
   const langs = (typeof langKeys === 'function') ? langKeys(snap) : Object.keys(snap.languages || {});
   if (!langs.length) return;
-  const activeLang = (typeof currentLang === 'function' && currentLang()) || langs[0];
+  const activeLang = (typeof currentLang === 'function' && currentLang())
+    || (typeof defaultLang === 'function' ? defaultLang(snap) : langs[0]);
   if (typeof setLang === 'function') setLang(activeLang);
 
   const langSnap = (snap.languages || {})[activeLang] || {};
@@ -143,24 +144,30 @@ function updateFilesTab() {
     main.appendChild(sec);
   }
 
-  // ── Language switcher ────────────────────────────────────────────────────
+  // ── Language switcher (header dropdown) ────────────────────────────────────
+  // A <select> of the snapshot's languages, hidden for a single-language report.
+  // Rebuilt on every updateFilesTab() call; the `change` handler is bound once.
   const langSw = document.getElementById('lang-switch');
   if (langSw) {
     langSw.innerHTML = '';
     for (const lang of langs) {
-      const a = document.createElement('a');
-      a.href = '#';
-      a.dataset.lang = lang;
-      a.textContent = lang.charAt(0).toUpperCase() + lang.slice(1);
-      if (lang === activeLang) a.classList.add('selected');
-      a.addEventListener('click', e => {
-        e.preventDefault();
-        if (lang === (typeof currentLang === 'function' ? currentLang() : null)) return;
-        if (typeof switchToLang === 'function') switchToLang(lang);
-      });
-      langSw.appendChild(a);
+      const opt = document.createElement('option');
+      opt.value = lang;
+      opt.textContent = lang;
+      langSw.appendChild(opt);
     }
+    langSw.value = activeLang;
     langSw.hidden = langs.length < 2;
+    if (!langSw.dataset.bound) {
+      langSw.addEventListener('change', e => {
+        const lang = e.target.value;
+        if (lang !== (typeof currentLang === 'function' ? currentLang() : null)
+            && typeof switchToLang === 'function') {
+          switchToLang(lang);
+        }
+      });
+      langSw.dataset.bound = '1';
+    }
   }
 
   // ── Level switcher ───────────────────────────────────────────────────────

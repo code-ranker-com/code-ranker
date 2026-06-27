@@ -737,9 +737,9 @@ a sortable node table for the single Files view, and the prompt-generator panel 
 principle buttons are read from `snapshot.languages.<lang>.principles` — the 13 design
 principles ADP / SRP / OCP / LSP / ISP / DIP / DRY / KISS / LoD / MISU / CoI / YAGNI /
 CPX) **and the snapshot data** are all embedded in
-the one file. A **language switcher** in the header (above the Files/Functions level
-switcher) shows the active language and switches the whole report; it is hidden when
-the report covers a single language. External library nodes render in a distinct
+the one file. A **language dropdown** in the header shows the active language and
+switches the whole report (opening on the largest language by default); it is hidden
+when the report covers a single language. External library nodes render in a distinct
 amber colour with dashed edges. No network, no telemetry — `open` it straight from
 disk.
 

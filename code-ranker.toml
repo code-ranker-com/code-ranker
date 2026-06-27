@@ -8,9 +8,13 @@ version = "5.0"
 # this project overrides — every unset key inherits the built-in default (e.g.
 # `[ignore]` tests/gitignore on, `[rules.cycles]` strict). CLI flags still win.
 
-# Active languages; overridden by --plugins. Omit/empty → auto-detect every language.
-[plugins]
-enabled = ["rust"]
+# Languages are auto-detected (no `[plugins] enabled`), so the repo gates its Rust
+# product, its Markdown docs, and any other language present. Exclude dev tooling
+# from that self-analysis: `contrib/` holds one-off helper scripts (the prompt-eval
+# harness) and notes, not product code.
+[plugins.base.ignore]
+paths = ["contrib/**"]
+
 # ── Output artifacts (`report`) ──────────────────────────────────────────────
 # Override only the path template (the built-in default is
 # `.code-ranker/{ts}-{git-hash-3}.{json,html}`); `enabled` and the sarif/codequality

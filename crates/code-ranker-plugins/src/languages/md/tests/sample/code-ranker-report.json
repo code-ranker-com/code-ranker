@@ -1,12 +1,12 @@
 {
-  "command": "code-ranker report /home/user/code-ranker/crates/code-ranker-plugins/src/languages/md/tests/sample --config /home/user/code-ranker/crates/code-ranker-plugins/src/languages/md/tests/sample/code-ranker.toml --output.json.path=/home/user/code-ranker/crates/code-ranker-plugins/src/languages/md/tests/sample/code-ranker-report.json",
-  "config_file": "/home/user/code-ranker/crates/code-ranker-plugins/src/languages/md/tests/sample/code-ranker.toml",
-  "generated_at": "1970-01-01T00:00:00Z",
+  "command": "code-ranker report crates/code-ranker-plugins/src/languages/md/tests/sample --config crates/code-ranker-plugins/src/languages/md/tests/sample/code-ranker.toml --output.json.path=crates/code-ranker-plugins/src/languages/md/tests/sample/code-ranker-report.json",
+  "config_file": "crates/code-ranker-plugins/src/languages/md/tests/sample/code-ranker.toml",
+  "generated_at": "2026-06-27T21:10:55.050737Z",
   "git": {
-    "branch": "main",
-    "commit": "000000000000",
-    "dirty_files": 0,
-    "origin": "git@example.com:org/repo.git"
+    "branch": "docs/v5-multilang-format",
+    "commit": "28fd0fd8fc77",
+    "dirty_files": 8,
+    "origin": "git@github.com:ffedoroff/code-ranker.git"
   },
   "languages": {
     "md": {
@@ -22,23 +22,8 @@
               "label": "Lines of Code"
             }
           },
-          "cycle_kinds": {
-            "chain": {
-              "description": "Three or more units form a strongly-connected component (A → B → C → A); the whole component must be loaded and changed together, defeating modular boundaries.",
-              "label": "Chain",
-              "remediation": "Run `code-ranker docs ADP` and follow its instructions."
-            }
-          },
-          "cycles": [
-            {
-              "kind": "chain",
-              "nodes": [
-                "{target}/api.md",
-                "{target}/index.md",
-                "{target}/guide.md"
-              ]
-            }
-          ],
+          "cycle_kinds": {},
+          "cycles": [],
           "edge_attributes": {},
           "edge_kinds": {
             "uses": {
@@ -91,14 +76,6 @@
                 "warning": 0.0
               },
               "value_type": "int"
-            },
-            "cycle": {
-              "description": "Cycle kind this node participates in.",
-              "group": "coupling",
-              "label": "Cycle",
-              "name": "Dependency cycle",
-              "short": "Cycle",
-              "value_type": "str"
             },
             "fan_in": {
               "description": "Many other units depend on this one, making it risky to change and a single point of failure — though some hubs (shared types) carry high fan-in legitimately.",
@@ -157,7 +134,6 @@
           },
           "nodes": [
             {
-              "cycle": "chain",
               "fan_in": 2,
               "fan_out": 2,
               "headings": 1,
@@ -169,7 +145,6 @@
               "name": "api.md"
             },
             {
-              "cycle": "chain",
               "fan_in": 2,
               "fan_out": 2,
               "headings": 1,
@@ -182,7 +157,6 @@
             },
             {
               "broken_links": 1,
-              "cycle": "chain",
               "fan_in": 2,
               "fan_out": 2,
               "headings": 1,
@@ -202,7 +176,6 @@
             "card": [],
             "columns": [
               "kind",
-              "cycle",
               "fan_in",
               "fan_out",
               "headings",
@@ -210,13 +183,9 @@
               "links",
               "broken_links"
             ],
-            "default_sort": "cycle",
-            "filter": [
-              "cycle"
-            ],
+            "filter": [],
             "size": [],
             "sort": [
-              "cycle",
               "fan_in",
               "fan_out",
               "headings",
@@ -253,14 +222,14 @@
     "md"
   ],
   "roots": {
-    "target": "/home/user/code-ranker/crates/code-ranker-plugins/src/languages/md/tests/sample"
+    "target": "/Users/roman/work/code-ranker/crates/code-ranker-plugins/src/languages/md/tests/sample"
   },
   "schema_version": "5.0",
-  "target": "/home/user/code-ranker/crates/code-ranker-plugins/src/languages/md/tests/sample",
+  "target": "/Users/roman/work/code-ranker/crates/code-ranker-plugins/src/languages/md/tests/sample",
   "timings": [
     {
       "detail": "3 nodes from 3 files",
-      "ms": 0,
+      "ms": 20,
       "stage": "md: parse"
     },
     {
@@ -270,12 +239,12 @@
     },
     {
       "detail": "nodes=3 edges=6",
-      "ms": 0,
+      "ms": 13,
       "stage": "md: projection"
     }
   ],
   "versions": {
     "code-ranker": "5.0.0"
   },
-  "workspace": "/home/user/code-ranker"
+  "workspace": "/Users/roman/work/code-ranker"
 }

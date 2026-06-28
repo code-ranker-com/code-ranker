@@ -86,6 +86,24 @@ clean:
 #   make publish  (phase 2) is the single Release button: after Verify is green it
 #                 dispatches publish.yml to release everywhere
 #                 (crates.io / PyPI / Docker / GitHub Release + npm).
+#
+# GitHub-ONLY prerelease (an alpha for testing — GitHub Release + binaries, and
+# NOTHING on any registry). The registries are SEPARATE workflows that run only
+# from publish.yml, so do NOT use `make publish` here — dispatch release.yml
+# directly and it publishes a GitHub Release + binaries and nothing else. The one
+# registry job baked into release.yml is npm; set `publish-prereleases = false` in
+# dist-workspace.toml and it (and any other publish-job) is SKIPPED for a
+# prerelease tag. Cut it from a THROWAWAY branch so the alpha version bump never
+# lands on main:
+#     git checkout -b release/vX.Y.Z-alpha
+#     # in dist-workspace.toml: publish-prereleases = false
+#     make bump VERSION=X.Y.Z-alpha && git commit -am 'release vX.Y.Z-alpha'
+#     git push -u origin release/vX.Y.Z-alpha
+#     git tag -a vX.Y.Z-alpha -m vX.Y.Z-alpha && git push origin vX.Y.Z-alpha
+#     gh workflow run release.yml --ref release/vX.Y.Z-alpha -f tag=vX.Y.Z-alpha
+# Verify goes RED on the PyPI job for a non-PEP-440 suffix like `-pre-alpha` —
+# expected and harmless: a direct release.yml dispatch is not gated by Verify and
+# never runs the PyPI/crates/Docker workflows. Delete the branch + tag when done.
 
 bump:
 	@if [ -z "$(VERSION)" ]; then echo "usage: make bump VERSION=0.1.0-alpha.12"; exit 1; fi

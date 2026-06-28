@@ -92,11 +92,11 @@ pub(crate) fn run(
     // so `fan_in`, `Fan-in`, and `FAN in` all resolve the same metric.
     let want = templates::normalize_id(subject);
     if want == "metrics" {
-        emit(render_metrics_index(&specs, language), language);
+        emit(render_metrics_index(&specs), language);
     } else if want == "principles" {
-        emit(render_principles_index(&specs, language), language);
+        emit(render_principles_index(&specs), language);
     } else if let Some(cat) = category_key(&specs, subject) {
-        emit(render_category(&specs, language, &cat), language);
+        emit(render_category(&specs, &cat), language);
     } else if let Some(p) = specs
         .principles
         .iter()
@@ -127,20 +127,15 @@ fn emit(md: String, lang: &str) {
 
 /// Make instructional `<lang>` placeholders concrete in served per-language docs, so
 /// commands print runnable as-is (`docs rust hk`, `--plugins rust`). `base` is the
-/// language-agnostic catalog, so its generic `<lang>` stays a placeholder.
+/// language-agnostic catalog, so its generic `<lang>` stays a placeholder. Every
+/// `docs`-command hint is written with the literal `<lang>` token and localized
+/// here at emit time — one substitution point for the whole served doc.
 fn localize_lang(md: String, lang: &str) -> String {
     if lang == "base" {
         md
     } else {
         md.replace("<lang>", lang)
     }
-}
-
-/// The language token a `docs` command hint should print: a concrete language for a
-/// real plugin, but the generic `<lang>` placeholder for `base` (its catalog is
-/// language-agnostic — mirrors [`localize_lang`]).
-fn command_lang(lang: &str) -> &str {
-    if lang == "base" { "<lang>" } else { lang }
 }
 
 /// `base` (the language-agnostic catalog) or any registered plugin name.
@@ -419,36 +414,32 @@ fn principles_block(specs: &DocSpecs) -> String {
         .collect()
 }
 
-/// `docs <lang> metrics`: every metric, grouped by category.
-fn render_metrics_index(specs: &DocSpecs, lang: &str) -> String {
-    let lang = command_lang(lang);
+/// `docs <lang> metrics`: every metric, grouped by category. The `<lang>` hint is
+/// localized at emit time (concrete language, or kept generic for `base`).
+fn render_metrics_index(specs: &DocSpecs) -> String {
     format!(
-        "Metrics — print one with `code-ranker docs {lang} <metric>`:\n{}",
+        "Metrics — print one with `code-ranker docs <lang> <metric>`:\n{}",
         categories_block(specs)
     )
 }
 
 /// `docs <lang> principles`: every design principle.
-fn render_principles_index(specs: &DocSpecs, lang: &str) -> String {
-    let lang = command_lang(lang);
+fn render_principles_index(specs: &DocSpecs) -> String {
     format!(
-        "Principles — print one with `code-ranker docs {lang} <ID>`:\n\n{}",
+        "Principles — print one with `code-ranker docs <lang> <ID>`:\n\n{}",
         principles_block(specs)
     )
 }
 
 /// `docs <lang> <category>`: the category's human label + description + its member metrics.
-fn render_category(specs: &DocSpecs, lang: &str, key: &str) -> String {
-    let lang = command_lang(lang);
+fn render_category(specs: &DocSpecs, key: &str) -> String {
     // Single-category view: the human label is the title (the key was just typed),
     // so there is no `key: Label` echo.
     let mut out = category_label(specs, key);
     if let Some(d) = specs.groups.get(key).and_then(|g| g.description.as_deref()) {
         out.push_str(&format!("\n{d}"));
     }
-    out.push_str(&format!(
-        "\n\nMetrics — print one with `code-ranker docs {lang} <metric>`:\n"
-    ));
+    out.push_str("\n\nMetrics — print one with `code-ranker docs <lang> <metric>`:\n");
     for (k, spec) in metrics_in_category(specs, key) {
         out.push_str(&format!("  - {k}: {}", metric_name(spec, k)));
         if let Some(d) = spec.description.as_deref() {

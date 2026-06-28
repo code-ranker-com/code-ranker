@@ -54,7 +54,7 @@ fn category_subject_resolves_case_insensitively() {
 
 #[test]
 fn render_category_lists_label_description_and_members() {
-    let out = render_category(&specs(), "rust", "loc");
+    let out = render_category(&specs(), "loc");
     assert!(out.contains("Lines of Code"), "header (human label): {out}");
     assert!(
         out.contains("Lines of code breakdown"),
@@ -120,7 +120,7 @@ fn catalog_lists_every_subject_class() {
 
 #[test]
 fn metrics_index_lists_categories_and_members() {
-    let out = render_metrics_index(&specs(), "rust");
+    let out = render_metrics_index(&specs());
     assert!(
         out.contains("loc — Lines of code breakdown"),
         "category: {out}"
@@ -130,25 +130,22 @@ fn metrics_index_lists_categories_and_members() {
 
 #[test]
 fn principles_index_lists_each_principle() {
-    let out = render_principles_index(&specs(), "rust");
+    let out = render_principles_index(&specs());
     assert!(out.contains("- TSR: Test Ratio"), "principle listed: {out}");
 }
 
-/// Index hints name a concrete language, but keep the generic `<lang>` placeholder
-/// for `base` (its catalog is language-agnostic — mirrors `localize_lang`).
+/// Index hints carry the generic `<lang>` token; `emit` → `localize_lang` makes it
+/// concrete for a real plugin and keeps `<lang>` for `base` (covered by
+/// `localize_lang_substitutes_concrete_language_but_not_base`).
 #[test]
-fn index_hints_keep_generic_lang_for_base() {
+fn index_hints_use_generic_lang_placeholder() {
     assert!(
-        render_metrics_index(&specs(), "rust").contains("`code-ranker docs rust <metric>`"),
-        "concrete language for a real plugin"
+        render_metrics_index(&specs()).contains("`code-ranker docs <lang> <metric>`"),
+        "metrics index hint"
     );
     assert!(
-        render_metrics_index(&specs(), "base").contains("`code-ranker docs <lang> <metric>`"),
-        "base keeps the generic placeholder"
-    );
-    assert!(
-        render_principles_index(&specs(), "base").contains("`code-ranker docs <lang> <ID>`"),
-        "principles index too"
+        render_principles_index(&specs()).contains("`code-ranker docs <lang> <ID>`"),
+        "principles index hint"
     );
 }
 
@@ -156,7 +153,7 @@ fn index_hints_keep_generic_lang_for_base() {
 fn principles_block_reports_when_the_plugin_defines_none() {
     let mut s = specs();
     s.principles.clear();
-    let out = render_principles_index(&s, "rust");
+    let out = render_principles_index(&s);
     assert!(out.contains("(none"), "empty principles note: {out}");
 }
 

@@ -103,9 +103,13 @@ pub fn resolve_language_snap<'a>(
         .context("snapshot has no languages; regenerate the report with `code-ranker report`")
 }
 
+mod focus;
 mod prompt;
 mod scorecard;
+mod util;
 
+pub(crate) use focus::{FocusPaths, in_focus};
+pub(crate) use util::{attr_short, clean_path, fmt_val};
 pub use prompt::compose_prompt;
 pub use scorecard::render_scorecard;
 
@@ -271,40 +275,6 @@ fn thresholds_for(level: &LevelGraph, metric: &str) -> Option<Thresholds> {
     level.node_attributes.get(metric).and_then(|s| s.thresholds)
 }
 
-/// The short header label for a metric (falls back to its label, then the key).
-pub(super) fn attr_short<'a>(level: &'a LevelGraph, metric: &'a str) -> &'a str {
-    level
-        .node_attributes
-        .get(metric)
-        .and_then(|s| s.short.as_deref().or(s.label.as_deref()))
-        .unwrap_or(metric)
-}
-
-/// Strip a leading `{root}/` token from a relativized id, e.g.
-/// `{target}/src/a.rs` → `src/a.rs`. A file node's id IS its path.
-pub fn clean_path(id: &str) -> String {
-    if let Some(rest) = id.strip_prefix('{')
-        && let Some(idx) = rest.find("}/")
-    {
-        return rest[idx + 2..].to_string();
-    }
-    id.to_string()
-}
-
-/// Whether `node` falls under one of the `--focus-path` entries (empty = no
-/// restriction). Mirrors `check`'s path matching: an entry matches a file exactly
-/// or, as a folder, anything beneath it; leading `./` and a trailing `/` are
-/// normalized so `./crates/a/` and `crates/a` are equivalent.
-pub(super) fn in_focus(node: &Node, focus_paths: &[String]) -> bool {
-    if focus_paths.is_empty() {
-        return true;
-    }
-    let rel = clean_path(&node.id);
-    focus_paths.iter().any(|f| {
-        let f = f.trim_start_matches("./").trim_end_matches('/');
-        !f.is_empty() && (rel == f || rel.starts_with(&format!("{f}/")))
-    })
-}
 
 /// Rank the file nodes for one metric, worst-first, and count tier breaches.
 /// `"cycle"` is special-cased (cycle members ranked by HK).
@@ -429,13 +399,6 @@ pub(super) fn tier_count(reco: &Reco, sev: Severity) -> usize {
 /// Count of project source files in the level.
 pub(super) fn file_count(level: &LevelGraph) -> usize {
     level.nodes.iter().filter(|n| is_internal(n)).count()
-}
-
-/// Format a metric value for CLI output: the exact rounded integer (never
-/// abbreviated — the K/M/G `abbreviate` spec flag is a viewer-only concern, so the
-/// scorecard and prompt always show the precise number, e.g. `295488` not `295.5K`).
-pub(super) fn fmt_val(v: f64) -> String {
-    format!("{}", v.round() as i64)
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────

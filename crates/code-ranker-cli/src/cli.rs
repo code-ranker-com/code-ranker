@@ -129,8 +129,9 @@ pub(crate) enum Command {
         /// Restrict the gate to these files/folders (repeatable). The whole project
         /// is still analyzed (the dependency graph needs it), but only violations
         /// located under one of these paths are reported and counted toward the exit
-        /// code. Paths are repo-relative (matching the reported `where`); a folder
-        /// matches everything beneath it.
+        /// code. Accepts the same path you passed as `[input]`, a subfolder, an
+        /// absolute path, or a target-relative subpath (`src`) — all scope to that
+        /// crate; a folder matches everything beneath it.
         #[arg(long = "focus-path", value_name = "PATH")]
         focus_path: Vec<String>,
 
@@ -241,9 +242,11 @@ pub(crate) enum Command {
 
         /// Restrict the scorecard / `--prompt` to modules under these paths (repeatable).
         /// The whole project is still analyzed (the graph needs it), but only modules
-        /// located under one of these paths are ranked and listed. Paths are
-        /// repo-relative (matching the reported location); a folder matches everything
-        /// beneath it. Mirrors `check`'s `--focus-path`.
+        /// located under one of these paths are ranked and listed. Accepts the same
+        /// path you passed as `[input]`, a subfolder, an absolute path, or a
+        /// target-relative subpath (`src`) — all scope to that crate; a folder matches
+        /// everything beneath it. A path matching no module prints a distinct
+        /// `0 of N` note, not a bare `(none)`. Mirrors `check`'s `--focus-path`.
         #[arg(long = "focus-path", value_name = "PATH")]
         focus_path: Vec<String>,
 

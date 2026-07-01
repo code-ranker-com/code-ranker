@@ -3,8 +3,8 @@
 //! `buildContent`).
 
 use super::{
-    Severity, attr_short, clean_path, fmt_val, in_focus, is_internal, num, reco_for, tier_count,
-    top_cycle_groups,
+    FocusPaths, Severity, attr_short, clean_path, fmt_val, in_focus, is_internal, num, reco_for,
+    tier_count, top_cycle_groups,
 };
 use anyhow::{Result, bail};
 use code_ranker_graph::level_graph::LevelGraph;
@@ -30,7 +30,7 @@ pub fn compose_prompt(
     lang: &str,
     sev: Severity,
     top: Option<usize>,
-    focus_paths: &[String],
+    focus_paths: &FocusPaths,
 ) -> Result<String> {
     let Some(principle) = principles.iter().find(|p| p.id == principle_id) else {
         let known: Vec<&str> = principles.iter().map(|p| p.id.as_str()).collect();

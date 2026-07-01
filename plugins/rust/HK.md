@@ -4,8 +4,17 @@
 ## In Rust
 
 Fan-in and fan-out are counted over real code dependencies (`use` paths,
-qualified paths, derives) — the flow edges, not structural `mod` / `pub use`
-re-export relationships. **One thing inflates `fan_in` artificially:** a
+qualified paths, derives) — the flow edges, not the structural `mod` / `pub use`
+re-export *lines* themselves. **An edge is attributed to the module that
+*defines* the imported item, not to the `use` path written at the call site:**
+a `pub use` re-export is traced through to the definition, so
+`use crate::facade::Thing` where `facade` does `pub use inner::Thing` records an
+edge to **`inner`** (the definer), not to `facade`. The refactoring corollary
+matters (see remedies): `pub use`-ing a type onto a facade the hub already
+depends on does **not** collapse the hub's edge onto that facade — the edge still
+lands on the original definer. To fold coupling behind a facade you must move the
+type's *definition* there, not re-export it. **One thing inflates `fan_in`
+artificially:** a
 `pub(in <ancestor>)` restricted-visibility path is recorded as a fan-in edge up
 to that ancestor even when nothing there `use`s the item (the same modelling as
 [ADP](ADP.md)). A Rust module scores high HK when it is both widely imported and
@@ -78,6 +87,10 @@ metric-gaming, see "When a hub is legitimate" below.
   persistence layer, not in the coordinator. The same shape applies to any concern
   that arrives as a cluster of edges (an HTTP/client stack, a serialization stack):
   one cohesive facade per concern, the hub depends on the facade.
+  **Define the folded items *on* the facade — do not just `pub use` them.** An
+  edge is traced to the definer (see "In Rust"), so `pub use inner::Row;` on the
+  facade leaves the hub coupled to `inner`; write `pub type Row = inner::Model;`
+  (or move the definition) so the facade itself is the definer.
 
 **Predict the edge change before you touch code, then verify it (Step 5).** Ask:
 does this make a dependant stop importing the hub, or the hub stop importing a
@@ -85,6 +98,23 @@ collaborator? If neither — if the new module still references the hub or the h
 still references it — you are *adding* an edge and the square will punish you.
 Re-measure with a before/after `--focus-path` scorecard and revert if the hub's
 HK did not drop.
+
+**Still over threshold after the basic moves? Escalate to a targeted principle.**
+The remedies above cover the common cases. If HK is still high once you have
+narrowed artificial fan-in, folded same-concern fan-out behind a facade, and
+split any obvious multi-role hub, the hub needs a deeper structural change — pull
+the one playbook that matches the factor still dominating, rather than guessing:
+
+- **fan_in high, callers use disjoint slices of the hub** → `code-ranker docs <lang> ISP`
+  (segregate the fat interface into per-audience facets / capability traits).
+- **fan_out high, the hub depends on concretions** → `code-ranker docs <lang> DIP`
+  (invert: the hub owns the port, the leaf implements it).
+- **the file still mixes 2–3 responsibilities** → `code-ranker docs <lang> SRP`.
+- **a dependant reaches *through* the hub to its collaborators** → `code-ranker docs <lang> LoD`.
+
+Each prints a worked, Rust-specific recipe. Read the matching one, apply it, then
+re-measure (Step 5). Fix the simple cases inline; reach for these only when the
+leftover HK justifies the deeper refactor.
 <!-- doc:base "Reducing it" -->
 
 ## When a hub is legitimate (accept, don't game)

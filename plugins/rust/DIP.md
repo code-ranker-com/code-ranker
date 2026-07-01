@@ -256,6 +256,23 @@ heterogeneously (a `Vec<Box<dyn Renderer>>`) or when avoiding
 generics for compile time. There is no LSP-style penalty either way;
 DIP is honoured regardless.
 
+## Inverting a dependency cuts a hub's HK fan_out
+
+DIP is the lever for a high-[HK](HK.md) hub whose `fan_out` dominates. An
+orchestrator that reaches directly for several low-level collaborators
+(a DB driver, a client, N repositories) edges each one — and HK squares that
+`fan_out`. Invert it: define **one** capability trait (the port) that the hub
+owns and depends on, and let the leaves implement it. The hub's several concrete
+edges collapse to a single edge on its own abstraction, and — because the port is
+defined *beside* the hub — the coupling genuinely dissolves rather than moving
+(the hub stops naming the concrete machinery at all).
+
+This pairs with [ISP](ISP.md): keep each port narrow (one capability per trait)
+so the hub depends only on the operations it invokes — the same capability-trait
+split shown in [ISP](ISP.md) also lowers the *implementor's* fan_in. Match the
+remedy to the dominant factor: `fan_out` heavy → DIP (own the port); `fan_in`
+heavy → ISP (segregate the surface).
+
 ## How code-ranker detects DIP violations
 
 Code Ranker's crate-level graph is precisely the DIP arrow:

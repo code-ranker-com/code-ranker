@@ -2,22 +2,14 @@
 //! per-principle table mirroring the viewer's per-principle badges, plus the worst
 //! modules overall.
 
-use super::{
-    Severity, attr_short, clean_path, file_count, fmt_val, in_cycle, in_focus, is_internal, num,
-    reco_for, top_cycle_groups,
-};
+mod rows;
+
+use rows::{breach_mod_rows, empty_modules_note, narrowed_mod_rows, render_mod_rows};
+
+use super::{FocusPaths, Severity, attr_short, clean_path, file_count, fmt_val, num, reco_for};
 use anyhow::Result;
 use code_ranker_graph::level_graph::LevelGraph;
-use code_ranker_plugin_api::{Principle, node::Node};
-
-/// One metric (or cycle) breach on a node, with its tier.
-struct Breach {
-    metric: String,
-    warning: bool,
-    /// `value / threshold` — how far over the line (for picking the worst metric).
-    ratio: f64,
-    value: f64,
-}
+use code_ranker_plugin_api::Principle;
 
 /// One row of the per-principle table.
 struct Row {
@@ -26,86 +18,6 @@ struct Row {
     warn: usize,
     info: usize,
     top: String,
-}
-
-/// The severity tag shown on a worst-modules row. In the unfocused view it is the
-/// node's worst breach; in the metric-focus view it is the focused metric's own
-/// tier for that node — `Below` when the value is under the threshold (or the
-/// metric has none), so a ranked-but-not-breaching module is labeled honestly
-/// rather than always shown as `warn`.
-#[derive(Clone, Copy)]
-enum Tier {
-    Warn,
-    Info,
-    Below,
-}
-
-impl Tier {
-    fn label(self) -> &'static str {
-        match self {
-            Tier::Warn => "warn",
-            Tier::Info => "info",
-            Tier::Below => "—",
-        }
-    }
-}
-
-/// One row of the worst-modules list.
-struct ModRow {
-    tier: Tier,
-    path: String,
-    head: String,
-    rest: Vec<String>,
-    n_warn: usize,
-    n_info: usize,
-    hk: f64,
-}
-
-/// Every selected-tier threshold a node breaches, plus cycle membership (treated
-/// as a warning-tier signal — a cycle is always a real problem).
-fn node_breaches(
-    level: &LevelGraph,
-    node: &Node,
-    want_warning: bool,
-    want_info: bool,
-) -> Vec<Breach> {
-    let mut out = Vec::new();
-    for (metric, spec) in &level.node_attributes {
-        let Some(th) = spec.thresholds else { continue };
-        let Some(v) = num(node, metric) else { continue };
-        if v > th.warning && want_warning {
-            out.push(Breach {
-                metric: metric.clone(),
-                warning: true,
-                ratio: if th.warning > 0.0 {
-                    v / th.warning
-                } else {
-                    f64::INFINITY
-                },
-                value: v,
-            });
-        } else if v > th.info && want_info {
-            out.push(Breach {
-                metric: metric.clone(),
-                warning: false,
-                ratio: if th.info > 0.0 {
-                    v / th.info
-                } else {
-                    f64::INFINITY
-                },
-                value: v,
-            });
-        }
-    }
-    if want_warning && in_cycle(node) {
-        out.push(Breach {
-            metric: "cycle".into(),
-            warning: true,
-            ratio: 1.0,
-            value: 0.0,
-        });
-    }
-    out
 }
 
 /// Render the console triage scorecard: a per-principle table (warning/info
@@ -118,7 +30,7 @@ pub fn render_scorecard(
     severities: &[Severity],
     top: Option<usize>,
     focus: Option<&super::Focus>,
-    focus_paths: &[String],
+    focus_paths: &FocusPaths,
 ) -> Result<String> {
     let want_warning = severities
         .iter()
@@ -179,7 +91,13 @@ pub fn render_scorecard(
     };
 
     if mod_rows.is_empty() {
-        out.push_str("  (none)\n");
+        out.push_str(&empty_modules_note(
+            level,
+            focus_paths,
+            narrow,
+            want_warning,
+            want_info,
+        ));
     } else {
         render_mod_rows(&mut out, &mod_rows);
     }
@@ -303,182 +221,3 @@ fn render_principle_table(out: &mut String, rows: &[Row], want_warning: bool, wa
     }
 }
 
-/// Worst-modules rows when narrowed to one metric (or the `cycle` pseudo-metric).
-/// May push an explanatory heading line into `out` (the cycle branch does).
-fn narrowed_mod_rows(
-    out: &mut String,
-    level: &LevelGraph,
-    m: &str,
-    top: Option<usize>,
-    limit: usize,
-    focus_paths: &[String],
-) -> Vec<ModRow> {
-    if m == "cycle" {
-        // A cycle is a global unit, so `--focus-path` does not narrow its members.
-        cycle_mod_rows(out, level, top)
-    } else {
-        metric_mod_rows(level, m, limit, focus_paths)
-    }
-}
-
-/// Cycle-narrowed worst-modules rows: list every member of each selected cycle
-/// (so the whole loop is visible). Pushes the explanatory heading into `out`.
-fn cycle_mod_rows(out: &mut String, level: &LevelGraph, top: Option<usize>) -> Vec<ModRow> {
-    // ADP: `--top` counts CYCLES (default 1 — the biggest chain).
-    let groups = top_cycle_groups(level, top.unwrap_or(1));
-    match groups.as_slice() {
-        [(g, members)] => out.push_str(&format!(
-            "  one cycle ({}, {} modules) — all members listed; fix one cycle at a \
-             time (avoid --top 2+):\n",
-            g.kind,
-            members.len()
-        )),
-        _ => out.push_str(&format!(
-            "  {} cycles — all members listed:\n",
-            groups.len()
-        )),
-    }
-    let mut mod_rows: Vec<ModRow> = Vec::new();
-    for (g, members) in &groups {
-        for n in members {
-            mod_rows.push(ModRow {
-                tier: Tier::Warn,
-                path: clean_path(&n.id),
-                head: g.kind.clone(),
-                rest: Vec::new(),
-                n_warn: 0,
-                n_info: 0,
-                hk: num(n, "hk").unwrap_or(0.0),
-            });
-        }
-    }
-    mod_rows
-}
-
-/// Metric-narrowed worst-modules rows: the metric's ranked modules, capped,
-/// restricted to `--focus-path` (empty = no restriction).
-fn metric_mod_rows(
-    level: &LevelGraph,
-    m: &str,
-    limit: usize,
-    focus_paths: &[String],
-) -> Vec<ModRow> {
-    let reco = reco_for(level, m);
-    // The focused metric's own tiers: tag each ranked module by where its value
-    // actually lands (warn > warning, info > info), `Below` otherwise — never a
-    // blanket `warn`. A metric with no configured threshold → every row `Below`.
-    let th = super::thresholds_for(level, m);
-    reco.sorted
-        .iter()
-        .filter(|n| in_focus(n, focus_paths))
-        .take(limit)
-        .map(|n| {
-            let v = num(n, m);
-            let head = match v {
-                Some(v) if v != 0.0 => {
-                    format!("{} {}", attr_short(level, m), fmt_val(v))
-                }
-                _ => attr_short(level, m).to_string(),
-            };
-            let value = v.unwrap_or(0.0);
-            let tier = match th {
-                Some(t) if value > t.warning => Tier::Warn,
-                Some(t) if value > t.info => Tier::Info,
-                _ => Tier::Below,
-            };
-            ModRow {
-                tier,
-                path: clean_path(&n.id),
-                head,
-                rest: Vec::new(),
-                n_warn: 0,
-                n_info: 0,
-                hk: num(n, "hk").unwrap_or(0.0),
-            }
-        })
-        .collect()
-}
-
-/// Worst-modules rows for the unnarrowed view: every internal node with a breach
-/// in the selected tiers, ranked by warning/info counts then `hk`, truncated.
-fn breach_mod_rows(
-    level: &LevelGraph,
-    want_warning: bool,
-    want_info: bool,
-    limit: usize,
-    focus_paths: &[String],
-) -> Vec<ModRow> {
-    let mut mod_rows: Vec<ModRow> = Vec::new();
-    for n in level
-        .nodes
-        .iter()
-        .filter(|n| is_internal(n) && in_focus(n, focus_paths))
-    {
-        let breaches = node_breaches(level, n, want_warning, want_info);
-        if breaches.is_empty() {
-            continue;
-        }
-        mod_rows.push(breach_row(level, n, &breaches));
-    }
-    mod_rows.sort_by(|a, b| {
-        b.n_warn
-            .cmp(&a.n_warn)
-            .then(b.n_info.cmp(&a.n_info))
-            .then(b.hk.total_cmp(&a.hk))
-    });
-    mod_rows.truncate(limit);
-    mod_rows
-}
-
-/// Build the worst-modules row for one node from its (non-empty) breach list:
-/// headline the worst metric (largest over-threshold ratio) and tag the rest.
-fn breach_row(level: &LevelGraph, n: &Node, breaches: &[Breach]) -> ModRow {
-    let n_warn = breaches.iter().filter(|b| b.warning).count();
-    let n_info = breaches.iter().filter(|b| !b.warning).count();
-    // Worst metric = the largest over-threshold ratio.
-    let worst = breaches
-        .iter()
-        .max_by(|a, b| a.ratio.total_cmp(&b.ratio))
-        .unwrap();
-    let head = breach_label(level, &worst.metric, Some(worst.value));
-    let rest: Vec<String> = breaches
-        .iter()
-        .filter(|b| b.metric != worst.metric)
-        .map(|b| breach_label(level, &b.metric, None))
-        .collect();
-    ModRow {
-        tier: if n_warn > 0 { Tier::Warn } else { Tier::Info },
-        path: clean_path(&n.id),
-        head,
-        rest,
-        n_warn,
-        n_info,
-        hk: num(n, "hk").unwrap_or(0.0),
-    }
-}
-
-/// Short label for one breached metric: `"cycle"` for the cycle pseudo-metric,
-/// else the metric's short name, optionally suffixed with its formatted value.
-fn breach_label(level: &LevelGraph, metric: &str, value: Option<f64>) -> String {
-    if metric == "cycle" {
-        return "cycle".to_string();
-    }
-    match value {
-        Some(v) => format!("{} {}", attr_short(level, metric), fmt_val(v)),
-        None => attr_short(level, metric).to_string(),
-    }
-}
-
-/// Render the worst-modules list (one numbered line per row) into `out`.
-fn render_mod_rows(out: &mut String, mod_rows: &[ModRow]) {
-    let path_w = mod_rows.iter().map(|r| r.path.len()).max().unwrap_or(0);
-    for (i, r) in mod_rows.iter().enumerate() {
-        let tier = r.tier.label();
-        let mut line = format!("{:>2} {:<4} {:<path_w$}  {}", i + 1, tier, r.path, r.head);
-        if !r.rest.is_empty() {
-            line.push_str(&format!("  +{}", r.rest.join(", ")));
-        }
-        out.push_str(&line);
-        out.push('\n');
-    }
-}

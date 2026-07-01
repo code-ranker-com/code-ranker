@@ -921,6 +921,53 @@ fn rust_sample_scorecard_focus_path_scopes_modules() {
     );
 }
 
+/// A `--focus-path` written as the analyzed `[input]` path itself (here the
+/// sample's absolute path) scopes to that crate — the normalization fix — instead
+/// of the counter-intuitive target-relative `src`. It lists the same worst module
+/// as an unscoped run.
+#[test]
+fn rust_sample_scorecard_focus_path_accepts_input_path() {
+    let sample = sample_dir("rust");
+    let sp = sample.to_string_lossy().into_owned();
+    let (ok, stdout, stderr) = run_report_capture(
+        "rust",
+        &["--output.scorecard", "--focus", "hk", "--focus-path", &sp],
+    );
+    assert!(ok, "input-path focus scorecard failed: {stderr}");
+    assert!(
+        stdout.contains("src/"),
+        "the input path scopes to the crate's own modules: {stdout}"
+    );
+    assert!(
+        !stdout.contains("no module matched"),
+        "the input path must match, not be treated as zero-match: {stdout}"
+    );
+}
+
+/// A `--focus-path` that matches no module prints a distinct diagnostic (not the
+/// same `(none)` used for "no violations"), so a wrong path is not mistaken for
+/// "the code is clean".
+#[test]
+fn rust_sample_scorecard_focus_path_zero_match_warns() {
+    let (ok, stdout, stderr) = run_report_capture(
+        "rust",
+        &[
+            "--output.scorecard",
+            "--focus",
+            "hk",
+            "--severity",
+            "info",
+            "--focus-path",
+            "does/not/exist",
+        ],
+    );
+    assert!(ok, "zero-match scorecard run failed: {stderr}");
+    assert!(
+        stdout.contains("no module matched --focus-path") && stdout.contains("0 of"),
+        "distinct zero-match diagnostic instead of a bare (none): {stdout}"
+    );
+}
+
 /// An unknown `--focus` name is a hard error naming both namespaces.
 #[test]
 fn rust_sample_scorecard_unknown_focus() {

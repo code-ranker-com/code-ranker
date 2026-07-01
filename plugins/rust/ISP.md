@@ -249,6 +249,46 @@ pub trait CacheTtl { fn ttl_seconds(&self) -> Option<u64>; }
 
 The test fake implements only what the test needs (e.g. `CacheGet + CachePut`).
 
+## Segregating a hub's interface cuts its HK fan_in
+
+ISP is the highest-value lever for a high-[HK](HK.md) hub whose `fan_in` is the
+dominant factor. When many callers depend on one wide trait, **every** caller
+draws an edge to the module that defines it — even a caller that touches a single
+method — so the hub's `fan_in` (and, squared, its HK) is inflated by the union of
+all its audiences.
+
+Say a job-processing hub exposes one trait that several unrelated subsystems
+reach for:
+
+```rust
+// Before: one wide trait. The executor, the scheduler, the retry supervisor,
+// and the audit log all `use job::Job`, so `job`'s fan_in counts every one.
+pub trait Job {
+    fn run(&self) -> Outcome;               // the executor
+    fn cost_estimate(&self) -> Cost;        // the scheduler (bin-packing)
+    fn retry_policy(&self) -> RetryPolicy;  // the retry supervisor
+    fn audit_record(&self) -> AuditRecord;  // the audit log
+}
+```
+
+Split it by capability so each caller names only the facet it uses:
+
+```rust
+// After: one trait per capability. The concrete job type impls all four,
+// but each subsystem depends on just one — so their edges land on different
+// (smaller) traits instead of all piling onto one module.
+pub trait Runnable    { fn run(&self) -> Outcome; }
+pub trait Schedulable { fn cost_estimate(&self) -> Cost; }
+pub trait Retryable   { fn retry_policy(&self) -> RetryPolicy; }
+pub trait Auditable   { fn audit_record(&self) -> AuditRecord; }
+```
+
+Callers that shared the trait for disjoint reasons now edge *different* small
+traits, so the defining module's `fan_in` drops to the callers that truly need
+its core surface. Because `HK = sloc × (fan_in × fan_out)²`, cutting `fan_in`
+from 5 to 2 alone is a ~6× HK reduction — reach for this before shaving line
+count when `fan_in` is the factor over budget.
+
 ## ISP at the workspace level
 
 The same principle applies to **crates**: a crate's public surface

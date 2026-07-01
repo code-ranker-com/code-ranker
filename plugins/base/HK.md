@@ -35,9 +35,15 @@ files. Those are the modules where splitting pays off the most.
 ## What high HK looks like
 
 Fan-in and fan-out are counted over real code dependencies (import paths,
-qualified paths) — the flow edges, not structural module-ownership or
-re-export relationships. A module scores high HK when it is both widely imported
-and imports widely:
+qualified paths) — the flow edges, not the structural module-ownership or
+re-export *lines* themselves. **An edge is attributed to the module that
+*defines* the imported name, not to the path written in the import.** Re-export
+chains are followed to the definition site: if a module imports a name that a
+facade re-exports from elsewhere, the edge lands on the **definer**, not the
+facade in the import path. This has a sharp refactoring consequence (see
+"Reducing it"): re-exporting a type through a facade does **not** move its
+coupling — only relocating the type's *definition* does. A module scores high HK
+when it is both widely imported and imports widely:
 
 - A package facade that re-exports and also orchestrates.
 - A types/model module that every layer imports *and* that itself pulls
@@ -60,7 +66,12 @@ You lower HK by attacking whichever factor dominates:
   single facade that owns the concern and exposes intent-level operations; the
   hub then depends on the one facade instead of N collaborators. Done right this
   *dissolves* the edges (the hub stops knowing about the underlying machinery),
-  it does not relocate them.
+  it does not relocate them. **Define the intent-level operations *on* the facade
+  — do not merely re-export the collaborators through it.** Because an edge
+  follows the imported name to its *definition* (re-exports are traced to origin),
+  a facade that only `re-exports` the underlying types leaves the hub coupled to
+  the originals; the fold only lands when the facade is where the types/functions
+  are actually defined.
 - **Cut fan_in**: narrow the public surface so fewer modules need this one;
   if different callers use disjoint parts, split it
   (see [ISP](ISP.md)).
@@ -131,10 +142,15 @@ code-ranker report --plugins <lang> --output.scorecard --focus hk
 
 In a monorepo / workspace, scope the ranking to the crate or package you own with
 `--focus-path <dir>` (repeatable) — the graph is still built from the whole project
-so cross-module edges stay correct, but only that subtree is listed:
+so cross-module edges stay correct, but only that subtree is listed. Pass **the
+same path you gave as `[input]`** — a subfolder, an absolute path, or a
+target-relative `src` all resolve to that crate. If the path matches no module the
+scorecard says so (`no module matched --focus-path — 0 of N`) instead of a bare
+`(none)`, so a wrong path is never read as "clean". Add `--severity info` to rank
+every module regardless of threshold:
 
 ```bash
-code-ranker report --plugins <lang> --output.scorecard --focus hk --focus-path <dir> --top 10
+code-ranker report --plugins <lang> --output.scorecard --focus hk --focus-path src --severity info --top 10
 ```
 
 HK is `sloc × (fan_in × fan_out)²`: the coupling term is squared, so a unit dropped
@@ -180,7 +196,10 @@ Pick the canonical technique that matches the seam you found:
 - **Extract a focused submodule + re-export.** Move the cohesive group into a
   new module, keep the public path stable with a re-export
   (`import module principle; re-export principle.Principle`). Callers don't churn; the
-  hub's `sloc` drops and the moved item's narrow dependants detach from the hub.
+  hub's `sloc` drops and the moved item's narrow dependants detach from the hub —
+  their edges follow the name to its **new definition site** (the submodule), so
+  they leave the hub even though the import *path* is unchanged. The re-export is
+  purely for call-site ergonomics; it carries no coupling.
 - **Move a pure data type (DTO) to its own module.** A plain data structure
   with no internal dependencies has `fan_out = 0`, so its own HK is `0`. When
   many consumers reach the hub only for a DTO, this is the biggest, safest win.
@@ -192,9 +211,11 @@ Pick the canonical technique that matches the seam you found:
   implement it in the leaf, cutting the hub's `fan_out`. See
   [DIP](DIP.md).
 - **Separate facade from orchestration.** For a package/module entry point that
-  both re-exports and contains logic, move the logic into a sibling and leave a
-  thin re-export facade. Re-exports are structural, not flow edges, so
-  they do not count toward fan_in/fan_out.
+  both re-exports and contains logic, move the logic (and the imports it drags
+  in) into a sibling and leave a thin re-export facade. The facade's own
+  `fan_out` falls because those imports left with the logic; the re-export *line*
+  itself is not a flow edge. (Consumers' edges now follow the moved names to the
+  sibling — the new definer — not the facade.)
 
 Two rules that decide whether a split *dissolves* coupling or merely *moves*
 it:
@@ -209,7 +230,9 @@ it:
   implementors still depend on the interface) but *raises* fan_out. Split by
   audience, not by line count.
 
-Re-export the moved items at the package root so call sites stay short.
+Re-export the moved items at the package root so call sites stay short — this is
+an ergonomic convenience only; the coupling edge still points at wherever each
+name is *defined*, not at the root that re-exports it.
 
 ### Step 5 — Verify with a before/after diff report
 

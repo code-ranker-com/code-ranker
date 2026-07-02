@@ -136,4 +136,9 @@ One command on any Rust project — you'll have an interactive structural map an
 
 ## License
 
-Apache-2.0.
+[Apache-2.0](./LICENSE). Copyright (c) 2026 Roman Fedorov.
+
+Contributions are accepted under the project [CLA](./CLA.md) — see
+[CONTRIBUTING.md](./CONTRIBUTING.md). The "code-ranker" name is a trademark of
+Roman Fedorov and is not covered by the code license; naming rules for forks
+and derivative products are in [TRADEMARK.md](./TRADEMARK.md).

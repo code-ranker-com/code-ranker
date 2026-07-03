@@ -7,7 +7,7 @@ does **not** force a config migration unless the config format itself changed.
 
 | # | Surface | Constant | Lives in | Current |
 |---|---------|----------|----------|---------|
-| 1 | **app** — the release | `[workspace.package] version` (`env!("CARGO_PKG_VERSION")`) | root `Cargo.toml` | `5.0.0` |
+| 1 | **app** — the release | `[workspace.package] version` (`env!("CARGO_PKG_VERSION")`) | root `Cargo.toml` | `5.0.3` |
 | 2 | **config + CLI** — the user-facing input interface | `CONFIG_VERSION` | `crates/code-ranker-graph/src/version.rs` | `5.0` |
 | 3 | **JSON snapshot + viewer** — the data format and its consumer | `SCHEMA_VERSION` | `crates/code-ranker-graph/src/version.rs` | `5.0` |
 
@@ -19,7 +19,7 @@ lives **only** at its constant; every consumer imports it, never hardcodes it
 
 ## 1. app version
 
-Plain SemVer of the release (`5.0.0`). Bumped with `make bump VERSION=…`,
+Plain SemVer of the release (`5.0.3`). Bumped with `make bump VERSION=…`,
 which rewrites `Cargo.toml`, `README.md` and the `code-ranker`/`--version` doc
 mentions. Every normal release bumps it; it does **not** imply a format change.
 

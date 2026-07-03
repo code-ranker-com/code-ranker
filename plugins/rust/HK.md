@@ -51,9 +51,12 @@ responsibilities, distinct dependency sets) and cut along them.
 submodule write `use super::{Service, …}` — and each of those is a **new
 `fan_in` edge** to the module that *defines* the struct. Because
 `HK = sloc × (fan_in × fan_out)²`, the squared `fan_in` bump typically outweighs
-the `sloc` you moved out, so the defining module's HK goes **up**. A struct's HK
-is driven by who **calls** it and what it **depends on** — never by how many
-files its `impl` is scattered across. The same applies to hoisting a type away
+the `sloc` you moved out, so the defining module's HK goes **up** — but only
+through those artificial `use super::{Service, …}` edges, not through any real
+new dependency. A struct's *actual* coupling is who **calls** it and what it
+**depends on**; splitting its `impl` across files changes neither, even though
+it moves the measured number (see 3a below for when the split itself is
+unavoidable). The same applies to hoisting a type away
 from its `impl` (it then needs wider `pub` visibility to compile, *adding*
 edges). Shaving the HK *number* this way separates no responsibility: it is
 metric-gaming, see "When a hub is legitimate" below.

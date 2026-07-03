@@ -517,6 +517,18 @@ fn rust_sample_check_focus_path_scopes_gate() {
     );
 }
 
+/// A `--focus-path` that normalizes to nothing (`./`, `/`) must not silently
+/// zero out the gate: `FocusPaths::new` drops every degenerate entry, so
+/// `check` has to fall back to "no restriction" rather than retaining nothing.
+#[test]
+fn rust_sample_check_focus_path_dot_slash_does_not_drop_everything() {
+    let (_ok, stdout, stderr) = run_check_capture("rust", &["--focus-path", "./"]);
+    assert!(
+        stdout.contains("2 violation(s)"),
+        "a degenerate --focus-path must not filter out every violation: {stdout}{stderr}"
+    );
+}
+
 /// `check --focus` scopes the gate to a rule id: focusing `cycle.mutual` keeps
 /// the `a ⇄ b` mutual cycle and drops the chain cycle.
 #[test]

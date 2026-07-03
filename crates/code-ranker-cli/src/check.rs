@@ -95,9 +95,15 @@ pub(crate) fn run_check(
     // attributed to a path, so `--focus-path` drops it too.
     if !focus_path.is_empty() {
         let fp = recommend::FocusPaths::new(focus_path, &a.snapshot.target);
-        findings.retain(|v| {
-            violation_rel_path(&v.location).is_some_and(|rel| fp.matches_target_rel(rel))
-        });
+        // Every entry can normalize to nothing (`--focus-path ./` or `/` both trim
+        // to empty) even though `focus_path` itself is non-empty. Without this
+        // guard `retain` would keep nothing — matching `in_focus`'s "empty =
+        // no restriction" rule instead of silently zeroing out the gate.
+        if !fp.is_empty() {
+            findings.retain(|v| {
+                violation_rel_path(&v.location).is_some_and(|rel| fp.matches_target_rel(rel))
+            });
+        }
     }
     if !focus.is_empty() {
         findings.retain(|v| rule_matches(v, focus));

@@ -144,10 +144,13 @@ In a monorepo / workspace, scope the ranking to the crate or package you own wit
 `--focus-path <dir>` (repeatable) — the graph is still built from the whole project
 so cross-module edges stay correct, but only that subtree is listed. Pass **the
 same path you gave as `[input]`** — a subfolder, an absolute path, or a
-target-relative `src` all resolve to that crate. If the path matches no module the
+target-relative `src` all resolve to that crate. If the path matches no module —
+and the unfiltered project does have ranked modules to compare against — the
 scorecard says so (`no module matched --focus-path — 0 of N`) instead of a bare
-`(none)`, so a wrong path is never read as "clean". Add `--severity info` to rank
-every module regardless of threshold:
+`(none)`, so a wrong path is never read as "clean". (A genuinely clean project,
+or the ADP/cycle view that `--focus-path` never narrows, still prints a plain
+`(none)` — there is no N to report against.) Add `--severity info` to rank every
+module regardless of threshold:
 
 ```bash
 code-ranker report --plugins <lang> --output.scorecard --focus hk --focus-path src --severity info --top 10

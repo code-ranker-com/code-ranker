@@ -9,7 +9,7 @@ jobs:
     uses: ffedoroff/code-ranker-ci/.github/workflows/report.yml@main
     with:
       install_from_source: true   # build code-ranker from this checkout
-      do_check: false             # advisory on our own PRs (don't red the build)
+      do_check: true              # gate on regressions vs the default-branch baseline
     permissions:
       id-token: write
       contents: read

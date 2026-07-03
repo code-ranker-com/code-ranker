@@ -58,6 +58,19 @@ from its `impl` (it then needs wider `pub` visibility to compile, *adding*
 edges). Shaving the HK *number* this way separates no responsibility: it is
 metric-gaming, see "When a hub is legitimate" below.
 
+**3a. When a file-size budget *forces* the split, minimize the submodule
+*count*.** A per-file SLOC/line cap can legitimately require breaking a big
+`impl` across files — point 3 says HK rises, but "don't split" is no longer an
+option when the file *must* shrink. The lever then is the *number* of
+submodules: every `use super::Type` submodule is one `fan_in` edge, and
+`HK = sloc × (fan_in × fan_out)²` squares that count. So split into the **fewest
+cohesive files that satisfy the budget** — group related methods together, never
+one-file-per-method. The corollary is a genuine reduction move: **consolidating
+an over-fragmented `impl` split lowers HK** — merging several tiny submodules
+back into fewer cohesive ones (each still within the budget) drops `fan_in`, and
+because it is squared, cuts HK far more than the moved `sloc` would suggest, with
+**no change to real coupling**.
+
 **The moves that actually lower a Rust hub's HK:**
 - **Move a leaf out so a caller stops importing the hub (`fan_in` ↓).** If a
   dependant reaches the hub only for one pure helper / DTO / `const`, relocate

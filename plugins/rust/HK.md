@@ -4,8 +4,17 @@
 ## In Rust
 
 Fan-in and fan-out are counted over real code dependencies (`use` paths,
-qualified paths, derives) — the flow edges, not structural `mod` / `pub use`
-re-export relationships. **One thing inflates `fan_in` artificially:** a
+qualified paths, derives) — the flow edges, not the structural `mod` / `pub use`
+re-export *lines* themselves. **An edge is attributed to the module that
+*defines* the imported item, not to the `use` path written at the call site:**
+a `pub use` re-export is traced through to the definition, so
+`use crate::facade::Thing` where `facade` does `pub use inner::Thing` records an
+edge to **`inner`** (the definer), not to `facade`. The refactoring corollary
+matters (see remedies): `pub use`-ing a type onto a facade the hub already
+depends on does **not** collapse the hub's edge onto that facade — the edge still
+lands on the original definer. To fold coupling behind a facade you must move the
+type's *definition* there, not re-export it. **One thing inflates `fan_in`
+artificially:** a
 `pub(in <ancestor>)` restricted-visibility path is recorded as a fan-in edge up
 to that ancestor even when nothing there `use`s the item (the same modelling as
 [ADP](ADP.md)). A Rust module scores high HK when it is both widely imported and
@@ -36,13 +45,92 @@ dependencies — **both `fan_in` and `fan_out` drop for real**, and each piece
 becomes independently testable and changeable. Find the seams (distinct
 responsibilities, distinct dependency sets) and cut along them.
 
-**3. Do not shave `sloc` by mechanical splitting.** Moving a type declaration
-away from its `impl`, or hoisting a trait into a sibling file, splits **one
-cohesive role** across two files. It lowers the HK *number* (less `sloc`) without
-separating any responsibility — and can even *raise* coupling by widening
-visibility to make the move compile. That is metric-gaming, not decoupling; see
-"When a hub is legitimate" below. The test: if your split does not leave each
-new module owning a **distinct role**, it is not a real HK fix.
+**3. Do NOT spread one struct's `impl` across `mod` submodules — in Rust this
+*raises* HK.** This is the single most common wrong move. Splitting
+`impl Service` into `service/create.rs`, `service/query.rs`, … makes every
+submodule write `use super::{Service, …}` — and each of those is a **new
+`fan_in` edge** to the module that *defines* the struct. Because
+`HK = sloc × (fan_in × fan_out)²`, the squared `fan_in` bump typically outweighs
+the `sloc` you moved out, so the defining module's HK goes **up** — but only
+through those artificial `use super::{Service, …}` edges, not through any real
+new dependency. A struct's *actual* coupling is who **calls** it and what it
+**depends on**; splitting its `impl` across files changes neither, even though
+it moves the measured number (see 3a below for when the split itself is
+unavoidable). The same applies to hoisting a type away
+from its `impl` (it then needs wider `pub` visibility to compile, *adding*
+edges). Shaving the HK *number* this way separates no responsibility: it is
+metric-gaming, see "When a hub is legitimate" below.
+
+**3a. When a file-size budget *forces* the split, minimize the submodule
+*count*.** A per-file SLOC/line cap can legitimately require breaking a big
+`impl` across files — point 3 says HK rises, but "don't split" is no longer an
+option when the file *must* shrink. The lever then is the *number* of
+submodules: every `use super::Type` submodule is one `fan_in` edge, and
+`HK = sloc × (fan_in × fan_out)²` squares that count. So split into the **fewest
+cohesive files that satisfy the budget** — group related methods together, never
+one-file-per-method. The corollary is a genuine reduction move: **consolidating
+an over-fragmented `impl` split lowers HK** — merging several tiny submodules
+back into fewer cohesive ones (each still within the budget) drops `fan_in`, and
+because it is squared, cuts HK far more than the moved `sloc` would suggest, with
+**no change to real coupling**.
+
+**The moves that actually lower a Rust hub's HK:**
+- **Move a leaf out so a caller stops importing the hub (`fan_in` ↓).** If a
+  dependant reaches the hub only for one pure helper / DTO / `const`, relocate
+  that item to its own module; the dependant now imports *that* module and its
+  edge to the hub disappears. (A pure data type with no deps has `fan_out = 0`,
+  so its own HK is ~0 — the safest win.)
+- **Extract a genuinely separate responsibility into its own type (`fan_out` ↓).**
+  Not the same struct's `impl` in another file — a *new* struct with its *own*
+  fields and dependencies (e.g. pull an I/O / streaming concern out of a
+  coordinator into its own worker type). The unrelated imports leave the hub with
+  that responsibility, and the new type carries its own, lower HK.
+- **Fold several same-concern edges behind one facade (`fan_out` ↓ — usually the
+  biggest win for a service/orchestrator hub).** A service hub often spends most
+  of its `fan_out` on a *single* concern that is split across several edges.
+  The classic case is persistence: the hub holds the database handle/pool, opens
+  connections and runs transactions itself (e.g. `sqlx` / a `DBRunner`-style
+  trait / the DB-driver crate), **and** also imports several repositories.
+  **Trace those edges at depth 2:** the repos already sit on the DB driver, so
+  the hub's *direct* driver edge is redundant with what its repos encapsulate.
+  Move the DB handle + the repositories + the connection/transaction management
+  into one repository / unit-of-work facade that exposes intent-level operations
+  (`store.get_x(…)`, `store.commit_y(…)`), keeping connections and transactions
+  *inside* it. The hub then depends on that **one** facade instead of the driver
+  crate plus each repo — N edges collapse to 1. This is the [DIP](DIP.md) remedy
+  and it genuinely *dissolves* `fan_out` (the orchestrator stops knowing about the
+  database at all), because connection/transaction lifecycle belongs in the
+  persistence layer, not in the coordinator. The same shape applies to any concern
+  that arrives as a cluster of edges (an HTTP/client stack, a serialization stack):
+  one cohesive facade per concern, the hub depends on the facade.
+  **Define the folded items *on* the facade — do not just `pub use` them.** An
+  edge is traced to the definer (see "In Rust"), so `pub use inner::Row;` on the
+  facade leaves the hub coupled to `inner`; write `pub type Row = inner::Model;`
+  (or move the definition) so the facade itself is the definer.
+
+**Predict the edge change before you touch code, then verify it (Step 5).** Ask:
+does this make a dependant stop importing the hub, or the hub stop importing a
+collaborator? If neither — if the new module still references the hub or the hub
+still references it — you are *adding* an edge and the square will punish you.
+Re-measure with a before/after `--focus-path` scorecard and revert if the hub's
+HK did not drop.
+
+**Still over threshold after the basic moves? Escalate to a targeted principle.**
+The remedies above cover the common cases. If HK is still high once you have
+narrowed artificial fan-in, folded same-concern fan-out behind a facade, and
+split any obvious multi-role hub, the hub needs a deeper structural change — pull
+the one playbook that matches the factor still dominating, rather than guessing:
+
+- **fan_in high, callers use disjoint slices of the hub** → `code-ranker docs <lang> ISP`
+  (segregate the fat interface into per-audience facets / capability traits).
+- **fan_out high, the hub depends on concretions** → `code-ranker docs <lang> DIP`
+  (invert: the hub owns the port, the leaf implements it).
+- **the file still mixes 2–3 responsibilities** → `code-ranker docs <lang> SRP`.
+- **a dependant reaches *through* the hub to its collaborators** → `code-ranker docs <lang> LoD`.
+
+Each prints a worked, Rust-specific recipe. Read the matching one, apply it, then
+re-measure (Step 5). Fix the simple cases inline; reach for these only when the
+leftover HK justifies the deeper refactor.
 <!-- doc:base "Reducing it" -->
 
 ## When a hub is legitimate (accept, don't game)

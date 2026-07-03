@@ -15,6 +15,13 @@ fn viol(location: &str, line: Option<u32>) -> config::Violation {
     }
 }
 
+/// Match a target-relative violation path against `--focus-path` entries, the way
+/// the gate does. The target is an unrelated absolute root, so these bare entries
+/// resolve to the printed-path (legacy) match — file-exact and folder-prefix.
+fn path_matches(rel: &str, focus: &[String]) -> bool {
+    crate::recommend::FocusPaths::new(focus, "/ws").matches_target_rel(rel)
+}
+
 #[test]
 fn path_matches_file_exactly_and_folder_prefix() {
     let focus = vec![
@@ -36,6 +43,18 @@ fn path_matches_ignores_leading_dot_slash_and_trailing_slash() {
     let focus = vec!["./crates/a/".to_string()];
     assert!(path_matches("crates/a/src/x.rs", &focus));
     assert!(path_matches("crates/a", &focus));
+}
+
+/// The normalization fix at the gate: `--focus-path` written as the analysis
+/// target (`[input]`) scopes to it — matching every violation under the target —
+/// instead of requiring the counter-intuitive target-relative form.
+#[test]
+fn path_matches_accepts_the_target_path_itself() {
+    let fp = crate::recommend::FocusPaths::new(&["/ws/crates/a".to_string()], "/ws/crates/a");
+    // Violations under the target are relativized to `src/…`; the target path
+    // now matches them all.
+    assert!(fp.matches_target_rel("src/store.rs"));
+    assert!(fp.matches_target_rel("src/repo/mod.rs"));
 }
 
 #[test]

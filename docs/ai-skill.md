@@ -99,9 +99,12 @@ Notes:
   **metric-framed** fix-prompt directly (titled "HK — Henry–Kafura", no Liskov wrapper),
   while `--prompt <PRINCIPLE>` emits a **principle-framed** one.
 - To scope the ranking to a subtree, add `--focus-path <dir>` (repeatable): the whole
-  project is still analyzed, but only modules under those repo-relative paths are
-  ranked/listed (a folder matches everything beneath it). Combine with `--focus` to
-  intersect; cycles stay global (they are not narrowed by `--focus-path`).
+  project is still analyzed, but only modules under those paths are ranked/listed
+  (a folder matches everything beneath it). Combine with `--focus` to intersect;
+  cycles stay global (they are not narrowed by `--focus-path`). Pass **the same path
+  you gave as `[input]`** — a subfolder, an absolute path, or a target-relative
+  subpath (`src`) all resolve to that crate. A path matching no module prints a
+  distinct `no module matched --focus-path — 0 of N` note, not a bare `(none)`.
 - For `--focus cycle`, `--top 1` shows **one whole cycle** — the biggest `chain`
   (else the biggest `mutual`) — with **all** its modules listed, so you can fix the
   loop as a unit.
@@ -137,6 +140,12 @@ code-ranker check  . --plugins <lang> --baseline base.json --output-format json 
   (`cargo metadata --offline`); if it errors, run `cargo fetch` first.
 - `--focus` / `--focus-path` / `--severity` / `--top` are **report-only** — they
   require a `--prompt <ID>` or `--output.scorecard`, else the run errors.
+- A bare `(none)` means "no violations in the selected tier" — add `--severity info`
+  (the default hides modules below the `warning` tier) to rank every module. A wrong
+  `--focus-path` is no longer confusable with it: a path matching zero modules prints
+  a distinct `no module matched --focus-path — 0 of N` note with a hint. The scorecard
+  with `--focus <metric> --severity info --top N` is the supported ranked-list mode —
+  read it, don't grep it.
 - `--prompt <ID>` names the target yourself (pick it from the scorecard) and prints to
   stdout; redirect to a file when you need an artifact. For a broader view use `--output.scorecard`.
 - `--top N` is a reporting limit (`--top 1` = the single worst); use it instead

@@ -5,6 +5,7 @@
 use crate::analyze::{analyze_input, load_snapshot_any, project_name};
 use crate::cli::{AnalyzeArgs, OutputFormat};
 use crate::config;
+use crate::recommend;
 use anyhow::Result;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write as _;
@@ -93,9 +94,16 @@ pub(crate) fn run_check(
     // violation must satisfy both (path AND rule). A locationless violation can't be
     // attributed to a path, so `--focus-path` drops it too.
     if !focus_path.is_empty() {
-        findings.retain(|v| {
-            violation_rel_path(&v.location).is_some_and(|rel| path_matches(rel, focus_path))
-        });
+        let fp = recommend::FocusPaths::new(focus_path, &a.snapshot.target);
+        // Every entry can normalize to nothing (`--focus-path ./` or `/` both trim
+        // to empty) even though `focus_path` itself is non-empty. Without this
+        // guard `retain` would keep nothing — matching `in_focus`'s "empty =
+        // no restriction" rule instead of silently zeroing out the gate.
+        if !fp.is_empty() {
+            findings.retain(|v| {
+                violation_rel_path(&v.location).is_some_and(|rel| fp.matches_target_rel(rel))
+            });
+        }
     }
     if !focus.is_empty() {
         findings.retain(|v| rule_matches(v, focus));
@@ -324,18 +332,6 @@ pub(crate) fn merged_specs_pub(
         }
     }
     (na, ck)
-}
-
-/// Whether a violation's repo-relative path falls under one of the `--focus-path`
-/// entries. An entry matches a file exactly or, treated as a folder, anything
-/// beneath it (`crates/a/src` matches `crates/a/src/x.rs`). Leading `./` and a
-/// trailing `/` on an entry are ignored so `./crates/a/` and `crates/a` are
-/// equivalent.
-fn path_matches(rel: &str, focus: &[String]) -> bool {
-    focus.iter().any(|f| {
-        let f = f.trim_start_matches("./").trim_end_matches('/');
-        !f.is_empty() && (rel == f || rel.starts_with(&format!("{f}/")))
-    })
 }
 
 /// Whether a violation matches one of the `--focus` entries. An entry matches

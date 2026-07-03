@@ -35,9 +35,15 @@ files. Those are the modules where splitting pays off the most.
 ## What high HK looks like
 
 Fan-in and fan-out are counted over real code dependencies (import paths,
-qualified paths) — the flow edges, not structural module-ownership or
-re-export relationships. A module scores high HK when it is both widely imported
-and imports widely:
+qualified paths) — the flow edges, not the structural module-ownership or
+re-export *lines* themselves. **An edge is attributed to the module that
+*defines* the imported name, not to the path written in the import.** Re-export
+chains are followed to the definition site: if a module imports a name that a
+facade re-exports from elsewhere, the edge lands on the **definer**, not the
+facade in the import path. This has a sharp refactoring consequence (see
+"Reducing it"): re-exporting a type through a facade does **not** move its
+coupling — only relocating the type's *definition* does. A module scores high HK
+when it is both widely imported and imports widely:
 
 - A package facade that re-exports and also orchestrates.
 - A types/model module that every layer imports *and* that itself pulls
@@ -52,13 +58,36 @@ You lower HK by attacking whichever factor dominates:
   sibling modules. The split halves the size and usually the coupling too.
 - **Cut fan_out**: depend on fewer, more abstract collaborators — invert a
   dependency (see [DIP](DIP.md)), or move a
-  responsibility that drags in unrelated imports elsewhere.
+  responsibility that drags in unrelated imports elsewhere. **Group the
+  out-edges by concern and trace them at depth 2:** a hub often spends much of
+  its `fan_out` on one concern split across several edges (e.g. a database handle
+  *plus* several repositories, where the repos already sit on that same driver —
+  so the hub's direct driver edge is redundant). Fold that cluster behind a
+  single facade that owns the concern and exposes intent-level operations; the
+  hub then depends on the one facade instead of N collaborators. Done right this
+  *dissolves* the edges (the hub stops knowing about the underlying machinery),
+  it does not relocate them. **Define the intent-level operations *on* the facade
+  — do not merely re-export the collaborators through it.** Because an edge
+  follows the imported name to its *definition* (re-exports are traced to origin),
+  a facade that only `re-exports` the underlying types leaves the hub coupled to
+  the originals; the fold only lands when the facade is where the types/functions
+  are actually defined.
 - **Cut fan_in**: narrow the public surface so fewer modules need this one;
   if different callers use disjoint parts, split it
   (see [ISP](ISP.md)).
 
 Because the coupling term is squared, even a modest reduction in fan_in or
 fan_out moves HK a lot — prefer those over chasing line count.
+
+**Predict the new edges before you split — a split that *adds* an edge raises
+HK.** This is the most common mistake. A split only lowers a hub's HK if it lets
+a **dependant stop importing the hub** (`fan_in` ↓) or the **hub stop importing a
+collaborator** (`fan_out` ↓). If instead your split creates a new module that
+imports the hub — or that the hub must import — you have *added* an edge, and the
+squared coupling term usually makes the hub's HK go **up**, not down. Carving one
+component into several files that all still reference the original is
+re-arrangement, not decoupling. When in doubt, measure before/after (Step 5) and
+revert if the hub's HK did not actually drop.
 
 ## When a hub is legitimate (accept, don't game)
 
@@ -108,7 +137,23 @@ a budget (worst-first; `--top 1` for just the single worst), each finding a
 self-contained where/issue/why/fix block you can paste into an AI assistant:
 
 ```bash
-code-ranker report --output.scorecard --focus hk
+code-ranker report --plugins <lang> --output.scorecard --focus hk
+```
+
+In a monorepo / workspace, scope the ranking to the crate or package you own with
+`--focus-path <dir>` (repeatable) — the graph is still built from the whole project
+so cross-module edges stay correct, but only that subtree is listed. Pass **the
+same path you gave as `[input]`** — a subfolder, an absolute path, or a
+target-relative `src` all resolve to that crate. If the path matches no module —
+and the unfiltered project does have ranked modules to compare against — the
+scorecard says so (`no module matched --focus-path — 0 of N`) instead of a bare
+`(none)`, so a wrong path is never read as "clean". (A genuinely clean project,
+or the ADP/cycle view that `--focus-path` never narrows, still prints a plain
+`(none)` — there is no N to report against.) Add `--severity info` to rank every
+module regardless of threshold:
+
+```bash
+code-ranker report --plugins <lang> --output.scorecard --focus hk --focus-path src --severity info --top 10
 ```
 
 HK is `sloc × (fan_in × fan_out)²`: the coupling term is squared, so a unit dropped
@@ -154,7 +199,10 @@ Pick the canonical technique that matches the seam you found:
 - **Extract a focused submodule + re-export.** Move the cohesive group into a
   new module, keep the public path stable with a re-export
   (`import module principle; re-export principle.Principle`). Callers don't churn; the
-  hub's `sloc` drops and the moved item's narrow dependants detach from the hub.
+  hub's `sloc` drops and the moved item's narrow dependants detach from the hub —
+  their edges follow the name to its **new definition site** (the submodule), so
+  they leave the hub even though the import *path* is unchanged. The re-export is
+  purely for call-site ergonomics; it carries no coupling.
 - **Move a pure data type (DTO) to its own module.** A plain data structure
   with no internal dependencies has `fan_out = 0`, so its own HK is `0`. When
   many consumers reach the hub only for a DTO, this is the biggest, safest win.
@@ -166,9 +214,11 @@ Pick the canonical technique that matches the seam you found:
   implement it in the leaf, cutting the hub's `fan_out`. See
   [DIP](DIP.md).
 - **Separate facade from orchestration.** For a package/module entry point that
-  both re-exports and contains logic, move the logic into a sibling and leave a
-  thin re-export facade. Re-exports are structural, not flow edges, so
-  they do not count toward fan_in/fan_out.
+  both re-exports and contains logic, move the logic (and the imports it drags
+  in) into a sibling and leave a thin re-export facade. The facade's own
+  `fan_out` falls because those imports left with the logic; the re-export *line*
+  itself is not a flow edge. (Consumers' edges now follow the moved names to the
+  sibling — the new definer — not the facade.)
 
 Two rules that decide whether a split *dissolves* coupling or merely *moves*
 it:
@@ -183,7 +233,9 @@ it:
   implementors still depend on the interface) but *raises* fan_out. Split by
   audience, not by line count.
 
-Re-export the moved items at the package root so call sites stay short.
+Re-export the moved items at the package root so call sites stay short — this is
+an ergonomic convenience only; the coupling edge still points at wherever each
+name is *defined*, not at the root that re-exports it.
 
 ### Step 5 — Verify with a before/after diff report
 
@@ -193,20 +245,20 @@ baseline and render the HTML report:
 
 ```bash
 # BEFORE — baseline snapshot (keep .code-ranker/ snapshots; they are baselines):
-code-ranker report --output.json.path=.code-ranker/before.json
+code-ranker report --plugins <lang> --output.json.path=.code-ranker/before.json
 
 #   …apply the split, then run the full test suite…
 
 # AFTER — diff against the baseline + render the HTML diff report:
-code-ranker report \
+code-ranker report --plugins <lang> \
   --baseline .code-ranker/before.json \
   --output.json.path=.code-ranker/after.json \
   --output.html.path=.code-ranker/after.html
 
 # Confirm the hotspot's HK actually dropped (and no sibling rose past it) —
 # re-rank with the scorecard, or let the gate decide (exit 0 = no breach):
-code-ranker report --output.scorecard --focus hk
-code-ranker check --threshold file.hk=100000
+code-ranker report --plugins <lang> --output.scorecard --focus hk
+code-ranker check --plugins <lang> --threshold file.hk=100000
 ```
 
 Then **surface the report to the user**: print its absolute path and offer to

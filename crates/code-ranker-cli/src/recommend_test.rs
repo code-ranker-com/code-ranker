@@ -19,6 +19,11 @@ fn file_node(id: &str, attrs: &[(&str, AttrValue)]) -> Node {
     node_kind(id, "file", attrs)
 }
 
+/// No `--focus-path` restriction — the common case for the render tests below.
+fn no_focus() -> FocusPaths {
+    FocusPaths::new(&[], "")
+}
+
 fn level_with(nodes: Vec<Node>) -> LevelGraph {
     let mut na: BTreeMap<String, AttributeSpec> = BTreeMap::new();
     let mut hk = AttributeSpec::new(ValueType::Float, "HK");
@@ -150,7 +155,7 @@ fn compose_prompt_cycle_lists_modules_and_connections() {
         "rust",
         Severity::Auto,
         None,
-        &[],
+        &no_focus(),
     )
     .unwrap();
     assert!(md.contains("# ADP — Acyclic"), "title heading: {md}");
@@ -246,7 +251,7 @@ fn compose_prompt_metric_orders_and_respects_top() {
         "rust",
         Severity::Warning,
         Some(1),
-        &[],
+        &no_focus(),
     )
     .unwrap();
     assert!(
@@ -283,7 +288,7 @@ fn compose_prompt_unknown_principle_errors() {
         "rust",
         Severity::Auto,
         None,
-        &[],
+        &no_focus(),
     )
     .unwrap_err();
     assert!(format!("{err}").contains("unknown principle 'NOPE'"));
@@ -334,7 +339,7 @@ fn scorecard_shows_principle_and_worst_modules() {
         &[Severity::Warning, Severity::Info],
         None,
         None,
-        &[],
+        &no_focus(),
     )
     .unwrap();
     assert!(sc.contains("scorecard  (rust, 2 files)"), "header: {sc}");
@@ -397,7 +402,7 @@ fn scorecard_narrowed_metric_lists_ranked_modules() {
         &[Severity::Warning],
         Some(2),
         Some(&Focus::Metric("sloc".into())),
-        &[],
+        &no_focus(),
     )
     .unwrap();
     assert!(sc.contains("WORST MODULES"), "modules section: {sc}");
@@ -429,7 +434,7 @@ fn scorecard_focus_metric_tags_each_module_by_its_actual_tier() {
         &[Severity::Warning],
         Some(3),
         Some(&Focus::Metric("sloc".into())),
-        &[],
+        &no_focus(),
     )
     .unwrap();
     // The second whitespace token of a module line is its tier label.
@@ -476,7 +481,7 @@ fn scorecard_narrowed_cycle_lists_all_members() {
         &[Severity::Warning],
         None,
         Some(&Focus::Metric("cycle".into())),
-        &[],
+        &no_focus(),
     )
     .unwrap();
     assert!(
@@ -553,7 +558,7 @@ fn scorecard_info_tier_and_cycle_in_rest() {
         &[Severity::Warning, Severity::Info],
         None,
         None,
-        &[],
+        &no_focus(),
     )
     .unwrap();
     assert!(
@@ -580,7 +585,7 @@ fn scorecard_reports_no_breaches_when_clean() {
         &[Severity::Warning],
         None,
         None,
-        &[],
+        &no_focus(),
     )
     .unwrap();
     assert!(
@@ -644,7 +649,7 @@ fn compose_prompt_lists_multiple_cycles() {
         "rust",
         Severity::Auto,
         Some(2),
-        &[],
+        &no_focus(),
     )
     .unwrap();
     assert!(
@@ -669,7 +674,7 @@ fn scorecard_narrowed_cycle_top_n_header() {
         &[Severity::Warning],
         Some(2),
         Some(&Focus::Metric("cycle".into())),
-        &[],
+        &no_focus(),
     )
     .unwrap();
     assert!(
@@ -689,7 +694,7 @@ fn scorecard_narrowed_cycle_with_none_says_none() {
         &[Severity::Warning],
         None,
         Some(&Focus::Metric("cycle".into())),
-        &[],
+        &no_focus(),
     )
     .unwrap();
     assert!(sc.contains("(none)"), "empty modules list: {sc}");
@@ -718,7 +723,7 @@ fn scorecard_clips_long_principle_name() {
         &[Severity::Warning],
         None,
         None,
-        &[],
+        &no_focus(),
     )
     .unwrap();
     assert!(sc.contains('…'), "long name clipped with ellipsis: {sc}");
@@ -830,7 +835,7 @@ fn compose_prompt_metric_lens_omits_duplicate_description() {
         "rust",
         Severity::Auto,
         Some(1),
-        &[],
+        &no_focus(),
     )
     .unwrap();
     assert_eq!(
@@ -844,23 +849,65 @@ fn compose_prompt_metric_lens_omits_duplicate_description() {
     );
 }
 
-/// `in_focus` mirrors `check`'s path matching: empty = no restriction; a folder
-/// matches everything beneath it; an exact file matches; `./` and trailing `/`
-/// normalize; anything outside is excluded.
+/// Build a `FocusPaths` from string literals + the analysis target.
+fn focus(paths: &[&str], target: &str) -> FocusPaths {
+    let owned: Vec<String> = paths.iter().map(|s| s.to_string()).collect();
+    FocusPaths::new(&owned, target)
+}
+
+/// `in_focus` matches a folder (everything beneath it), an exact file, and
+/// normalizes `./` / trailing `/`; anything outside is excluded. The target here
+/// is the analysis root, so the node's rel is `crates/a/src/lib.rs`.
 #[test]
 fn in_focus_matches_file_and_folder() {
     let n = file_node("{target}/crates/a/src/lib.rs", &[]);
-    assert!(in_focus(&n, &[]), "empty = no restriction");
-    assert!(in_focus(&n, &["crates/a".to_string()]), "folder prefix");
+    let t = "/repo";
+    assert!(in_focus(&n, &no_focus()), "empty = no restriction");
+    assert!(in_focus(&n, &focus(&["crates/a"], t)), "folder prefix");
     assert!(
-        in_focus(&n, &["crates/a/src/lib.rs".to_string()]),
+        in_focus(&n, &focus(&["crates/a/src/lib.rs"], t)),
         "exact file"
     );
     assert!(
-        in_focus(&n, &["./crates/a/".to_string()]),
+        in_focus(&n, &focus(&["./crates/a/"], t)),
         "normalizes ./ and trailing /"
     );
-    assert!(!in_focus(&n, &["crates/b".to_string()]), "outside the path");
+    assert!(!in_focus(&n, &focus(&["crates/b"], t)), "outside the path");
+}
+
+/// The normalization fix: a `--focus-path` written as the analysis target itself
+/// (the `[input]` path) — or an absolute path to it — scopes to that crate's
+/// nodes, not to a foreign crate. Previously only the counter-intuitive
+/// target-relative `src` worked.
+#[test]
+fn in_focus_accepts_the_input_path_and_absolute_forms() {
+    // Target crate lives at `/repo/crates/a`; its files are `{target}/src/…`.
+    let t = "/repo/crates/a";
+    let mine = file_node("{target}/src/store.rs", &[]);
+    // A sibling crate pulled into the graph keeps an absolute id.
+    let sibling = file_node("/repo/crates/b/src/lib.rs", &[]);
+
+    // Naming the whole target (the same path passed as `[input]`) → all its nodes.
+    assert!(
+        in_focus(&mine, &focus(&["/repo/crates/a"], t)),
+        "input path"
+    );
+    assert!(
+        !in_focus(&sibling, &focus(&["/repo/crates/a"], t)),
+        "does not leak to a sibling crate"
+    );
+    // A subpath under the target, written the long way, still scopes.
+    assert!(
+        in_focus(&mine, &focus(&["/repo/crates/a/src"], t)),
+        "input path + subfolder"
+    );
+    // The target-relative `src` keeps working (back-compat).
+    assert!(in_focus(&mine, &focus(&["src"], t)), "target-relative src");
+    // An ancestor path matches the reconstructed absolute location.
+    assert!(
+        in_focus(&mine, &focus(&["/repo/crates"], t)),
+        "ancestor absolute path"
+    );
 }
 
 /// A principle focus shows only that principle's row (others hidden) and ranks the
@@ -882,7 +929,7 @@ fn scorecard_focus_principle_shows_only_that_principle() {
         &[Severity::Warning, Severity::Info],
         None,
         Some(&Focus::Principle("SRP".into())),
-        &[],
+        &no_focus(),
     )
     .unwrap();
     assert!(
@@ -1130,7 +1177,7 @@ fn compose_prompt_single_focus_abbreviates_in_and_out_edges() {
         "rust",
         Severity::Auto,
         Some(1),
-        &[],
+        &no_focus(),
     )
     .unwrap();
     assert!(

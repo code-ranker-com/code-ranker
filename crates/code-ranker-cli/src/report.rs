@@ -225,7 +225,7 @@ fn run_direct(args: &AnalyzeArgs, reco: &ReportReco) -> Result<()> {
         lang,
         recommend::Severity::Auto,
         reco.top,
-        &reco.focus_path,
+        &recommend::FocusPaths::new(&reco.focus_path, &snap.target),
     )?;
     print!("{md}");
     Ok(())
@@ -277,7 +277,7 @@ fn write_scorecard(
             &severities,
             reco.top,
             focus.as_ref(),
-            &reco.focus_path,
+            &recommend::FocusPaths::new(&reco.focus_path, &snap.target),
         )?;
         let dest = render_name(scorecard_tpl, target, commit, generated_at);
         write_artifact(&dest, &txt, "scorecard")?;

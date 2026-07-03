@@ -187,8 +187,10 @@ violations.
 
 - **`--focus-path <path>`** — keep violations under a file/folder. An entry matches a file
   exactly or, treated as a folder, anything beneath it; a leading `./` and a trailing `/`
-  are ignored. Locationless violations (e.g. a cycle whose breaking edge can't be placed)
-  can't be attributed to a path and are dropped.
+  are ignored. The entry may be written as the same path passed as `[input]`, a subfolder,
+  an absolute path, or a target-relative subpath (`src`) — all resolve to that crate.
+  Locationless violations (e.g. a cycle whose breaking edge can't be placed) can't be
+  attributed to a path and are dropped.
 - **`--focus <rule|group>`** — keep violations of a rule or concern group. Matches a
   full rule id (`threshold.file.hk`, `check.inline_tests_too_large`), the bare id
   (`inline_tests_too_large`), or a group (`TST`, `CPL`).
@@ -295,7 +297,7 @@ code-ranker report [input] [options]
 | `--output.<fmt>.path <path>` | `json` + `html` in `.code-ranker/` | Which artifacts to emit and where. `<fmt>` is `json`, `html`, or `scorecard`. Repeatable, one per format. See [Output paths](#output-paths). |
 | `--baseline <snapshot>` | — | Baseline snapshot (`.json` or `.html`). Turns the HTML into a diff (baseline vs current) with a verdict, and names it `…-diff.html`. See [`--baseline`](#--baseline-comparison). |
 | `--focus <NAME>` | auto (all principles) | Frame the `scorecard` by a **metric** (`hk`, `cycle`, `sloc`, `cognitive`, `cyclomatic`, `fan_in`, `fan_out`, `items` — case-insensitive; also accepts the full threshold rule id `threshold.file.hk`, matched **by value** so it works whether or not the metric has a configured threshold) or a **principle** id (`LSP`, `ADP`, `SRP`, `OCP`, `DIP`, `ISP`, `DRY`, `KISS`, `LoD`, `MISU`, `CoI`, `YAGNI`, `CPX`). A metric narrows the scorecard to that metric; a principle frames it by that principle. Without it the scorecard spans every principle. Unknown names error with both namespaces listed. See [Recommendations](#recommendations-scorecard--prompt). |
-| `--focus-path <PATH>` | all modules | Restrict the ranked modules to a subtree. The whole project is still analyzed (the dependency graph needs it), but only modules under one of these repo-relative paths are ranked/listed; a folder matches everything beneath it. Repeatable; combine with `--focus` to intersect. A dependency cycle is a global unit, so `--focus-path` does **not** narrow cycle members — only the node-ranked metric/breach lists. See [Recommendations](#recommendations-scorecard--prompt). |
+| `--focus-path <PATH>` | all modules | Restrict the ranked modules to a subtree. The whole project is still analyzed (the dependency graph needs it), but only modules under the path are ranked/listed; a folder matches everything beneath it. The path may be written as the same path passed as `[input]`, a subfolder, an absolute path, or a target-relative subpath (`src`) — all resolve to that crate. A path matching no module prints a distinct `no module matched --focus-path — 0 of N` note (with a hint), not a bare `(none)`. Repeatable; combine with `--focus` to intersect. A dependency cycle is a global unit, so `--focus-path` does **not** narrow cycle members — only the node-ranked metric/breach lists. See [Recommendations](#recommendations-scorecard--prompt). |
 | `--severity <tier>` | all tiers | Threshold tier for the `scorecard`: `info`, `warning`, or `auto`. Repeatable to show several tiers. |
 | `--top <N>` | 15 (scorecard) | `scorecard`: how many rows; `--top 1` = the single worst module. With `--focus cycle`, `--top 1` prints one entire cycle (biggest `chain` first) with **all** its members. `--prompt <ID>`: how many modules the fix-prompt lists, ranked by the principle's sort metric. |
 | `--export-full-config <PATH>` | — | Instead of analyzing, write the **full effective configuration** to `PATH` and exit. See [Inspecting the effective config](#inspecting-the-effective-config). |

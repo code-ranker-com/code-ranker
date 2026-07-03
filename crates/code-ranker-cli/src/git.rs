@@ -142,4 +142,28 @@ mod tests {
         };
         assert!(collect(&non_repo, &ov).is_none());
     }
+
+    /// A partial override (`commit` given, `branch` not) inside a REAL repo
+    /// falls back to `git` for the missing branch, then uses the override for
+    /// commit — the mirror image of `partial_override_outside_repo_yields_none`,
+    /// which fails because there is no repo to fall back to.
+    #[test]
+    fn partial_override_inside_repo_falls_back_to_git_for_the_rest() {
+        let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let ov = GitOverride {
+            commit: Some("deadbeef".into()),
+            ..Default::default()
+        };
+        let info =
+            collect(repo, &ov).expect("branch resolves from the real repo, commit overridden");
+        assert_eq!(info.commit, "deadbeef");
+        assert!(!info.branch.is_empty(), "branch came from real git");
+    }
+
+    /// `count_dirty` degrades to 0 (not a panic) when `git status` fails —
+    /// e.g. outside any repository.
+    #[test]
+    fn count_dirty_outside_a_repo_is_zero() {
+        assert_eq!(count_dirty(&std::env::temp_dir()), 0);
+    }
 }

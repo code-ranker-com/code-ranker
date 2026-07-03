@@ -226,3 +226,39 @@ fn sarif_partial_fingerprint_is_stable_across_line_shifts() {
     };
     assert_eq!(fp(&at_7), fp(&at_42));
 }
+
+/// A violation whose location doesn't resolve to a repo-relative path (an
+/// external node, or a bare `{target}/` with nothing after it) still gets a
+/// `**Module:**` line in the prompt — falling back to the raw (non-empty)
+/// location instead of silently dropping the module line.
+#[test]
+fn render_prompt_falls_back_to_raw_location_when_not_target_relative() {
+    let md = render_prompt(
+        &[viol("ext:serde", None)],
+        1,
+        "demo",
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+    );
+    assert!(
+        md.contains("**Module:** `ext:serde`"),
+        "falls back to the raw location: {md}"
+    );
+}
+
+/// A genuinely empty location (no path at all — e.g. a project-wide finding)
+/// gets no `**Module:**` line, rather than printing an empty backtick pair.
+#[test]
+fn render_prompt_omits_module_line_for_an_empty_location() {
+    let md = render_prompt(
+        &[viol("", None)],
+        1,
+        "demo",
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+    );
+    assert!(
+        !md.contains("**Module:**"),
+        "no module line for an empty location: {md}"
+    );
+}

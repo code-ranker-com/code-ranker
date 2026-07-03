@@ -73,6 +73,88 @@ fn dev_only_crates_from_metadata_excludes_dep_also_used_regularly() {
     );
 }
 
+/// A tiny offline Cargo workspace: `app` depends on `helper` (regular) and
+/// `devhelper` (dev-only), all via path deps — resolves fully offline (no
+/// registry, no network), so `collect_dev_only_crates` is deterministic and
+/// fast here, not an integration test in the slow/flaky sense. `devhelper`
+/// must be `exclude`d: cargo implicitly treats any path dependency living
+/// under the workspace root as a member otherwise, which would seed it into
+/// `regular` directly regardless of dep edges.
+fn write_offline_workspace_with_dev_dep(root: &std::path::Path) {
+    std::fs::write(
+        root.join("Cargo.toml"),
+        "[workspace]\nresolver = \"3\"\nmembers = [\"app\", \"helper\"]\nexclude = [\"devhelper\"]\n",
+    )
+    .unwrap();
+
+    std::fs::create_dir_all(root.join("app/src")).unwrap();
+    std::fs::write(
+        root.join("app/Cargo.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n\
+         [dependencies]\nhelper = { path = \"../helper\" }\n\n\
+         [dev-dependencies]\ndevhelper = { path = \"../devhelper\" }\n",
+    )
+    .unwrap();
+    std::fs::write(root.join("app/src/main.rs"), "fn main() {}\n").unwrap();
+
+    std::fs::create_dir_all(root.join("helper/src")).unwrap();
+    std::fs::write(
+        root.join("helper/Cargo.toml"),
+        "[package]\nname = \"helper\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .unwrap();
+    std::fs::write(root.join("helper/src/lib.rs"), "").unwrap();
+
+    std::fs::create_dir_all(root.join("devhelper/src")).unwrap();
+    std::fs::write(
+        root.join("devhelper/Cargo.toml"),
+        "[package]\nname = \"devhelper\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .unwrap();
+    std::fs::write(root.join("devhelper/src/lib.rs"), "").unwrap();
+}
+
+/// `collect_dev_only_crates` end-to-end, against a REAL `cargo metadata` run —
+/// not just the pure `dev_only_crates_from_metadata` split above.
+#[test]
+fn collect_dev_only_crates_runs_real_cargo_metadata_offline() {
+    let dir = tempfile::tempdir().unwrap();
+    write_offline_workspace_with_dev_dep(dir.path());
+
+    let dev_only = collect_dev_only_crates(dir.path());
+    assert_eq!(
+        dev_only,
+        ["devhelper".to_string()].into_iter().collect(),
+        "helper is a regular dependency; only devhelper is dev-only"
+    );
+}
+
+/// `apply_ignore` with `dev_only_crates: true` drives `collect_dev_only_crates`
+/// from the actual config-flag entry point (not just called directly), then
+/// prunes the matching `ext:` node from the graph.
+#[test]
+fn apply_ignore_dev_only_crates_flag_prunes_the_real_dev_dep() {
+    let dir = tempfile::tempdir().unwrap();
+    write_offline_workspace_with_dev_dep(dir.path());
+
+    let mut g = Graph {
+        nodes: vec![
+            file_node("{target}/src/main.rs", &[]),
+            file_node("ext:devhelper", &[("external", AttrValue::Bool(true))]),
+            file_node("ext:helper", &[("external", AttrValue::Bool(true))]),
+        ],
+        edges: vec![],
+    };
+    let ignore = IgnoreConfig {
+        dev_only_crates: true,
+        ..Default::default()
+    };
+    let removed = apply_ignore(&mut g, &ignore, dir.path()).unwrap();
+    assert_eq!(removed, 1, "only the dev-only external is pruned");
+    assert!(g.nodes.iter().any(|n| n.id == "ext:helper"));
+    assert!(!g.nodes.iter().any(|n| n.id == "ext:devhelper"));
+}
+
 /// A workspace member itself is never reported as dev-only, even though
 /// nothing else in the fixture points to it — it seeds `regular` directly.
 #[test]

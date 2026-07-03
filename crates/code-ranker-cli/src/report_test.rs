@@ -125,3 +125,16 @@ fn write_artifact_creates_parent_dirs_and_writes_file() {
     write_artifact(dest.to_str().unwrap(), "payload", "json").unwrap();
     assert_eq!(std::fs::read_to_string(&dest).unwrap(), "payload");
 }
+
+/// A destination whose parent path is blocked by an existing FILE (not a
+/// directory) can't be `create_dir_all`'d — the write errors out with context,
+/// it doesn't panic.
+#[test]
+fn write_artifact_errors_when_a_parent_path_component_is_a_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let blocker = dir.path().join("blocker");
+    std::fs::write(&blocker, "not a directory").unwrap();
+    let dest = blocker.join("report.json");
+    let err = write_artifact(dest.to_str().unwrap(), "payload", "json").unwrap_err();
+    assert!(err.to_string().contains("creating directory"), "{err}");
+}

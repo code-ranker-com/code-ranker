@@ -86,10 +86,6 @@ pub(crate) fn run_report(
             "--focus/--focus-path/--severity/--top apply only with --output.scorecard (for a fix-prompt use --prompt <ID>)"
         );
     }
-    // `--severity` steers the scorecard only (tiers are a triage concern).
-    if !reco.severity.is_empty() && !want_scorecard {
-        anyhow::bail!("--severity applies only to --output.scorecard");
-    }
 
     let a = analyze_input(args, &[], &[])?;
 

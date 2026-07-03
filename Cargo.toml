@@ -1,0 +1,55 @@
+[workspace]
+members = ["crates/*"]
+resolver = "3"
+
+[workspace.package]
+version = "5.0.3"
+edition = "2024"
+rust-version = "1.88"
+license = "Apache-2.0"
+repository = "https://github.com/ffedoroff/code-ranker"
+keywords = ["dependency-graph", "coupling", "refactoring", "code-quality", "static-analysis"]
+categories = ["development-tools", "command-line-utilities"]
+
+[workspace.dependencies]
+code-ranker-graph = { path = "crates/code-ranker-graph", version = "5.0.3" }
+code-ranker-plugin-api = { path = "crates/code-ranker-plugin-api", version = "5.0.3" }
+code-ranker-plugins = { path = "crates/code-ranker-plugins", version = "5.0.3" }
+code-ranker-viewer = { path = "crates/code-ranker-viewer", version = "5.0.3" }
+
+anyhow = "1.0"
+cel = "0.13"
+globset = "0.4"
+toml = "1"
+# Distributed, self-registering plugin inventory: each language plugin submits
+# itself; the binary collects them with no central list naming a language.
+inventory = "0.3"
+cargo_metadata = "0.18"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+syn = { version = "2", features = ["full", "visit"] }
+proc-macro2 = { version = "1", features = ["span-locations"] }
+tempfile = "3"
+thiserror = "1"
+which = "8"
+
+# One version of each tree-sitter grammar across the whole workspace (plugins +
+# metric engines), each at its latest. Enforced by the `grammar_single_version`
+# test. Engines resolve node kinds by name, so they are grammar-version-robust.
+tree-sitter = "0.26.9"
+tree-sitter-python = "0.25.0"
+tree-sitter-javascript = "0.25.0"
+tree-sitter-typescript = "0.23.2"
+tree-sitter-rust = "0.24.2"
+tree-sitter-go = "0.25.0"
+tree-sitter-c = "0.24.1"
+tree-sitter-cpp = "0.23.4"
+tree-sitter-c-sharp = "0.23.1"
+ignore = "0.4"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

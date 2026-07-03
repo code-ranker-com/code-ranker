@@ -1,0 +1,6 @@
+version = "5.0"
+# Self-contained config for the code-ranker "cpp" sample fixture.
+[plugins]
+enabled = ["cpp"]
+[plugins.base.ignore]
+tests = false

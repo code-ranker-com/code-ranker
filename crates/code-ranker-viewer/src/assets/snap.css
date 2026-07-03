@@ -1,0 +1,57 @@
+/* snap.css: snapshot popup, review mode — part of the split stylesheet; concatenated in lib.rs in source order to preserve the cascade. */
+/* ── Snap popup ─────────────────────────────────────────────────────────────── */
+#snap-popup {
+  display: none; position: fixed; z-index: 20000;
+  background: #fff; border: 1px solid #d0dcea; border-radius: 8px;
+  padding: 12px 16px; font-size: 12px; color: #2c3e50;
+  box-shadow: 0 6px 24px rgba(0,0,0,.14);
+  max-width: 820px; min-width: 380px;
+}
+.sp-side { font-weight: 700; font-size: 13px; color: #2c3e50; margin-bottom: 8px;
+           padding-bottom: 6px; border-bottom: 1px solid #eef1f5; }
+.sp-side.sp-side-shown { color: #117a65; }   /* the side currently shown on the map */
+.sp-row { display: flex; gap: 10px; margin: 3px 0; align-items: baseline; }
+.sp-lbl { color: #888; font-weight: 600; min-width: 88px; flex-shrink: 0; }
+.sp-cmd { font-family: ui-monospace, 'SF Mono', 'Fira Code', monospace; font-size: 11px; color: #2c3e50; }
+.sp-cmd-block { margin: 4px 0; }
+.sp-cmd-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.sp-cmd-input { width: 100%; box-sizing: border-box; font-family: ui-monospace, 'SF Mono', 'Fira Code', monospace;
+                font-size: 11px; color: #2c3e50; background: #f5f7fa; border: 1px solid #d0dcea;
+                border-radius: 4px; padding: 4px 6px; outline: none; cursor: text; resize: none; }
+.sp-cmd-input:focus { border-color: #1abc9c; }
+.sp-copy-btn { flex-shrink: 0; background: none; border: 1px solid #d0dcea; border-radius: 4px;
+               padding: 1px 5px; font-size: 11px; color: #888; cursor: pointer; line-height: 1.4;
+               transition: background .15s, color .15s; }
+.sp-copy-btn:hover { background: #1abc9c; border-color: #1abc9c; color: #fff; }
+.sp-dirty { color: #b45309; font-weight: 600; }
+.sp-clean { color: #2a7a30; }
+.sp-section-label { font-weight: 700; font-size: 10px; text-transform: uppercase;
+                    letter-spacing: .07em; color: #aaa; margin: 10px 0 4px; }
+.sp-section-label:first-child { margin-top: 0; }
+.sp-gen-diff { color: #888; font-size: 11px; }
+.sp-origin { word-break: break-all; }
+/* Snapshot actions, moved out of the header into the popup. */
+.sp-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.sp-action { background: #2c3e50; color: #fff; border: 0; border-radius: 4px;
+             padding: 4px 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.sp-action:hover { background: #1abc9c; }
+.sp-action-x { background: #fdecea; color: #c0392b; }
+.sp-action-x:hover { background: #c0392b; color: #fff; }
+
+/* ── Review mode ────────────────────────────────────────────────────────────── */
+[data-review] { display: none; }
+body.mode-review [data-review]         { display: inline-block; }
+body.mode-review [data-review].active  { background: #1abc9c; color: #fff; }
+body.mode-review [data-review="cycles"].has-cycles.active  { background: #c0392b; color: #fff; }
+body.mode-review [data-review="cycles"]:not(.has-cycles)   { opacity: 0.4; pointer-events: none; }
+
+body.mode-review [data-preset="baseline"],
+body.mode-review [data-preset="current"],
+body.mode-review [data-preset="diff"],
+body.mode-review [data-preset="cycles"] { display: none; }
+body.mode-review .control-panel        { display: none; }
+body.mode-review [data-col="status"]   { display: none; }
+/* Review (single snapshot) lives in the CURRENT slot; the BASELINE slot is an empty,
+   editable baseline placeholder. Header element visibility is driven by JS
+   (updateHeader), so no mode-review hiding of the arrow / current metadata here. */
+

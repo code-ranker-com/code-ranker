@@ -1,0 +1,93 @@
+# ---------------------------------------------------------------------------
+# code-ranker — MINIMAL mode (analyze + gate + GitLab findings)
+#
+# Runs code-ranker on every MR and on the default branch: produces a JSON
+# snapshot + a self-contained HTML viewer (kept as artifacts), then `check`s the
+# snapshot, gating on violations and emitting a GitLab Code Quality report so the
+# findings show inline on the MR. No baseline / token / API calls.
+#
+# Prerequisite: `code-ranker` must be on PATH. Either bake it into your CI image
+# (`cargo install code-ranker`, or copy a prebuilt binary), or install it in a
+# `before_script`.
+# ---------------------------------------------------------------------------
+
+code-ranker:
+  # Use an image that already has the code-ranker binary. If it doesn't, add:
+  #   before_script:
+  #     - cargo install code-ranker --locked
+  #
+  # Rust note: the analysis runs `cargo metadata` under the hood, which resolves
+  # the full dependency graph. Run this job on the SAME base Rust image (and
+  # cargo cache) as your build/test jobs so deps are already on disk — otherwise
+  # a cold runner spends minutes fetching crates before the analysis can start.
+  # See README.md → "Rust: the cargo dependency cache". (Rust-only; Python/JS
+  # need none of this.)
+  image: your-registry/your-rust-image:latest
+
+  stage: test
+  interruptible: true
+  # Soft gate: the `check` below exits non-zero on a violation, but allow_failure
+  # keeps it advisory (job goes yellow, pipeline continues, findings still shown).
+  # Remove this line to turn it into a HARD gate that blocks the pipeline.
+  allow_failure: true
+
+  script:
+    # Name artifacts by commit hash so each run is identifiable and never collides.
+    - H="$(git rev-parse --short=12 HEAD)"
+    # Inject clean git metadata into the snapshot. CI mangles the raw git view —
+    # a detached checkout reports the branch as "HEAD", and files the job writes
+    # before analysis would inflate the dirty count — so map CI variables onto the
+    # --git.* flags. With branch+commit+dirty-files all set, code-ranker never even
+    # shells out to git. See docs/code-ranker-cli/CLI.md → "Git metadata overrides".
+    - BR="${CI_MERGE_REQUEST_SOURCE_BRANCH_NAME:-$CI_COMMIT_REF_NAME}"
+    - |
+      code-ranker report . \
+        --git.branch="$BR" \
+        --git.commit="$CI_COMMIT_SHA" \
+        --git.dirty-files=0 \
+        --git.origin="$CI_PROJECT_URL" \
+        --output.json.path="code-ranker-${H}.json" \
+        --output.html.path="code-ranker-${H}.html"
+    # Gate + native findings. `check` re-reads the snapshot (no re-analysis),
+    # evaluates the rules, and writes them as a GitLab Code Quality report — which
+    # GitLab renders inline on the MR diff + the pipeline Code Quality widget.
+    # `check` EXITS NON-ZERO on a violation, so it is also the gate; `artifacts:
+    # when: always` still uploads the report, so the findings are highlighted even
+    # when the gate fails. Keep this LAST — a non-zero exit ends the script.
+    - code-ranker check "code-ranker-${H}.json" --output-format codequality > gl-code-quality-report.json
+
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - "code-ranker-*.json"
+      - "code-ranker-*.html"
+      - "gl-code-quality-report.json"
+    # GitLab ingests the Code Quality (CodeClimate) report `check` wrote and shows
+    # the violations inline in the MR diff + the pipeline Code Quality widget. GA —
+    # works on current GitLab, no feature flag. The path is fixed (not `${H}`-named)
+    # because `reports:` is resolved at config time, before the script runs.
+    reports:
+      codequality: gl-code-quality-report.json
+    # SARIF alternative (GitLab >= 18.11 with the `sarif_ingestion` flag ON, off by
+    # default — ask your admin); surfaces findings in the security views instead.
+    # Add `--output-format sarif` (a second `check` writing `gl-code-ranker.sarif`)
+    # and uncomment:
+    #   reports:
+    #     sarif: gl-code-ranker.sarif
+
+  rules:
+    # Skip tag pipelines; run on MRs and on the default branch.
+    - if: '$CI_COMMIT_TAG'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE =~ /^(merge_request_event|web|api|schedule)$/'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - when: never
+
+# ---------------------------------------------------------------------------
+# Hard gate: delete the `allow_failure: true` line above and a code-ranker rule
+# violation (threshold / cycle) blocks the pipeline. The Code Quality report is
+# still written and highlighted in the MR either way (`artifacts: when: always`).
+# Tune what gates via code-ranker.toml ([plugins.base.rules.thresholds.file] / [plugins.base.rules.cycles])
+# or CLI flags on the `check` line (e.g. --threshold file.sloc=800 --cycle-rule chain=0).
+# ---------------------------------------------------------------------------

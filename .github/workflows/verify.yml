@@ -1,0 +1,177 @@
+name: Verify (no publish)
+
+# Runs automatically on every release tag (and on demand) BEFORE anything is
+# published. It exercises the full pipeline in CHECK mode — tests, lint, audit,
+# per-registry packaging dry-runs, and a token preflight — but publishes
+# NOTHING anywhere. Actual publishing is the separate manual "Release" button
+# (publish.yml), which you run only after this is green.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test & lint
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --workspace
+
+  msrv:
+    name: MSRV (rust 1.88)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@1.88.0
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo check on the minimum supported rust version
+        run: cargo check --workspace
+
+  audit:
+    name: Security audit
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@cargo-audit
+      - run: cargo audit
+
+  crates-dry-run:
+    name: crates.io packaging (dry-run)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # Only the TRUE leaf crate can be dry-run before release: every other
+      # crate depends on a sibling at the new (unpublished) version, which cargo
+      # can't resolve until it's actually on crates.io (the real publish does it
+      # bottom-up). code-ranker-plugin-api is the only crate with no workspace
+      # deps; code-ranker-graph depends on it, so dry-running graph fails to
+      # resolve plugin-api. The whole workspace is still compiled by the test job.
+      - name: cargo publish --dry-run (leaf crate)
+        run: cargo publish -p code-ranker-plugin-api --dry-run --allow-dirty
+
+  wheels-dry-run:
+    name: PyPI wheel build (no upload)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: PyO3/maturin-action@v1
+        with:
+          args: --release --out dist --strip
+          manylinux: '2_28'
+      - name: Validate built distributions
+        run: pipx run twine check dist/*
+
+  artifacts-build:
+    name: Release artifacts build (dist, no publish)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install dist
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.32.0/cargo-dist-installer.sh | sh
+      - name: dist build (host target only, no upload/release)
+        run: dist build --artifacts=local --output-format=json || cargo build --release --workspace
+
+  docker-dry-run:
+    name: Docker build check + registry login
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v4
+      - name: Log in to Docker Hub (validates DOCKERHUB_TOKEN)
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Log in to GHCR (validates token)
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # The image downloads prebuilt binaries from the GitHub Release, which does
+      # not exist yet at verify time — so we validate the Dockerfile statically
+      # (syntax/stages) rather than executing the download. The real multi-arch
+      # build+push runs in the Release workflow once the binaries are published.
+      - name: Dockerfile check (no build execution)
+        run: docker buildx build --call=check .
+
+  tokens:
+    name: Token preflight
+    runs-on: ubuntu-22.04
+    steps:
+      - name: crates.io token present
+        env:
+          TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          # crates.io API tokens can't be validated read-only: GET /api/v1/me is
+          # cookie-session only and 403s for API tokens. So check presence here;
+          # the crates-dry-run job above proves the crates are publishable.
+          [ -n "$TOKEN" ] || { echo "CARGO_REGISTRY_TOKEN is empty"; exit 1; }
+          echo "crates.io token present"
+      - name: npm token is valid
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          [ -n "$NODE_AUTH_TOKEN" ] || { echo "NPM_TOKEN is empty"; exit 1; }
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
+          who=$(npm whoami) || { echo "npm token rejected"; exit 1; }
+          echo "npm token OK (user: $who)"
+      - name: PyPI token is valid
+        env:
+          TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          case "$TOKEN" in
+            pypi-*) ;;
+            "")     echo "PYPI_TOKEN is empty"; exit 1 ;;
+            *)      echo "PYPI_TOKEN does not look like an API token (expected 'pypi-…')"; exit 1 ;;
+          esac
+          # PyPI has no read-only validate endpoint, so probe the upload endpoint
+          # with an empty multipart body: a revoked/invalid token → 403; an
+          # accepted token → 400 (missing metadata — nothing is uploaded without
+          # a file). Heuristic on warehouse's auth-before-validation order, not a
+          # documented contract; the real fix is Trusted Publishing (OIDC).
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -u "__token__:$TOKEN" \
+            -F ":action=file_upload" https://upload.pypi.org/legacy/)
+          [ "$code" = 403 ] && { echo "PyPI token rejected (HTTP 403)"; exit 1; }
+          echo "PyPI token accepted (HTTP $code)"
+      - name: Docker Hub token is valid
+        env:
+          USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          [ -n "$USER" ] && [ -n "$TOKEN" ] || { echo "DOCKERHUB_USERNAME/DOCKERHUB_TOKEN missing"; exit 1; }
+          # Exchange the PAT for a JWT — 200 proves the credential is live. jq
+          # builds the JSON body so a token with shell-special chars is safe.
+          body=$(jq -nc --arg u "$USER" --arg p "$TOKEN" '{username:$u,password:$p}')
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+            -H 'Content-Type: application/json' -d "$body" \
+            https://hub.docker.com/v2/users/login)
+          [ "$code" = 200 ] || { echo "Docker Hub token rejected (HTTP $code)"; exit 1; }
+          echo "Docker Hub token OK"

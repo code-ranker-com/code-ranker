@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>code-ranker report</title>
+<link rel="stylesheet" href="./index.css">
+<script src="./graphviz.umd.js"></script>
+<script src="./snarkdown.umd.js"></script>
+<script src="./data.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="header-row">
+    <a class="header-brand" href="https://github.com/ffedoroff/code-ranker" target="_blank" rel="noopener" title="code-ranker on GitHub"><span class="header-brand-name">code-ranker</span><span class="header-ver">__CR_VERSION__</span></a>
+    <span class="header-title" id="title"></span>
+    <!-- Language switcher: a dropdown of the snapshot's languages, populated by
+         updateFilesTab() from snapshot.languages keys; hidden for a single-language
+         report. Switching rebuilds the level sections + diff/cycles for that language. -->
+    <select class="lang-select" id="lang-switch" hidden aria-label="Report language" title="Switch the report language"></select>
+    <div class="header-meta">
+      <!-- Each snapshot control shows its branch + commit. Click the body → show
+           that side on the map; click the ⚙ gear → details + upload/remove actions. -->
+      <div class="snap-group" data-snap="baseline" title="Click to view the baseline on the map">
+        <span class="meta-info" id="meta-baseline-info"><code id="meta-baseline-name"></code><span class="mc" id="meta-baseline-commit"></span></span>
+        <button class="snap-edit" type="button" title="Snapshot details &amp; actions">⚙</button>
+      </div>
+      <button class="meta-mode" id="meta-mode" type="button">toggle</button>
+      <div class="snap-group" data-snap="current" title="Click to view the current snapshot on the map">
+        <span class="meta-info" id="meta-current-info"><code id="meta-current-name"></code><span class="mc" id="meta-current-commit"></span></span>
+        <button class="snap-edit" type="button" title="Snapshot details &amp; actions">⚙</button>
+      </div>
+      <span class="custom-indicator" id="custom-indicator"></span>
+    </div>
+    <button class="header-stats-btn" id="stats-btn" type="button" title="Open the diff summary statistics">stat</button>
+  </div>
+  <input type="file" id="input-baseline" accept=".json,.html" style="display:none">
+  <input type="file" id="input-current"  accept=".json,.html" style="display:none">
+</header>
+
+<main>
+
+<!-- ── Level switcher (Files / Functions / …) — populated by updateFilesTab()
+     from the snapshot's graph levels; hidden for a single-level report. ─────── -->
+<nav class="report-switch" id="report-switch" hidden></nav>
+
+<!-- ── Per-level views. The `files` section is the template; updateFilesTab()
+     clones it for every other level present in the snapshot. ───────────────── -->
+<section class="view active" data-view="files">
+  <div class="frame-wrap">
+    <div class="svg-frame" id="frame-files"></div>
+    <div class="loading-indicator" id="loading-files">Loading…</div>
+    <!-- Navigation breadcrumb — tier dropdown anchor + path chips + reveal-depth
+         lens chip. Always visible; populated by renderBreadcrumb() in
+         map-interactions.js. -->
+    <div class="drill-breadcrumb" id="drill-breadcrumb-files"></div>
+    <!-- Size-mode + filter buttons are built per render from the level's
+         `ui.size` / `ui.filter` (renderMapControls in
+         view-state.js) — nothing hardcoded here. -->
+    <div class="size-controls">
+      <div class="size-row" data-row="metric"></div>
+      <div class="size-row" data-row="filter"></div>
+    </div>
+    <div class="zoom-controls">
+      <button class="zoom-btn" data-zoom="fullscreen" title="Fullscreen">⛶</button>
+      <button class="zoom-btn" data-zoom="in">+</button>
+      <button class="zoom-btn" data-zoom="fit">fit</button>
+      <button class="zoom-btn" data-zoom="out">−</button>
+    </div>
+    <!-- Keyboard-shortcut legend; key labels are filled per-platform in JS. -->
+    <div class="kbd-hints" id="kbd-hints"></div>
+  </div>
+</section>
+
+</main>
+
+<!-- ── Diff summary popup (full-screen, opened by the header `stat` button) ── -->
+<div id="summary-overlay" style="display:none">
+  <div id="summary-popup">
+    <div id="summary-header">
+      <span id="summary-title">Diff summary</span>
+      <span class="summary-exports">
+        <span class="summary-export-grp">
+          <span class="summary-fl">json</span>
+          <button class="summary-ibtn" id="summary-dl-json" type="button" title="Download JSON" aria-label="Download JSON"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg></button>
+          <button class="summary-ibtn" id="summary-copy-json" type="button" title="Copy JSON" aria-label="Copy JSON"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+        </span>
+        <span class="summary-export-grp">
+          <span class="summary-fl">md</span>
+          <button class="summary-ibtn" id="summary-dl-md" type="button" title="Download Markdown" aria-label="Download Markdown"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg></button>
+          <button class="summary-ibtn" id="summary-copy-md" type="button" title="Copy Markdown" aria-label="Copy Markdown"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+        </span>
+      </span>
+      <button id="summary-close" type="button" title="Close">✕</button>
+    </div>
+    <div id="summary-body">
+      <div class="node-table-container" id="summary-container">
+        <table class="node-table summary-table">
+          <thead id="summary-thead"></thead>
+          <tbody id="summary-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="tt" class="tt" hidden></div>
+
+<script src="./schema.js"></script>
+<script src="./grouping.js"></script>
+<script src="./diff.js"></script>
+<script src="./layout.js"></script>
+<script src="./utils.js"></script>
+<script src="./tooltip.js"></script>
+<script src="./modal.js"></script>
+<script src="./panzoom.js"></script>
+<script src="./source-links.js"></script>
+<script src="./node-popup.js"></script>
+<script src="./modal-content.js"></script>
+<script src="./map-interactions.js"></script>
+<script src="./map-render.js"></script>
+<script src="./ui.js"></script>
+<script src="./summary.js"></script>
+<script src="./export-popup.js"></script>
+<script src="./node-table.js"></script>
+<script src="./nav.js"></script>
+<script src="./view-state.js"></script>
+<script src="./snap-controls.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>

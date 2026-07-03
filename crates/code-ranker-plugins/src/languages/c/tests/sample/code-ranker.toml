@@ -1,0 +1,6 @@
+version = "5.0"
+# Self-contained config for the code-ranker "c" sample fixture.
+[plugins]
+enabled = ["c"]
+[plugins.base.ignore]
+tests = false

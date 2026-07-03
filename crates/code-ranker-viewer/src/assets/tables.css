@@ -1,0 +1,105 @@
+/* tables.css: summary, tooltip, node table — part of the split stylesheet; concatenated in lib.rs in source order to preserve the cascade. */
+/* ── Summary ────────────────────────────────────────────────────────────────── */
+#summary-container { max-height: none; width: fit-content; }
+.node-table.summary-table { width: auto; table-layout: fixed; }
+.summary-table .metric-cell,
+.summary-table .metric-header { width: 180px; }
+.node-table.summary-table thead th { border-bottom: none; }
+.node-table.summary-table thead tr:last-child th { border-bottom: 2px solid #ddd; }
+.node-table.summary-table td { border-bottom: none; }
+.node-table.summary-table tbody tr:nth-child(even) td { background: #f4f6f8; }
+.summary-table .level-header  { text-align: center; }
+.summary-table .metric-header { vertical-align: middle; border-right: 2px solid #d0d8e4; }
+.node-table.summary-table .metric-header { border-bottom: 2px solid #ddd; }
+.summary-table .metric-cell   { color: #555; font-weight: 500; white-space: nowrap; border-right: 2px solid #d0d8e4; }
+.summary-table .grp-start     { border-left: 2px solid #d0d8e4; }
+.summary-table td.delta-good  { color: #2a7a30; font-weight: 600; }
+.summary-table td.delta-bad   { color: #c0392b; font-weight: 600; }
+.summary-table th.num,
+.summary-table td.num { width: 66px; min-width: 66px; max-width: 66px; }
+/* Sub-header divider rows (section labels inside the table body). */
+.node-table.summary-table tbody tr.summary-subhead td {
+  padding: 12px 6px 4px; font-size: 11px; font-weight: 700; letter-spacing: .05em;
+  text-transform: uppercase; color: #6b7f93; background: #eef2f6;
+  text-align: left; border-bottom: 1px solid #d0d8e4;
+}
+.node-table.summary-table tbody tr.summary-subhead:first-child td { padding-top: 2px; }
+/* In-table aggregation radio row (a tinted band between counts and metric rows). */
+.node-table.summary-table tbody tr.summary-stat-row td {
+  padding: 9px 6px; text-align: center; background: #eef6f3;
+  border-top: 1px solid #cfe3da; border-bottom: 1px solid #cfe3da;
+}
+.cycle-badge { display: inline-block; padding: 1px 9px; border-radius: 10px;
+               background: #fff0f0; border: 1px solid #f5a0a0;
+               color: #c00; font-weight: 600; font-size: 13px; }
+
+/* ── Tooltip ────────────────────────────────────────────────────────────────── */
+#tt { position: fixed; z-index: 30001; pointer-events: none;
+      background: #1e2a3a; color: #e8eef5; border-radius: 8px;
+      padding: 10px 14px; font-size: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.4);
+      /* Grow to fit the content, capped so it still fits small viewports; long
+         lines wrap (below) rather than overflow, so the box never clips. */
+      width: max-content; max-width: min(560px, 92vw);
+      border: 1px solid rgba(255,255,255,.08); }
+#tt[hidden] { display: none; }
+.tt-title { font-weight: 700; color: #7ec8e3; margin-bottom: 7px; font-size: 13px; }
+.tt-count { color: #8ba6c0; font-size: 11px; font-weight: 400; margin-left: 5px; }
+.tt-tbl { border-collapse: collapse; width: 100%; margin-top: 4px; }
+.tt-tbl th { color: #8ba6c0; font-size: 10px; text-transform: uppercase;
+             letter-spacing: .06em; text-align: center; padding: 2px 6px 4px; }
+.tt-tbl th:first-child { text-align: left; }
+.tt-tbl td { color: #e8eef5; font-weight: 600; text-align: right; padding: 3px 6px;
+             font-family: ui-monospace, 'SF Mono', monospace; font-size: 12px; }
+.tt-tbl td:first-child { color: #8ba6c0; font-weight: 400; text-align: left; font-family: inherit; }
+.tt-tbl tr:first-child td { padding-top: 0; }
+/* The avg row is the value the summary cell actually shows — accent it apart from
+   the percentile rows below. */
+.tt-tbl tr.tt-avg td { color: #7ec8e3; border-bottom: 1px solid rgba(126,200,227,.25); }
+.tt-tbl tr.tt-avg td:first-child { color: #7ec8e3; font-weight: 600; }
+[data-tt] { cursor: help; border-bottom: 1px dashed rgba(100,120,140,.35); }
+[data-tip] { cursor: help; }
+.tt-desc { color: #c8d8e8; font-size: 12px; line-height: 1.55; margin-top: 2px; }
+/* Inline `code` spans inside a description: highlighted. Wraps at the spaces
+   between tokens (a long operator list grows the box's height, not its width). */
+.tt-desc .tt-code { font-family: ui-monospace, 'SF Mono', monospace;
+                    font-size: 11px; color: #e8eef5; background: rgba(126,200,227,0.16);
+                    border-radius: 3px; padding: 0 4px; overflow-wrap: anywhere; }
+/* Metric formula on its own bold line. Prefers a single line, but wraps (at
+   operators) when it would exceed the box, rather than overflowing/clipping. */
+.tt-formula { font-weight: 700; color: #e8eef5;
+              white-space: normal; overflow-wrap: anywhere;
+              margin: 4px 0 6px; font-size: 11px;
+              font-family: ui-monospace, 'SF Mono', monospace; }
+/* The formula filled with the node's real values — lighter, sits under the
+   generic formula. */
+.tt-calc { font-weight: 400; color: #9fd0e8; margin-top: -3px; }
+
+/* ── Node table ─────────────────────────────────────────────────────────────── */
+.node-table-wrap { margin: 10px 0 20px; }
+
+.node-table-header {
+  color: #2c3e50; border-bottom: 2px solid #1abc9c; padding-bottom: 6px; margin-top: 24px;
+  cursor: pointer; user-select: none;
+  display: flex; align-items: center; gap: 8px;
+  font-size: 1.5rem; font-weight: 700;
+}
+.node-table-header::after { content: '▾'; font-size: 14px; color: #7a92a8; font-weight: 400; }
+.node-table-wrap.collapsed .node-table-header::after { content: '▸'; }
+.node-table-badge {
+  background: #4d6f9c; color: #fff; border-radius: 10px;
+  padding: 1px 8px; font-size: 11px; font-weight: 600; min-width: 20px; text-align: center;
+}
+
+.node-table-body { margin-top: 4px; }
+.nt-search-input { padding: 2px 8px; font-size: 12px; border: 1px solid #c8d4e0;
+                   border-radius: 4px; outline: none; color: #333; background: #fff; width: 200px;
+                   font-family: inherit; }
+.nt-search-input:focus { border-color: #1abc9c; }
+.nt-search-input::placeholder { color: #aaa; font-weight: 400; }
+/* Kind-filter checkboxes (files / folders / groups), next to the search box. */
+.nt-kind-filters { display: inline-flex; gap: 12px; align-items: center;
+                   font-size: 12px; font-weight: 400; color: #5c7a96; }
+.nt-kind-opt { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.nt-kind-opt input { cursor: pointer; margin: 0; }
+

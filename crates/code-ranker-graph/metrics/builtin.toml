@@ -1,0 +1,453 @@
+# Built-in metric registry — the data-driven home for every metric.
+#
+# In dependency order:
+#   - `[categories.*]`  the metric groups (each metric references one).
+#   - `[ast.*]`         tier-1 metrics measured directly from the AST during the
+#                       tree walk — these are the variables a `formula_cel` formula reads.
+#                       Every one carries a display spec and is emitted onto the
+#                       node; the Halstead/structural base counts (eta1, eta2, n1,
+#                       n2, spaces, branches, span_sloc) are kept out of the default
+#                       table columns but emitted so the viewer can show each
+#                       derived metric's live "formula = numbers" line. Each
+#                       language refines their descriptions (the exact operator /
+#                       operand tokens it counts) via its `[specs.<key>]`.
+#   - `[fields.*]`      the derived metrics: each is a `formula_cel` formula over the AST
+#                       inputs (and earlier fields), with its display spec.
+#   - `[report]` (+ `[report.stats]`)  the views that
+#                       reference the metric keys above.
+#
+# Spec fields on a measured `[ast.<key>]` / derived `[fields.<key>]` entry:
+#   - `formula_cel`          (derived only) the executable CEL formula, computed at
+#                    snapshot time by the registry engine over the AST inputs.
+#   - `formula_pretty`/`formula_js`  display only — `formula_pretty` is the pretty
+#                    formula shown in the viewer (NOT CEL); `formula_js` is the JS
+#                    the viewer can re-run client-side.
+#   - `label` is the base display name; `name` (the full name) and `short` (the
+#                    column abbreviation) each default to `label` when omitted, so
+#                    an entry only spells out the names that actually differ.
+#   - the rest are display metadata (value_type, description, direction,
+#                    category, omit_at).
+#
+# Editing a `formula_cel` formula or spec here changes the metric with no Rust change.
+# log2/ln/pow/sqrt/sin are host functions registered by the engine (the exact f64
+# ops Rust used). Inter-metric references are auto-ordered (e.g. `mi` after
+# `volume`); the `formula_cel` formulas below are verbatim ports of the former Rust
+# `derive()`, same operand order and zero gating, so emitted values are unchanged.
+
+# ── field-omission defaults ───────────────────────────────────────────────────
+# The fallbacks a metric entry inherits when it doesn't spell out the field —
+# applies to the built-in `[ast.*]` / `[fields.*]` below AND to a user's
+# `[metrics.<key>]`. The SINGLE source of these values (no literal in Rust).
+[defaults]
+value_type = "float"
+omit_at = 0.0
+
+# ── categories ────────────────────────────────────────────────────────────────
+[categories.complexity]
+label = "Complexity"
+description = "per-function branching, nesting & size"
+
+[categories.halstead]
+label = "Halstead"
+description = "operator/operand vocabulary & derived effort"
+
+[categories.loc]
+label = "Lines of Code"
+description = "physical line counts"
+
+[categories.maintainability]
+label = "Maintainability"
+description = "composite score"
+
+[categories.coupling]
+label = "Coupling"
+description = "how tightly modules depend on each other"
+
+# ── ast (tier-1, measured directly from the AST) ──────────────────────────────
+# Halstead base counts — emitted so the derived formulas (length, vocabulary,
+# effort, volume, …) can render their live "formula with this node's numbers" line
+# in the viewer. They are the operator/operand tallies the Halstead model is built
+# from; useful on their own only when reading a formula's derivation.
+[ast.eta1]
+value_type = "int"
+label = "η₁"
+name = "Unique operators"
+description = "Distinct operators (η₁) — a Halstead base count feeding `vocabulary` / `volume`."
+direction = "lower_better"
+category = "halstead"
+
+[ast.eta2]
+value_type = "int"
+label = "η₂"
+name = "Unique operands"
+description = "Distinct operands (η₂) — a Halstead base count feeding `vocabulary` / `volume`."
+direction = "lower_better"
+category = "halstead"
+
+[ast.n1]
+value_type = "int"
+label = "N₁"
+name = "Total operators"
+description = "Total operator occurrences (N₁) — a Halstead base count feeding `length`."
+direction = "lower_better"
+category = "halstead"
+
+[ast.n2]
+value_type = "int"
+label = "N₂"
+name = "Total operands"
+description = "Total operand occurrences (N₂) — a Halstead base count feeding `length`."
+direction = "lower_better"
+category = "halstead"
+
+# Structural counts — emitted (inputs to cyclomatic / MI).
+[ast.spaces]
+value_type = "int"
+label = "Spaces"
+name = "Code units"
+description = "Unit count: the source file (1) plus each function / impl / trait / closure space. Feeds `cyclomatic`."
+direction = "lower_better"
+category = "complexity"
+
+[ast.branches]
+value_type = "int"
+label = "Branches"
+name = "Decision points"
+description = "Decision points: if / for / while / loop / match arm / try / && / ||. Feeds `cyclomatic`."
+direction = "lower_better"
+category = "complexity"
+
+[ast.span_sloc]
+value_type = "int"
+label = "Span"
+name = "Line span"
+description = "Line span of the unit (end_row − start_row) — the size input the Maintainability Index (`mi` / `mi_sei`) is computed from."
+direction = "lower_better"
+category = "maintainability"
+
+# Structural counts — emitted measured metrics.
+[ast.cognitive]
+value_type = "int"
+label = "Cognitive"
+name = "Cognitive complexity"
+description = """
+How hard the code is for a human to follow — not just how many paths it has.
+Like `cyclomatic` it adds +1 for each break in linear flow (`if`, `else`, `match`, loops, `catch`, chained `&&` / `||`), but it also adds an extra +1 for every level of nesting: an `if` inside a loop inside an `if` costs far more than three flat `if`s.
+That nesting penalty is the point — deeply indented logic is what actually strains a reader, so a high `cognitive` next to a modest `cyclomatic` flags tangled, hard-to-read code.
+Summed across every function in the file."""
+direction = "lower_better"
+category = "complexity"
+
+[ast.exits]
+value_type = "int"
+label = "Exits"
+name = "Exit points"
+description = "Number of exit points (return/throw) in the unit."
+direction = "lower_better"
+category = "complexity"
+
+[ast.args]
+value_type = "int"
+label = "Args"
+name = "Arguments"
+description = "Number of function / closure arguments."
+direction = "lower_better"
+category = "complexity"
+
+[ast.closures]
+value_type = "int"
+label = "Closures"
+name = "Closures defined"
+description = "Number of closures defined in the unit."
+direction = "lower_better"
+category = "complexity"
+
+# LOC counts — emitted measured metrics.
+[ast.sloc]
+value_type = "int"
+label = "Source"
+name = "Source lines"
+short = "SLOC"
+description = "Source lines of code — lines with at least one non-whitespace, non-comment character. Blank and comment-only lines are not counted (unlike `loc`, the raw file line count)."
+category = "loc"
+
+[ast.lloc]
+value_type = "int"
+label = "Logical"
+name = "Logical lines"
+description = "Logical lines — counts statements, not physical lines."
+category = "loc"
+
+[ast.cloc]
+value_type = "int"
+label = "Comments"
+name = "Comment lines"
+description = "Comment-only lines (inline comments on code lines are not counted)."
+category = "loc"
+
+[ast.blank]
+value_type = "int"
+label = "Blank"
+name = "Blank lines"
+description = "Empty or whitespace-only lines."
+category = "loc"
+
+[ast.tloc]
+value_type = "int"
+label = "Test"
+name = "Test lines"
+short = "TLOC"
+description = "Test lines of code — the lines inside `#[cfg(test)]` / `#[test]` / `#[bench]` items (Rust), removed before the production metrics are measured. The complement of `sloc`: test code never inflates a file's size, HK, or complexity."
+category = "loc"
+
+# ── fields (derived: a `formula_cel` formula over the AST inputs) ─────────────────────
+[fields.bugs]
+value_type = "float"
+label = "Bugs"
+name = "Estimated bugs"
+short = "H.bugs"
+description = "Estimated delivered bugs — a rough predictor of defect density."
+formula_cel = "eta2 > 0.0 ? pow(effort, 2.0 / 3.0) / 3000.0 : 0.0"
+formula_pretty = "effort^⅔ ÷ 3000"
+formula_js = "effort ** (2/3) / 3000"
+direction = "lower_better"
+category = "halstead"
+
+[fields.cyclomatic]
+value_type = "int"
+label = "Cyclomatic"
+name = "Cyclomatic complexity"
+description = """
+Number of independent paths through the code — roughly the minimum number of test cases needed to cover every branch.
+A function starts at 1 and gains +1 per decision point: each `if` / `else if`, every `match` / `switch` arm, every loop, and each `&&` / `||` in a condition.
+Summed across every function in the file, so it grows with both size and branching — the file's total branching burden.
+Counts paths only, ignoring how deeply they nest. For a readability-weighted view see `cognitive`."""
+formula_cel = "spaces + branches"
+formula_pretty = "spaces + branches"
+formula_js = "spaces + branches"
+direction = "lower_better"
+category = "complexity"
+omit_at = 1.0
+
+[fields.effort]
+value_type = "float"
+label = "Effort"
+name = "Implementation effort"
+short = "H.effort"
+description = "Mental effort to implement the algorithm."
+formula_cel = "eta2 > 0.0 ? (eta1 / 2.0) * (n2 / eta2) * volume : 0.0"
+formula_pretty = "(eta1 ÷ 2) × (n2 ÷ eta2) × volume"
+formula_js = "(eta1 / 2) * (n2 / eta2) * volume"
+direction = "lower_better"
+category = "halstead"
+
+[fields.length]
+value_type = "float"
+label = "Length"
+name = "Total tokens"
+short = "H.len"
+description = "Program length — total operator + operand occurrences."
+formula_cel = "n1 + n2"
+formula_pretty = "n1 + n2"
+formula_js = "n1 + n2"
+direction = "lower_better"
+category = "halstead"
+
+[fields.mi]
+value_type = "float"
+label = "MI"
+name = "Maintainability index"
+description = "Maintainability Index (0–100, higher is more maintainable). Derived from Halstead volume, cyclomatic complexity, and SLOC."
+formula_cel = "171.0 - 5.2 * ln(volume) - 0.23 * cyclomatic - 16.2 * ln(span_sloc)"
+formula_pretty = "171 − 5.2·ln(volume) − 0.23·cyclomatic − 16.2·ln(span_sloc)"
+formula_js = "171 - 5.2*Math.log(volume) - 0.23*cyclomatic - 16.2*Math.log(span_sloc)"
+direction = "higher_better"
+category = "maintainability"
+
+[fields.mi_sei]
+value_type = "float"
+label = "MI (SEI)"
+name = "Maintainability (SEI)"
+short = "MI SEI"
+description = "SEI variant of the Maintainability Index — adds a bonus for comment density."
+formula_cel = "171.0 - 5.2 * log2(volume) - 0.23 * cyclomatic - 16.2 * log2(span_sloc) + 50.0 * sin(sqrt(cloc / span_sloc * 2.4))"
+formula_pretty = "171 − 5.2·log₂(volume) − 0.23·cyclomatic − 16.2·log₂(span_sloc) + 50·sin(√(cloc ÷ span_sloc × 2.4))"
+formula_js = "171 - 5.2*Math.log2(volume) - 0.23*cyclomatic - 16.2*Math.log2(span_sloc) + 50*Math.sin(Math.sqrt(cloc / span_sloc * 2.4))"
+direction = "higher_better"
+category = "maintainability"
+
+[fields.time]
+value_type = "float"
+label = "Time"
+name = "Coding time (s)"
+short = "H.time(s)"
+description = "Estimated implementation time, in seconds."
+formula_cel = "effort / 18.0"
+formula_pretty = "effort ÷ 18"
+formula_js = "effort / 18"
+direction = "lower_better"
+category = "halstead"
+
+[fields.vocabulary]
+value_type = "float"
+label = "Vocabulary"
+name = "Distinct symbols"
+short = "H.vocab"
+description = "Vocabulary — distinct operators + operands."
+formula_cel = "eta1 + eta2"
+formula_pretty = "eta1 + eta2"
+formula_js = "eta1 + eta2"
+direction = "lower_better"
+category = "halstead"
+
+[fields.volume]
+value_type = "float"
+label = "Volume"
+name = "Code volume"
+short = "H.vol"
+description = "Algorithm size in bits, from distinct operators and operands."
+formula_cel = "vocabulary > 0.0 ? length * log2(vocabulary) : 0.0"
+formula_pretty = "length × log₂(vocabulary)"
+formula_js = "length * Math.log2(vocabulary)"
+direction = "lower_better"
+category = "halstead"
+
+# Henry–Kafura: a graph-derived field — its `formula_cel` reads the coupling
+# counts (`fan_in`/`fan_out`) the graph pass writes, so it is evaluated AFTER that
+# pass (see `builtin::write_derived`), not in the per-file tier-2 step. A file with
+# no `sloc` (no analysed source lines) gets no `hk`. (`fan_in`/`fan_out`/`sloc` are
+# integers, so `pow(·, 2.0)` is exact and the result is rounded to 3 significant
+# figures like every metric.)
+[fields.hk]
+value_type = "float"
+label = "HK"
+name = "God-object risk"
+short = "HK"
+description = "Henry-Kafura information-flow complexity: a module that is both a busy crossroads (high fan-in × fan-out) and large — the most expensive place in the codebase to change."
+formula_cel = "sloc * pow(fan_in * fan_out, 2.0)"
+formula_pretty = "sloc × (fan_in × fan_out)²"
+formula_js = "sloc * (fan_in * fan_out) ** 2"
+direction = "lower_better"
+category = "coupling"
+abbreviate = true
+
+# ── coupling (computed post-walk by annotate_coupling / annotate_cycles) ───────
+# Spec-only entries: the VALUES are derived by the graph crate's coupling/cycle
+# pass over the flow edges, so these carry NO `formula_cel`. `fan_in` / `fan_out`
+# are neutral (a high count is dual — broad reuse vs. bottleneck). `description` is
+# the `why` and `remediation` the `fix` shown by `check` (data, not Rust). The
+# size-folding `hk` is a graph-derived `[fields.hk]` above (it has a `formula_cel`).
+[coupling.fan_in]
+value_type = "int"
+label = "Fan-in"
+name = "Incoming dependencies"
+description = "Many other units depend on this one, making it risky to change and a single point of failure — though some hubs (shared types) carry high fan-in legitimately."
+category = "coupling"
+
+[coupling.fan_out]
+value_type = "int"
+label = "Fan-out"
+name = "Outgoing dependencies"
+description = "This unit depends on many others, so it breaks when any of them change and is hard to test in isolation."
+category = "coupling"
+
+[coupling.fan_out_external]
+value_type = "int"
+label = "Fan-out (external)"
+name = "External dependencies"
+description = "Number of distinct external libraries this node depends on."
+category = "coupling"
+
+[coupling.cycle]
+value_type = "str"
+label = "Cycle"
+name = "Dependency cycle"
+short = "Cycle"
+category = "coupling"
+description = "Cycle kind this node participates in."
+
+# ── cycle kinds (computed by annotate_cycles) ─────────────────────────────────
+# Diagnostic vocab for dependency-cycle kinds — `description` is the `why` and
+# `remediation` the `fix` shown by `check`; the orchestrator overlays these onto
+# each level's `cycle_kinds`. Language-agnostic, like coupling.
+[cycles.mutual]
+label = "Mutual"
+description = "Two units import each other (A ↔ B), so neither can be built, tested, or understood in isolation — the tightest possible coupling."
+remediation = "Run `code-ranker docs {lang} ADP` and follow its instructions."
+
+[cycles.chain]
+label = "Chain"
+description = "Three or more units form a strongly-connected component (A → B → C → A); the whole component must be loaded and changed together, defeating modular boundaries."
+remediation = "Run `code-ranker docs {lang} ADP` and follow its instructions."
+
+# ── prompt scaffolding ────────────────────────────────────────────────────────
+# The Prompt-Generator framing prose moved OUT of this file into `metrics/prompt.md`
+# (authored as Markdown `## <field>` sections, parsed by `builtin.rs::prompt_template`).
+# Edit it there.
+
+# ── report views ──────────────────────────────────────────────────────────────
+# ONE section, with the SAME key names a project's `[report]` override uses and
+# the same names that reach the JSON `ui` block and the viewer — so the vocabulary
+# matches end to end (catalog → ReportOverride → LevelUi → ui → JS). Each list is
+# pruned by the orchestrator to the keys actually present on an internal node.
+#   columns       node-table column order, left to right (one flat list; may
+#                 include non-field tokens `kind`/`cycle` and coupling keys).
+#   default_sort  initial sort, most-significant first; leading `-` = descending.
+#                 Every column stays sortable in the UI — this only sets the open order.
+#   card          ordered metrics shown as the big numbers on a node's card.
+#   size          attribute keys the SVG map offers as circle-size modes.
+#   filter        attribute keys the SVG map offers as on/off node filters (keep
+#                 only nodes where the metric has signal).
+# A language/project extends any list via its own `[report]` (e.g.
+# `size = { add = [...] }`).
+[report]
+columns = [
+    "kind", "cycle", "sloc", "hk", "fan_in", "fan_out", "volume", "bugs",
+    "effort", "time", "length", "vocabulary", "cyclomatic", "cognitive", "mi",
+    "mi_sei", "lloc", "cloc", "blank", "tloc",
+]
+default_sort = ["-cycle", "-hk", "-sloc"]
+card = ["hk", "sloc"]
+size = ["sloc", "hk"]
+filter = ["cycle"]
+
+# ── aggregates (the `stats` block of the JSON report) ─────────────────────────
+# Each key here becomes one entry in the report's per-graph aggregate map; its
+# value is a graph-scope CEL formula, evaluated once over the whole node set.
+# These can be any aggregate, not just means. The `agg(metric, reducer,
+# population)` host function reduces a metric's value population to a scalar:
+#   - reducer:    avg / sum / min / max / count / median / p<q>  (e.g. p50, p90, p99)
+#   - population: `not_empty` — only nodes whose value carries signal (≠ the
+#                 metric's omit floor); `all` — every internal node, with missing
+#                 values counted at the floor.
+# The output KEY is free-form; the convention is `<metric>[_<population>]_<reducer>`
+# (population left out ⇒ not_empty), but only the formula decides what is computed.
+#
+# The first block reproduces today's aggregates: the per-file mean of each tracked
+# metric with zero/floor values excluded (= avg over `not_empty`).
+[report.stats]
+blank = "agg('blank', 'avg', 'not_empty')"
+bugs = "agg('bugs', 'avg', 'not_empty')"
+cloc = "agg('cloc', 'avg', 'not_empty')"
+cognitive = "agg('cognitive', 'avg', 'not_empty')"
+cyclomatic = "agg('cyclomatic', 'avg', 'not_empty')"
+effort = "agg('effort', 'avg', 'not_empty')"
+fan_in = "agg('fan_in', 'avg', 'not_empty')"
+fan_out = "agg('fan_out', 'avg', 'not_empty')"
+hk = "agg('hk', 'avg', 'not_empty')"
+length = "agg('length', 'avg', 'not_empty')"
+mi = "agg('mi', 'avg', 'not_empty')"
+mi_sei = "agg('mi_sei', 'avg', 'not_empty')"
+sloc = "agg('sloc', 'avg', 'not_empty')"
+time = "agg('time', 'avg', 'not_empty')"
+tloc = "agg('tloc', 'avg', 'not_empty')"
+vocabulary = "agg('vocabulary', 'avg', 'not_empty')"
+volume = "agg('volume', 'avg', 'not_empty')"
+
+# Examples of the richer aggregates the same mechanism allows — each adds a NEW
+# key to the aggregate block. With `all` the empty/floor nodes are counted in:
+fan_in_all_p50 = "agg('fan_in', 'p50', 'all')"
+sloc_all_avg = "agg('sloc', 'avg', 'all')"
+# …and a couple over `not_empty` (the population left out of the key name):
+sloc_max = "agg('sloc', 'max', 'not_empty')"
+hk_p99 = "agg('hk', 'p99', 'not_empty')"

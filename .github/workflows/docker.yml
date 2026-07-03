@@ -1,0 +1,92 @@
+name: Publish Docker image
+# Manual release step — run via the single "Release (publish everywhere)" button
+# (publish.yml) after Verify is green, or on its own. Never auto-publishes on tag.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (without v prefix), e.g. 1.0.0-alpha.3'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write    # required to push to ghcr.io
+
+jobs:
+  push:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check the release binaries exist
+        run: |
+          v="${{ inputs.version }}"
+          base="https://github.com/ffedoroff/code-ranker/releases/download/v${v}"
+          # Ordering is handled upstream: publish.yml waits for the Release
+          # workflow to finish before it dispatches Docker, so the binaries the
+          # Dockerfile downloads are already uploaded. This is a fast one-shot
+          # existence check (no polling) — it just fails with a clear message if
+          # Docker is dispatched directly or out of order.
+          missing=0
+          for arch in x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu; do
+            curl -fsI "${base}/code-ranker-${arch}.tar.xz" > /dev/null 2>&1 \
+              || { echo "missing: code-ranker-${arch}.tar.xz"; missing=1; }
+          done
+          if [ "$missing" = 1 ]; then
+            echo "::error::Release binaries for v${v} are not present. Publish the GitHub Release first (run the release via publish.yml, which orders Docker after it)."
+            exit 1
+          fi
+          echo "both linux binaries present at $base"
+
+      - name: Compute version and tags
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            v="${{ inputs.version }}"
+          else
+            v="${GITHUB_REF_NAME#v}"
+          fi
+          owner_lc="${GITHUB_REPOSITORY_OWNER,,}"
+
+          hub="fedoroff/code-ranker"
+          ghcr="ghcr.io/${owner_lc}/code-ranker"
+
+          tags="${hub}:${v},${ghcr}:${v}"
+          if echo "$v" | grep -qE "(alpha|beta|rc)"; then
+            tags="${tags},${hub}:alpha,${ghcr}:alpha"
+          else
+            tags="${tags},${hub}:latest,${hub}:alpha,${ghcr}:latest,${ghcr}:alpha"
+          fi
+
+          {
+            echo "version=$v"
+            echo "tags<<EOF"
+            echo "$tags" | tr ',' '\n'
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+          provenance: false

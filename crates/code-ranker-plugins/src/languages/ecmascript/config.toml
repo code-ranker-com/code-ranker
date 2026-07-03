@@ -1,0 +1,211 @@
+# ECMAScript engine config — inherits `../defaults.toml` (see `../config.rs`).
+#
+# Shared by the `javascript` and `typescript` plugins: both inject their grammar
+# (and the `else_if_via_else_clause` behavior flag) and reuse the generic engine
+# (`crate::engine`) via `ecmascript/dialect.rs`. The node-kind strings are
+# identical for both dialects; each is resolved against its own grammar.
+# ECMAScript carries NO principles / thresholds / spec overrides — its only
+# language-specific data is the tree-sitter node-kind tables the engine keys on:
+#
+#   [roles] / [halstead] / [loc]  tree-sitter node-kind ROLE tables for the
+#                                 metric engine; the walk logic stays in Rust,
+#                                 *which* kinds it counts is data.
+#
+# Unlike Rust/Python, the engine collects ALL ids matching a `(name, is_named)`
+# pair (rca's duplicate `Identifier2`/`String2`/… variants share a name but
+# differ by id), so each list resolves a set. `named` lists resolve named nodes,
+# `anon` lists resolve anonymous tokens. Keep in lock-step with the grammar
+# versions pinned in Cargo.toml.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Walk skip lists — DATA, not code (see `../README.md` §3). Shared by the JS and
+# TS plugins (both walk via the shared `crate::walk`). `skip_dirs` are directory
+# names pruned by EXACT match; `skip_suffixes` are filename suffixes pruned by
+# `ends_with` in `structure.rs::has_skip_suffix` (generated / config / minified /
+# bundle artifacts). Hidden (dot-prefixed) files/dirs are pruned by the shared
+# walker's `hidden` flag (the `[ignore]` config), not enumerated here. (Top-level
+# keys: they must precede the first `[table]` header below to stay top-level.)
+# ──────────────────────────────────────────────────────────────────────────────
+
+skip_dirs = ["node_modules", "dist", "target", "build", "out", ".venv", "__pycache__"]
+skip_suffixes = [
+    ".gen.ts", ".config.ts", ".config.js", ".min.js", ".min.ts", ".umd.js", ".bundle.js",
+]
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Test-path conventions — DATA, not code (see `../README.md` §4). The
+# `ecmascript_is_test_path` predicate LOGIC (split on '/', `contains`, `ends_with`)
+# stays in Rust; *which* names it keys on is data, shared by the JS and TS plugins.
+# `test_dirs` match a path component exactly; `test_infixes` match the filename via
+# `contains`; `test_stem_suffixes` match the filename stem via `ends_with`.
+# ──────────────────────────────────────────────────────────────────────────────
+
+test_dirs = ["__tests__", "__mocks__", "tests", "test"]
+test_infixes = [".test.", ".spec."]
+test_stem_suffixes = ["_test", "_spec"]
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Source-root + module-path DATA, not code (see `../README.md` §4). The detection
+# LOGIC stays in Rust; the names it keys on are data. `source_dirs` are the
+# workspace subfolders `find_source_root` prefers as the import root;
+# `module_strip_exts` are the extensions `file_to_mod_path` strips from a module
+# path (order matters — first match wins); `index_file` is the implicit module
+# stem collapsed into its parent directory; `alias_prefix` is the webpack/tsconfig
+# source-root import alias that resolves against `source_dirs` (the `./`/`../`
+# relative prefixes stay inline in Rust as pure path syntax).
+# ──────────────────────────────────────────────────────────────────────────────
+
+source_dirs = ["src"]
+module_strip_exts = [".tsx", ".ts", ".jsx", ".js", ".mjs", ".cjs", ".mts", ".cts"]
+index_file = "index"
+alias_prefix = "@/"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Function-unit `kind` id strings the dialect's `fn_kind` emits, keyed by the
+# dialect's internal classification slot. The classification LOGIC (by node kind)
+# stays in `dialect.rs`; only the emitted id strings are data. `method` for a
+# `method_definition`, `arrow` for an `arrow_function`, `generator` for a
+# generator, `default` (a plain `function`) otherwise.
+# ──────────────────────────────────────────────────────────────────────────────
+
+[units]
+method = "method"
+arrow = "arrow"
+generator = "generator"
+default = "function"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ECMAScript-only function-unit NodeKindSpec display specs for the optional
+# `functions` level. `function` / `method` are the cross-language kinds and live
+# in `defaults.toml`; `arrow` / `generator` are ECMAScript-only and live here so
+# they are not leaked into the non-ECMAScript languages' configs. The shared
+# `ecmascript_functions_level` reads these via `config::node_kinds`.
+# ──────────────────────────────────────────────────────────────────────────────
+
+[node_kinds.arrow]
+label = "Arrow fn"
+plural = "Arrow fns"
+fill = "#efe0ef"
+stroke = "#8a5d8a"
+
+[node_kinds.generator]
+label = "Generator"
+plural = "Generators"
+fill = "#f6e9cf"
+stroke = "#b3801f"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Import / module-graph tree-sitter NODE-KIND strings the structure builder
+# (`mod.rs`) keys on when extracting import specifiers. The walk LOGIC stays in
+# Rust; *which* node kinds it matches is data. `require` is the call-name marker
+# for a CommonJS `require("…")` call.
+# ──────────────────────────────────────────────────────────────────────────────
+
+[structure]
+import_statement = "import_statement"
+export_statement = "export_statement"
+call_expression = "call_expression"
+string = "string"
+require = "require"
+
+# tree-sitter field-name API navigation (`child_by_field_name`) for the CommonJS
+# `require(...)` call: its `function` child (the callee) and `arguments` child.
+[fields]
+function = "function"
+arguments = "arguments"
+
+[roles]
+# Metric-scoping func-spaces (each contributes a McCabe base path of 1).
+space_kinds.named = [
+    "program", "function_expression", "function", "class", "generator_function",
+    "function_declaration", "method_definition", "generator_function_declaration",
+    "class_declaration", "arrow_function",
+]
+# Cyclomatic branch kinds — mixed named/anon (anon `if`/`&&`, named
+# `ternary_expression`).
+branch_kinds.anon = ["if", "for", "while", "case", "catch", "&&", "||"]
+branch_kinds.named = ["ternary_expression"]
+# Value-returning exits.
+exit_kinds.named = ["return_statement"]
+# Punctuation children of a `parameters` node that don't count.
+non_arg_kinds.anon = ["(", ")", ","]
+# Cognitive-nesting statements.
+cog_nest.named = [
+    "for_statement", "for_in_statement", "while_statement", "do_statement",
+    "switch_statement", "catch_clause", "ternary_expression",
+]
+
+# Singletons resolved by rca's `one()` (first matching id), used for the
+# func/closure/arrow/generator classification + cognitive function nesting.
+[roles.one]
+
+# Ancestor / sibling / child sets for rca's context-aware func vs closure
+# classification and the cognitive state machine (resolved as id sets, including
+# duplicate-name variants).
+[roles.group]
+func_assign_anc.named = ["variable_declarator", "assignment_expression", "labeled_statement", "pair"]
+func_stop.named = ["statement_block", "return_statement", "new_expression", "arguments"]
+arrow_assign_anc.named = ["variable_declarator", "assignment_expression", "labeled_statement"]
+arrow_stop.named = ["statement_block", "return_statement", "new_expression", "call_expression"]
+identifier.named = ["identifier"]
+property_identifier.named = ["property_identifier"]
+if_statement.named = ["if_statement"]
+else_clause.named = ["else_clause"]
+expression_statement.named = ["expression_statement"]
+unary_expression.named = ["unary_expression"]
+binary_expression.named = ["binary_expression"]
+amp_amp.anon = ["&&"]
+pipe_pipe.anon = ["||"]
+kw_else.anon = ["else"]
+
+# ── Halstead operators / operands ─────────────────────────────────────────────
+[halstead]
+operators.anon = [
+    "export", "import", "extends", ".", "from", "(", ",", "as", "*", ">>", ">>>", ":",
+    "return", "delete", "throw", "break", "continue", "if", "else", "switch", "case",
+    "default", "async", "for", "in", "of", "while", "try", "catch", "finally", "with", "=",
+    "@", "&&", "||", "+", "-", "--", "++", "/", "%", "**", "|", "&", "<<", "~", "<", "<=",
+    "==", "!=", ">=", ">", "+=", "!", "!==", "===", "-=", "*=", "/=", "%=", "**=", ">>=",
+    ">>>=", "<<=", "&=", "^", "^=", "|=", "yield", "[", "{", "await", "?", "??", "new",
+    "let", "var", "const", "function", ";",
+]
+# Named operator kinds (rca's FunctionExpression + the `import` expression node,
+# distinct from the anon `import` keyword).
+operators.named = ["function_expression", "import"]
+# Value/literal operands. The keyword operands `set`/`get`/`typeof`/`instanceof`
+# are resolved as BOTH named and anon (their kind varies by grammar version);
+# the rest are NAMED-only — resolving them as anon too would wrongly count TS
+# type keywords (`number`/`string`/`void`/… are anon tokens inside
+# `predefined_type`), which rca's named operand kinds do not include.
+operands.named = [
+    "identifier", "nested_identifier", "member_expression", "property_identifier",
+    "string", "number", "true", "false", "null", "void", "this", "super", "undefined",
+    "set", "get", "typeof", "instanceof",
+]
+operands.anon = ["set", "get", "typeof", "instanceof"]
+
+# ── LOC breakdown ─────────────────────────────────────────────────────────────
+[loc]
+# noop is mixed named/anon: `string`/`program` are named, `"` is an anon token.
+noop_kinds.named = ["string", "program"]
+noop_kinds.anon = ["\""]
+comment_kinds.named = ["comment"]
+statement_kinds.named = [
+    "expression_statement", "export_statement", "import_statement", "statement_block",
+    "if_statement", "switch_statement", "for_statement", "for_in_statement",
+    "while_statement", "do_statement", "try_statement", "with_statement",
+    "break_statement", "continue_statement", "debugger_statement", "return_statement",
+    "throw_statement", "empty_statement", "statement_identifier",
+]
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Halstead base counts — the exact JS/TS operator/operand tokens counted (from the
+# `[halstead]` table above). Shared by both the JavaScript and TypeScript plugins
+# (`ecmascript_metric_specs`). Keep in lock-step with that table.
+# ──────────────────────────────────────────────────────────────────────────────
+
+[specs.eta1]
+description = "Distinct operators (η₁): the count of unique operator token kinds. JavaScript / TypeScript count the keywords `export import from as extends new function let var const return delete throw break continue if else switch case default for in of while try catch finally with async await yield`, arithmetic / logical / comparison / assignment operators (`+ - * / % ** ++ -- && || ! == === != !== < <= > >= = += -= *= /= %= **= ?? ?`), bitwise operators (`& | ^ << >> >>> ~`), and punctuation / delimiters (`. , : ; ( [ { @`)."
+
+[specs.eta2]
+description = "Distinct operands (η₂): the count of unique operand texts. JavaScript / TypeScript count identifiers (including `member_expression` / `property_identifier` / `nested_identifier`), literals (`string`, `number`, `true`, `false`, `null`, `undefined`, `void`), `this` / `super`, and the contextual keywords `set` / `get` / `typeof` / `instanceof`."

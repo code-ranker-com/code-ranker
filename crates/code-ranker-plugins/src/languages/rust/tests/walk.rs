@@ -282,3 +282,36 @@ fn facts_collector_gathers_all_kinds() {
     assert!(!fc.attrs.contains("derive"));
     assert!(!fc.attrs.contains("allow"));
 }
+
+/// `resolve_submodule_path` tries the sibling-file form first (`{dir}/{mod}.rs`),
+/// then the directory-module form (`{dir}/{mod}/mod.rs`), then gives up.
+/// `lib.rs` is a MODULE_ROOTS stem, so its submodules search the SAME directory
+/// (not a `lib/` subfolder).
+#[test]
+fn resolve_submodule_path_tries_sibling_then_dir_module_then_gives_up() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let parent_file = root.join("lib.rs");
+    std::fs::write(&parent_file, "").unwrap();
+
+    // Neither form exists yet.
+    assert_eq!(resolve_submodule_path(&parent_file, "missing"), None);
+
+    // Directory-module form: dir_mod/mod.rs.
+    std::fs::create_dir(root.join("dir_mod")).unwrap();
+    std::fs::write(root.join("dir_mod/mod.rs"), "").unwrap();
+    assert_eq!(
+        resolve_submodule_path(&parent_file, "dir_mod"),
+        Some(root.join("dir_mod/mod.rs"))
+    );
+
+    // Sibling-file form takes priority when both exist: sibling.rs vs.
+    // sibling/mod.rs.
+    std::fs::write(root.join("sibling.rs"), "").unwrap();
+    std::fs::create_dir(root.join("sibling")).unwrap();
+    std::fs::write(root.join("sibling/mod.rs"), "").unwrap();
+    assert_eq!(
+        resolve_submodule_path(&parent_file, "sibling"),
+        Some(root.join("sibling.rs"))
+    );
+}

@@ -290,3 +290,60 @@ pub struct Level {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grouping: Option<Grouping>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `attr_dict`/`SpecRow::into_spec`: empty `&str` fields become `None`,
+    /// `abbreviate: false` becomes `None` (not `Some(false)`), and `thresholds`
+    /// is always `None` — a row declares no threshold, those are attached later.
+    #[test]
+    fn attr_dict_builds_specs_from_rows() {
+        let rows = vec![
+            (
+                "hk",
+                SpecRow {
+                    group: "coupling",
+                    value_type: ValueType::Float,
+                    label: "HK",
+                    short: "HK",
+                    direction: Direction::LowerBetter,
+                    abbreviate: true,
+                    ..Default::default()
+                },
+            ),
+            ("bare", SpecRow::default()),
+        ];
+        let dict = attr_dict(rows);
+
+        let hk = &dict["hk"];
+        assert_eq!(hk.label.as_deref(), Some("HK"));
+        assert_eq!(hk.short.as_deref(), Some("HK"));
+        assert_eq!(hk.name, None, "empty string becomes None");
+        assert_eq!(hk.group.as_deref(), Some("coupling"));
+        assert_eq!(hk.direction, Direction::LowerBetter);
+        assert_eq!(hk.abbreviate, Some(true));
+        assert!(hk.thresholds.is_none(), "a row never carries thresholds");
+
+        let bare = &dict["bare"];
+        assert_eq!(bare.label, None);
+        assert_eq!(
+            bare.abbreviate, None,
+            "false abbreviate becomes None, not Some(false)"
+        );
+        assert_eq!(bare.direction, Direction::Neutral);
+        assert_eq!(bare.value_type, ValueType::Int);
+        assert_eq!(bare.omit_at, 0.0);
+    }
+
+    #[test]
+    fn group_builder_sets_label_and_description() {
+        let g = group("Coupling", "Fan-in/fan-out and related metrics.");
+        assert_eq!(g.label.as_deref(), Some("Coupling"));
+        assert_eq!(
+            g.description.as_deref(),
+            Some("Fan-in/fan-out and related metrics.")
+        );
+    }
+}

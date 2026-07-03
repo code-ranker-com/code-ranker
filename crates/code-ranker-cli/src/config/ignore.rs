@@ -54,7 +54,15 @@ fn collect_dev_only_crates(target: &Path) -> HashSet<String> {
 
     let meta: serde_json::Value =
         serde_json::from_slice(&out.stdout).expect("cargo metadata produced invalid JSON");
+    dev_only_crates_from_metadata(&meta)
+}
 
+/// The pure half of [`collect_dev_only_crates`]: BFS the resolved dependency
+/// graph from the workspace members over non-dev edges only, so any package
+/// never reached that way is dev-only. Split out so the graph logic is
+/// testable against a hand-built `cargo metadata` JSON value, without
+/// shelling out to `cargo`.
+fn dev_only_crates_from_metadata(meta: &serde_json::Value) -> HashSet<String> {
     let packages = meta["packages"].as_array().expect("packages array");
     let mut id_to_name: HashMap<&str, &str> = HashMap::new();
     for pkg in packages {
@@ -165,6 +173,125 @@ fn filter_graph(graph: &mut Graph, gs: Option<&GlobSet>, dev_only: &HashSet<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
+
+    /// A minimal `cargo metadata --format-version 1` shape: `packages` (id →
+    /// name), `workspace_members`, and `resolve.nodes` (id → deps, each with the
+    /// `dep_kinds` cargo actually emits — `[{"kind": null}]` for a normal edge).
+    fn metadata(
+        workspace_members: &[&str],
+        nodes: &[(&str, &[(&str, bool)])],
+    ) -> serde_json::Value {
+        let mut names = std::collections::BTreeSet::new();
+        names.extend(workspace_members.iter().copied());
+        for (id, deps) in nodes {
+            names.insert(*id);
+            for (dep_id, _) in *deps {
+                names.insert(*dep_id);
+            }
+        }
+        let packages: Vec<_> = names
+            .iter()
+            .map(|id| json!({"id": id, "name": id}))
+            .collect();
+        let resolve_nodes: Vec<_> = nodes
+            .iter()
+            .map(|(id, deps)| {
+                let deps_json: Vec<_> = deps
+                    .iter()
+                    .map(|(dep_id, dev_only)| {
+                        let kind = if *dev_only { json!("dev") } else { json!(null) };
+                        json!({"pkg": dep_id, "dep_kinds": [{"kind": kind}]})
+                    })
+                    .collect();
+                json!({"id": id, "deps": deps_json})
+            })
+            .collect();
+        json!({
+            "packages": packages,
+            "workspace_members": workspace_members,
+            "resolve": {"nodes": resolve_nodes},
+        })
+    }
+
+    /// A crate reached from a workspace member ONLY via a `dev` edge — never via
+    /// a regular one — is dev-only.
+    #[test]
+    fn dev_only_crates_from_metadata_finds_transitive_dev_only_dep() {
+        let meta = metadata(
+            &["root"],
+            &[
+                ("root", &[("regular_dep", false), ("dev_dep", true)]),
+                ("regular_dep", &[]),
+                ("dev_dep", &[]),
+            ],
+        );
+        let dev_only = dev_only_crates_from_metadata(&meta);
+        assert_eq!(dev_only, ["dev_dep".to_string()].into_iter().collect());
+    }
+
+    /// The same crate reached via a `dev` edge from one workspace member and a
+    /// regular edge from another is NOT dev-only — any real edge makes it
+    /// regular for the whole graph.
+    #[test]
+    fn dev_only_crates_from_metadata_excludes_dep_also_used_regularly() {
+        let meta = metadata(
+            &["a", "b"],
+            &[
+                ("a", &[("shared", true)]),
+                ("b", &[("shared", false)]),
+                ("shared", &[]),
+            ],
+        );
+        let dev_only = dev_only_crates_from_metadata(&meta);
+        assert!(
+            dev_only.is_empty(),
+            "a dep with any regular edge is not dev-only: {dev_only:?}"
+        );
+    }
+
+    /// A workspace member itself is never reported as dev-only, even though
+    /// nothing else in the fixture points to it — it seeds `regular` directly.
+    #[test]
+    fn dev_only_crates_from_metadata_never_flags_a_workspace_member() {
+        let meta = metadata(&["root"], &[("root", &[])]);
+        let dev_only = dev_only_crates_from_metadata(&meta);
+        assert!(dev_only.is_empty());
+    }
+
+    /// A `resolve.nodes` entry missing `id` or `deps` is skipped rather than
+    /// panicking — `cargo metadata` always includes both, but the graph walk
+    /// degrades gracefully around a malformed entry instead of indexing blindly,
+    /// and still resolves the rest of the (well-formed) graph correctly.
+    #[test]
+    fn dev_only_crates_from_metadata_skips_malformed_nodes() {
+        let meta = json!({
+            "packages": [
+                {"id": "root", "name": "root"},
+                {"id": "dev_dep", "name": "dev_dep"},
+                {"id": "good_dep", "name": "good_dep"},
+            ],
+            "workspace_members": ["root"],
+            "resolve": {"nodes": [
+                // No `id` — the edges it carries can't be attributed to a source.
+                {"deps": [{"pkg": "dev_dep", "dep_kinds": [{"kind": "dev"}]}]},
+                // No `deps` — treated as a dead end, not a crash.
+                {"id": "junk"},
+                {"id": "root", "deps": [
+                    {"pkg": "dev_dep", "dep_kinds": [{"kind": "dev"}]},
+                    {"pkg": "good_dep", "dep_kinds": [{"kind": null}]},
+                ]},
+                {"id": "dev_dep", "deps": []},
+                {"id": "good_dep", "deps": []},
+            ]},
+        });
+        let dev_only = dev_only_crates_from_metadata(&meta);
+        assert_eq!(
+            dev_only,
+            ["dev_dep".to_string()].into_iter().collect(),
+            "the malformed nodes are skipped; the well-formed graph still resolves"
+        );
+    }
 
     fn file_node(id: &str, attrs: &[(&str, AttrValue)]) -> Node {
         let mut n = Node {

@@ -219,6 +219,38 @@ fn custom_check_fires_with_path_predicate_and_carries_group() {
 }
 
 #[test]
+fn describe_cycle_chain_truncates_past_four_nodes() {
+    let nodes: Vec<String> = ["a", "b", "c", "d", "e"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    let d = describe_cycle("chain", &nodes);
+    assert!(d.contains("a → b → c → d"), "shows the first 4: {d}");
+    assert!(d.contains("… (5 nodes total)"), "notes the full count: {d}");
+}
+
+#[test]
+fn describe_cycle_unknown_kind_untruncated_and_truncated() {
+    let short = vec!["a".to_string(), "b".to_string()];
+    let d = describe_cycle("weird", &short);
+    assert_eq!(d, "cycle: a ↔ b");
+
+    let long: Vec<String> = ["a", "b", "c", "d", "e", "f"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    let d = describe_cycle("weird", &long);
+    assert_eq!(d, "cycle: a ↔ b ↔ c ↔ d (+2 more)");
+}
+
+#[test]
+fn cycle_rule_id_maps_known_kinds_and_falls_back() {
+    assert_eq!(cycle_rule_id("mutual"), "cycle.mutual");
+    assert_eq!(cycle_rule_id("chain"), "cycle.chain");
+    assert_eq!(cycle_rule_id("weird"), "cycle.unknown");
+}
+
+#[test]
 fn bad_custom_check_predicate_becomes_a_loud_violation() {
     let graphs = level_with(
         vec![file_node("a.rs", &[("tloc", AttrValue::Int(1))])],

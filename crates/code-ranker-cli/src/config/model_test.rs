@@ -80,12 +80,66 @@ fn parse_number_handles_separators_and_suffixes() {
         ("5_123_000", 5_123_000.0),
         ("5K", 5_000.0),
         ("1.5M", 1_500_000.0),
+        ("2G", 2_000_000_000.0),
     ] {
         assert_eq!(parse_number(input).unwrap(), want);
     }
     for bad in ["", "K", "5X"] {
         assert!(parse_number(bad).is_err());
     }
+}
+
+/// `CycleRule`'s `Deserialize` accepts a bool or an integer. TOML integers are
+/// always signed (`visit_i64`, covered elsewhere via `toml::from_str`); JSON's
+/// `deserialize_any` calls `visit_u64` for a non-negative literal, so this is the
+/// only way to drive that branch — plus the `expecting()` message on a type error.
+#[test]
+fn cycle_rule_deserializes_from_json_u64_and_rejects_wrong_type() {
+    assert_eq!(
+        serde_json::from_str::<CycleRule>("5").unwrap(),
+        CycleRule::Max(5)
+    );
+    assert_eq!(
+        serde_json::from_str::<CycleRule>("true").unwrap(),
+        CycleRule::Max(0)
+    );
+    assert_eq!(
+        serde_json::from_str::<CycleRule>("false").unwrap(),
+        CycleRule::Off
+    );
+    let err = serde_json::from_str::<CycleRule>("\"nope\"").unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("a bool (on/off) or a non-negative integer"),
+        "{err}"
+    );
+}
+
+/// Same `visit_u64` / `expecting()` gap for `ThresholdNumber` (driven only
+/// through `MetricThresholds`'s map deserializer, not directly).
+#[test]
+fn metric_thresholds_deserializes_json_u64_and_rejects_wrong_shape() {
+    let mt: MetricThresholds = serde_json::from_str(r#"{"hk": 300000}"#).unwrap();
+    assert_eq!(mt.get("hk"), Some(300000.0));
+
+    let err = serde_json::from_str::<MetricThresholds>("[1, 2]").unwrap_err();
+    assert!(
+        err.to_string().contains("a table of `metric = limit`"),
+        "{err}"
+    );
+
+    // A wrong-typed value (bool) hits the Visitor's default `visit_bool`, which
+    // reports `expecting()`'s text — unlike a string, which `visit_str` accepts
+    // structurally and only rejects via `parse_number`'s own message.
+    let err = serde_json::from_str::<MetricThresholds>(r#"{"hk": true}"#).unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("a number, or a string like \"5K\" / \"1.5M\""),
+        "{err}"
+    );
+
+    let err = serde_json::from_str::<MetricThresholds>(r#"{"hk": "nope"}"#).unwrap_err();
+    assert!(err.to_string().contains("invalid number"), "{err}");
 }
 
 #[test]

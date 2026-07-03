@@ -160,3 +160,76 @@ fn inline_module_merges_and_reexport_keeps_visibility() {
         "reexport carries visibility"
     );
 }
+
+/// When a crate `Contains`-edges into more than one root-looking module (e.g. a
+/// crate with both `src/main.rs` and `src/lib.rs`), the crate maps to whichever
+/// one ends in the configured `crate_root_file` (`lib.rs`) — first-seen order
+/// must not matter.
+#[test]
+fn build_crate_root_map_prefers_lib_rs_among_multiple_root_files() {
+    let mut g = InternalGraph::default();
+    g.nodes
+        .push(krate("crate:demo", "/p/Cargo.toml", false, None));
+    g.nodes.push(module("mod:main", "/p/src/main.rs", None));
+    g.nodes.push(module("mod:lib", "/p/src/lib.rs", None));
+    // main.rs seen first (Vacant), lib.rs second (Occupied, matches the guard).
+    g.edges
+        .push(edge("crate:demo", "mod:main", EdgeKind::Contains));
+    g.edges
+        .push(edge("crate:demo", "mod:lib", EdgeKind::Contains));
+    let map = build_crate_root_map(&g);
+    assert_eq!(
+        map.get("crate:demo").map(String::as_str),
+        Some("/p/src/lib.rs")
+    );
+
+    // Reversed order: lib.rs seen first (Vacant), main.rs second (Occupied,
+    // does NOT match the guard) — lib.rs must still win.
+    let mut g2 = InternalGraph::default();
+    g2.nodes
+        .push(krate("crate:demo", "/p/Cargo.toml", false, None));
+    g2.nodes.push(module("mod:lib", "/p/src/lib.rs", None));
+    g2.nodes.push(module("mod:main", "/p/src/main.rs", None));
+    g2.edges
+        .push(edge("crate:demo", "mod:lib", EdgeKind::Contains));
+    g2.edges
+        .push(edge("crate:demo", "mod:main", EdgeKind::Contains));
+    let map2 = build_crate_root_map(&g2);
+    assert_eq!(
+        map2.get("crate:demo").map(String::as_str),
+        Some("/p/src/lib.rs")
+    );
+}
+
+/// A `Contains` edge naming an endpoint that isn't in `full.nodes` (a dangling
+/// reference) is skipped rather than panicking on the lookup.
+#[test]
+fn build_crate_root_map_skips_a_dangling_edge_endpoint() {
+    let mut g = InternalGraph::default();
+    g.nodes
+        .push(krate("crate:demo", "/p/Cargo.toml", false, None));
+    // "mod:missing" is never added to `g.nodes`.
+    g.edges
+        .push(edge("crate:demo", "mod:missing", EdgeKind::Contains));
+    let map = build_crate_root_map(&g);
+    assert!(map.is_empty());
+}
+
+/// A local crate with no `Contains` edge into any module (so its root file is
+/// unknown) never enters `id_map`; any edge naming it is dropped, not a panic.
+#[test]
+fn collapse_to_files_drops_edges_from_a_crate_with_no_known_root_file() {
+    let mut g = InternalGraph::default();
+    g.nodes
+        .push(krate("crate:orphan", "/p/Cargo.toml", false, None));
+    g.nodes.push(module("mod:b", "/p/src/b.rs", None));
+    // No Contains edge from crate:orphan to any module.
+    g.edges.push(edge("crate:orphan", "mod:b", EdgeKind::Uses));
+
+    let out = collapse_to_files(g);
+    assert!(
+        out.edges.is_empty(),
+        "the edge from the root-less crate is dropped: {:?}",
+        out.edges
+    );
+}

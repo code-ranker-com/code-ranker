@@ -174,6 +174,21 @@ fn load_auto_discovers_cargo_workspace_metadata() {
 }
 
 #[test]
+fn table_from_cargo_toml_rejects_a_non_table_metadata_section() {
+    // `[*.metadata.code-ranker]` must be a table; a scalar there is a loud
+    // config error, not a silent skip.
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("Cargo.toml"),
+        "[package]\nname = \"x\"\nversion = \"0.1.0\"\n[package.metadata]\ncode-ranker = \"oops\"\n",
+    )
+    .unwrap();
+
+    let err = table_from_cargo_toml(dir.path()).unwrap_err();
+    assert!(err.to_string().contains("must be a table"), "{err}");
+}
+
+#[test]
 fn load_falls_back_to_builtin_defaults_when_no_config_found() {
     // An empty dir (no code-ranker.toml, no Cargo.toml) → pure built-in defaults.
     let dir = tempfile::tempdir().unwrap();

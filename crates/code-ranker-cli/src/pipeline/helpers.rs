@@ -190,4 +190,12 @@ mod tests {
         langs.insert("ts".to_string(), lang_with_node("dup.rs", "file"));
         let _ = assert_disjoint_languages(&langs);
     }
+
+    /// A plugin whose `levels()` never declares a `files` level (defensive
+    /// fallback — every built-in plugin does) yields no flow kinds rather than
+    /// panicking on a missing level.
+    #[test]
+    fn flow_kinds_with_no_level_is_empty() {
+        assert!(flow_kinds(None).is_empty());
+    }
 }

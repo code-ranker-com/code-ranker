@@ -141,4 +141,30 @@ mod tests {
             "external target is not fan_out"
         );
     }
+
+    /// A flow edge FROM an external node TO an internal one (unusual — a library
+    /// node reaching into our own code) is dropped entirely: not fan_in for the
+    /// target, not fan_out/fan_out_external for anyone, since the source isn't a
+    /// node whose coupling we track.
+    #[test]
+    fn external_source_is_dropped_not_counted_anywhere() {
+        let mut g = Graph {
+            nodes: vec![
+                Node {
+                    id: "ext:x".into(),
+                    kind: "external".into(),
+                    name: "x".into(),
+                    parent: None,
+                    attrs: Default::default(),
+                },
+                file("a", 5),
+            ],
+            edges: vec![uses("ext:x", "a")],
+        };
+        annotate_coupling(&mut g, &flow());
+        let a = &g.nodes[1];
+        assert_eq!(attr_f64(a, "fan_in"), None, "external source is not fan_in");
+        assert_eq!(attr_f64(a, "fan_out"), None);
+        assert_eq!(attr_f64(a, "fan_out_external"), None);
+    }
 }

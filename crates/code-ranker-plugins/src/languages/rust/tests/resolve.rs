@@ -189,6 +189,41 @@ fn follows_reexport_to_definer() {
     assert_eq!(r0.as_deref(), Some("DOMAIN"));
 }
 
+/// A `pub use` re-export whose source doesn't resolve to anything (a dangling
+/// reference — e.g. into a module this fixture never indexed) leaves the
+/// facade module as the answer instead of losing the resolution entirely.
+#[test]
+fn dangling_reexport_source_falls_back_to_the_facade() {
+    let mut idx: HashMap<Vec<String>, NodeId> = HashMap::new();
+    idx.insert(vec![], "ROOT".into());
+    idx.insert(vec!["domain".into()], "DOMAIN".into());
+
+    let mut rx = ReexportMap::new();
+    rx.insert(
+        vec!["domain".into()],
+        vec![(
+            "DomainError".into(),
+            vec!["nonexistent".into(), "DomainError".into()],
+        )],
+    );
+
+    let r = resolve_use_path(
+        &["domain".into(), "DomainError".into()],
+        &[],
+        &idx,
+        &HashMap::new(),
+        &HashMap::new(),
+        &HashMap::new(),
+        &rx,
+        0,
+    );
+    assert_eq!(
+        r.as_deref(),
+        Some("DOMAIN"),
+        "an unresolvable re-export source keeps the facade, not a lost edge"
+    );
+}
+
 #[test]
 fn resolve_use_path_handles_intra_crate_bare_path() {
     let mut index: HashMap<Vec<String>, NodeId> = HashMap::new();
@@ -463,4 +498,47 @@ fn resolves_cross_crate_reexport_keyword_sources() {
     );
     // a `std`-rooted re-export source is suppressed → stays at the facade root.
     assert_eq!(resolve(&["f", "ViaStd"]).as_deref(), Some("F_ROOT"));
+}
+
+/// The remaining `resolve_foreign_source` arms, called directly: an empty
+/// path, a `super::super::…` source (pops once per extra `super`, then once
+/// more for the leading one), and a root that names neither a keyword, a
+/// `std` crate, nor an indexed sibling module.
+#[test]
+fn resolve_foreign_source_empty_double_super_and_unrecognized_root() {
+    let empty = resolve_foreign_source(&[], &["a".into()], &HashMap::new(), &ReexportMap::new(), 0);
+    assert_eq!(empty, None, "an empty path resolves to nothing");
+
+    // From `a::b::c`, `super::super::X` pops one segment per `super` (`c` in
+    // the loop for the extra `super`, `b` in the trailing pop for the leading
+    // one), landing at `a`, then resolves `X` under it.
+    let mut index: HashMap<Vec<String>, NodeId> = HashMap::new();
+    index.insert(vec![], "ROOT".into());
+    index.insert(vec!["a".into()], "A".into());
+    index.insert(vec!["a".into(), "b".into()], "AB".into());
+    index.insert(vec!["a".into(), "X".into()], "AX".into());
+    let redirected = resolve_foreign_source(
+        &["super".into(), "super".into(), "X".into()],
+        &["a".into(), "b".into(), "c".into()],
+        &index,
+        &ReexportMap::new(),
+        0,
+    );
+    assert_eq!(
+        redirected.as_deref(),
+        Some("AX"),
+        "two supers pop two segments"
+    );
+
+    let unrecognized = resolve_foreign_source(
+        &["totally_unknown".into(), "X".into()],
+        &[],
+        &index,
+        &ReexportMap::new(),
+        0,
+    );
+    assert_eq!(
+        unrecognized, None,
+        "a root that isn't a keyword, std crate, or indexed module resolves to nothing"
+    );
 }

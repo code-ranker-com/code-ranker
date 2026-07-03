@@ -82,6 +82,33 @@ fn reco_for_sorts_worst_first_and_counts_tiers() {
 }
 
 #[test]
+fn tier_count_picks_the_right_tier_and_auto_prefers_warning() {
+    let reco = Reco {
+        sorted: Vec::new(),
+        warning_count: 2,
+        info_count: 5,
+    };
+    assert_eq!(tier_count(&reco, Severity::Warning), 2);
+    assert_eq!(tier_count(&reco, Severity::Info), 5);
+    assert_eq!(
+        tier_count(&reco, Severity::Auto),
+        2,
+        "auto prefers warning when it has any"
+    );
+
+    let clean_of_warnings = Reco {
+        sorted: Vec::new(),
+        warning_count: 0,
+        info_count: 5,
+    };
+    assert_eq!(
+        tier_count(&clean_of_warnings, Severity::Auto),
+        5,
+        "auto falls back to info when nothing warns"
+    );
+}
+
+#[test]
 fn reco_for_cycle_uses_cycle_members() {
     let level = level_with(vec![
         file_node(
@@ -849,6 +876,33 @@ fn compose_prompt_metric_lens_omits_duplicate_description() {
     );
 }
 
+/// A metric with no `node_attributes` spec at all (so no description to print)
+/// still lists its modules, and a module missing the metric value entirely
+/// gets a bare `- \`path\`` line instead of `(metric: value)`.
+#[test]
+fn compose_prompt_metric_lens_handles_missing_spec_and_missing_value() {
+    let level = level_with(vec![
+        file_node("{target}/a.rs", &[("hk", AttrValue::Float(5.0))]),
+        file_node("{target}/b.rs", &[]), // no "custom" attr at all
+    ]);
+    let principle = synth_metric_principle(&level, &[], "custom");
+    let md = compose_prompt(
+        &level,
+        &[principle],
+        &code_ranker_graph::prompt_template(),
+        "custom",
+        "rust",
+        Severity::Auto,
+        Some(2),
+        &no_focus(),
+    )
+    .unwrap();
+    assert!(
+        md.contains("- `a.rs`\n") && md.contains("- `b.rs`\n"),
+        "modules missing the metric value print a bare path line, no spec description: {md}"
+    );
+}
+
 /// Build a `FocusPaths` from string literals + the analysis target.
 fn focus(paths: &[&str], target: &str) -> FocusPaths {
     let owned: Vec<String> = paths.iter().map(|s| s.to_string()).collect();
@@ -940,6 +994,56 @@ fn scorecard_focus_principle_shows_only_that_principle() {
     assert!(
         sc.contains("big.rs"),
         "worst modules ranked by the principle's sort_metric: {sc}"
+    );
+}
+
+/// `--focus ADP` forces the row to show even with zero cycles (narrowed rows
+/// bypass the in-scope skip) — with nothing to rank, the top-module cell is a
+/// bare dash, not a module.
+#[test]
+fn scorecard_focus_principle_with_no_matches_shows_a_dash() {
+    let level = level_with(vec![file_node(
+        "{target}/quiet.rs",
+        &[("hk", AttrValue::Float(1.0))],
+    )]);
+    let sc = render_scorecard(
+        "rust",
+        &level,
+        &[adp_principle()],
+        &[Severity::Warning, Severity::Info],
+        None,
+        Some(&Focus::Principle("ADP".into())),
+        &no_focus(),
+    )
+    .unwrap();
+    assert!(sc.contains("ADP"), "the narrowed row still shows: {sc}");
+    let top_cell = sc.lines().find(|l| l.starts_with("ADP")).expect("ADP row");
+    assert!(
+        top_cell.trim_end().ends_with('—'),
+        "no cycles to rank -> a bare dash, not a module: {top_cell:?}"
+    );
+}
+
+/// A narrowed row whose worst-ranked module has no value at all for the
+/// sort_metric (never set on any node) prints a bare module path, not
+/// `path (METRIC 0)`.
+#[test]
+fn scorecard_focus_principle_top_module_missing_value_is_bare_path() {
+    let level = level_with(vec![file_node("{target}/lonely.rs", &[])]);
+    let sc = render_scorecard(
+        "rust",
+        &level,
+        &[srp_principle()],
+        &[Severity::Warning, Severity::Info],
+        None,
+        Some(&Focus::Principle("SRP".into())),
+        &no_focus(),
+    )
+    .unwrap();
+    let top_cell = sc.lines().find(|l| l.starts_with("SRP")).expect("SRP row");
+    assert!(
+        top_cell.trim_end().ends_with("lonely.rs"),
+        "no sloc value on the module -> bare path, no ` (SLOC …)` suffix: {top_cell:?}"
     );
 }
 

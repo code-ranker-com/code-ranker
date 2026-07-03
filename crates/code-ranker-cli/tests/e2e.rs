@@ -441,6 +441,113 @@ fn rust_sample_check_suggest_config() {
     );
 }
 
+/// Recursively copy a directory (`std` has no built-in for this).
+fn copy_dir_all(src: &Path, dst: &Path) {
+    std::fs::create_dir_all(dst).unwrap();
+    for entry in std::fs::read_dir(src).unwrap() {
+        let entry = entry.unwrap();
+        let dest = dst.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_dir_all(&entry.path(), &dest);
+        } else {
+            std::fs::copy(entry.path(), &dest).unwrap();
+        }
+    }
+}
+
+/// A copy of the rust sample with the `chain` cycle broken: `three()` no longer
+/// calls back into `one`, so the 3-node `uses` cycle (one → two → three → one)
+/// is gone while the unrelated `a ⇄ b` mutual cycle is untouched.
+fn rust_sample_copy_without_chain_cycle(dst: &Path) {
+    copy_dir_all(&sample_dir("rust"), dst);
+    std::fs::write(
+        dst.join("src/chain/three.rs"),
+        "//! `chain::three` — cycle-closing `use` removed for this fixture.\n\npub fn three() -> i32 {\n    3\n}\n",
+    )
+    .unwrap();
+}
+
+/// A `--baseline` run against a snapshot with STRICTLY MORE violations (the
+/// `chain` cycle resolved, `mutual` untouched) reports `improved` — the
+/// opposite tail of the `degraded`/`neutral` verdicts already covered.
+#[test]
+fn rust_sample_check_baseline_verdict_improved() {
+    let baseline_dir = tempfile::tempdir().expect("baseline sample copy");
+    copy_dir_all(&sample_dir("rust"), baseline_dir.path()); // full sample: both cycles
+    let baseline_json = std::env::temp_dir().join("cs-e2e-baseline-improved.json");
+    let report = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
+        .current_dir(tempfile::tempdir().unwrap().path())
+        .env("CARGO_NET_OFFLINE", "true")
+        .arg("report")
+        .arg(baseline_dir.path())
+        .arg("--config")
+        .arg(sample_dir("rust").join("code-ranker.toml"))
+        .arg(format!("--output.json.path={}", baseline_json.display()))
+        .output()
+        .expect("spawn baseline report");
+    assert!(report.status.success(), "baseline report: {report:?}");
+
+    let current_dir = tempfile::tempdir().expect("current sample copy");
+    rust_sample_copy_without_chain_cycle(current_dir.path());
+    let check = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
+        .current_dir(tempfile::tempdir().unwrap().path())
+        .env("CARGO_NET_OFFLINE", "true")
+        .arg("check")
+        .arg(current_dir.path())
+        .arg("--config")
+        .arg(sample_dir("rust").join("code-ranker.toml"))
+        .arg("--baseline")
+        .arg(&baseline_json)
+        .arg("--output-format")
+        .arg("json")
+        .arg("--exit-zero")
+        .output()
+        .expect("spawn check");
+    let stdout = String::from_utf8_lossy(&check.stdout);
+    let v: Value = serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("json: {e}: {stdout}"));
+    assert_eq!(
+        v["verdict"], "improved",
+        "chain resolved, mutual kept, nothing new: {stdout}"
+    );
+}
+
+/// A `--baseline` run against a snapshot with STRICTLY FEWER violations (only
+/// `mutual`) reports `degraded` once the `chain` cycle reappears as a new
+/// violation not present in the baseline.
+#[test]
+fn rust_sample_check_baseline_verdict_degraded() {
+    let baseline_dir = tempfile::tempdir().expect("baseline sample copy");
+    rust_sample_copy_without_chain_cycle(baseline_dir.path()); // only mutual
+    let baseline_json = std::env::temp_dir().join("cs-e2e-baseline-degraded.json");
+    let report = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
+        .current_dir(tempfile::tempdir().unwrap().path())
+        .env("CARGO_NET_OFFLINE", "true")
+        .arg("report")
+        .arg(baseline_dir.path())
+        .arg("--config")
+        .arg(sample_dir("rust").join("code-ranker.toml"))
+        .arg(format!("--output.json.path={}", baseline_json.display()))
+        .output()
+        .expect("spawn baseline report");
+    assert!(report.status.success(), "baseline report: {report:?}");
+
+    // Current: the real (unmodified) sample — both cycles.
+    let (_ok, stdout, stderr) = run_check_capture(
+        "rust",
+        &[
+            "--baseline",
+            baseline_json.to_str().unwrap(),
+            "--output-format",
+            "json",
+        ],
+    );
+    let v: Value = serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("json: {e}: {stderr}"));
+    assert_eq!(
+        v["verdict"], "degraded",
+        "the chain cycle is new vs the baseline: {stdout}"
+    );
+}
+
 /// A `--baseline` run computes a relative verdict; against itself it is `neutral`
 /// (no new violations).
 #[test]
@@ -699,6 +806,47 @@ fn report_baseline_html_is_named_diff() {
     assert!(
         dir.join("viewer-diff.html").exists(),
         "baseline run renames the html artifact to -diff.html"
+    );
+    assert!(!html.exists(), "the plain name is not used for a diff");
+}
+
+/// A `--baseline` diff whose `--output.html.path` has no `.html` extension
+/// falls back to a bare `-diff` suffix (the `.strip_suffix` miss branch).
+#[test]
+fn report_baseline_html_diff_without_html_extension_appends_plain_suffix() {
+    let sample = sample_dir("rust");
+    let dir = std::env::temp_dir().join("cs-e2e-report-diff-noext");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let base = dir.join("base.json");
+    let html = dir.join("viewer"); // no `.html` extension
+    let cap = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
+        .current_dir(&dir)
+        .env("CARGO_NET_OFFLINE", "true")
+        .arg("report")
+        .arg(&sample)
+        .arg("--config")
+        .arg(sample.join("code-ranker.toml"))
+        .arg(format!("--output.json.path={}", base.display()))
+        .output()
+        .expect("spawn baseline report");
+    assert!(cap.status.success(), "baseline capture failed");
+    let res = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
+        .current_dir(&dir)
+        .env("CARGO_NET_OFFLINE", "true")
+        .arg("report")
+        .arg(&sample)
+        .arg("--config")
+        .arg(sample.join("code-ranker.toml"))
+        .arg("--baseline")
+        .arg(&base)
+        .arg(format!("--output.html.path={}", html.display()))
+        .output()
+        .expect("spawn diff report");
+    assert!(res.status.success(), "diff report failed");
+    assert!(
+        dir.join("viewer-diff").exists(),
+        "extension-less path gets a bare -diff suffix, not -diff.html"
     );
     assert!(!html.exists(), "the plain name is not used for a diff");
 }
@@ -1013,6 +1161,41 @@ fn rust_sample_check_prompt_format() {
     );
 }
 
+/// A clean gate (`--output-format prompt`, zero violations) prints nothing —
+/// an agent reads an empty prompt as "nothing to do".
+#[test]
+fn rust_sample_check_prompt_format_empty_when_clean() {
+    let (ok, stdout, stderr) = run_check_capture(
+        "rust",
+        &["--focus-path", "src/foo", "--output-format", "prompt"],
+    );
+    assert!(ok, "clean subtree must pass: {stderr}");
+    assert!(
+        stdout.is_empty(),
+        "empty prompt on a clean gate: {stdout:?}"
+    );
+}
+
+/// A whole-file threshold breach (no specific line, unlike a cycle) renders its
+/// `**Module:**` line without a trailing `(line N)`.
+#[test]
+fn rust_sample_check_prompt_format_lineless_violation_omits_line_number() {
+    let (_ok, stdout, stderr) = run_check_capture(
+        "rust",
+        &[
+            "--config",
+            "rules.thresholds.file.sloc=1",
+            "--output-format",
+            "prompt",
+        ],
+    );
+    assert!(
+        stdout.contains("**Module:** `src/lib.rs`\n")
+            || stdout.contains("**Module:** `src/lib.rs`\r\n"),
+        "a lineless (whole-file) violation has no ` (line N)` suffix: {stdout}{stderr}"
+    );
+}
+
 /// `--index` is rejected with a hint to use `--top`.
 #[test]
 fn rust_sample_report_rejects_index() {
@@ -1032,6 +1215,141 @@ fn rust_sample_report_rejects_stray_reco_flags() {
     assert!(
         stderr.contains("apply only with --output.scorecard"),
         "actionable error: {stderr}"
+    );
+}
+
+/// A bare filename (no directory component) is a valid `--output.json.path`:
+/// `write_artifact` must skip the parent-dir creation step (an empty parent),
+/// not try to `create_dir_all("")`.
+#[test]
+fn rust_sample_report_bare_filename_output_path_has_no_parent_to_create() {
+    let sample = sample_dir("rust");
+    let cwd = tempfile::tempdir().expect("create temp cwd");
+    let status = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
+        .current_dir(cwd.path())
+        .env("CARGO_NET_OFFLINE", "true")
+        .arg("report")
+        .arg(&sample)
+        .arg("--config")
+        .arg(sample.join("code-ranker.toml"))
+        .arg("--output.json.path=bare.json")
+        .status()
+        .expect("spawn code-ranker");
+    assert!(status.success());
+    assert!(cwd.path().join("bare.json").exists());
+}
+
+/// With every artifact format explicitly disabled and no `--output.scorecard`,
+/// `report` still writes json + html — the CLI never silently produces nothing.
+#[test]
+fn rust_sample_report_defaults_to_json_and_html_when_everything_disabled() {
+    let sample = sample_dir("rust");
+    let cwd = tempfile::tempdir().expect("create temp cwd");
+    let status = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
+        .current_dir(cwd.path())
+        .env("CARGO_NET_OFFLINE", "true")
+        .arg("report")
+        .arg(&sample)
+        .arg("--config")
+        .arg(sample.join("code-ranker.toml"))
+        .arg("--config")
+        .arg("output.json.enabled=false")
+        .arg("--config")
+        .arg("output.html.enabled=false")
+        .status()
+        .expect("spawn code-ranker");
+    assert!(status.success());
+
+    let entries: Vec<_> = std::fs::read_dir(cwd.path().join(".code-ranker"))
+        .expect("`.code-ranker/` dir created")
+        .filter_map(|e| e.ok().map(|e| e.file_name().to_string_lossy().into_owned()))
+        .collect();
+    assert!(
+        entries.iter().any(|f| f.ends_with(".json")),
+        "json still written despite enabled=false: {entries:?}"
+    );
+    assert!(
+        entries.iter().any(|f| f.ends_with(".html")),
+        "html still written despite enabled=false: {entries:?}"
+    );
+}
+
+/// With `--output.scorecard` requested and json/html explicitly disabled, the
+/// "nothing selected" fallback must NOT kick in (scorecard counts as
+/// "something selected") — no `.code-ranker/` json/html artifacts appear.
+#[test]
+fn rust_sample_report_scorecard_only_skips_json_and_html() {
+    let sample = sample_dir("rust");
+    let cwd = tempfile::tempdir().expect("create temp cwd");
+    let status = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
+        .current_dir(cwd.path())
+        .env("CARGO_NET_OFFLINE", "true")
+        .arg("report")
+        .arg(&sample)
+        .arg("--config")
+        .arg(sample.join("code-ranker.toml"))
+        .arg("--output.scorecard")
+        .arg("--config")
+        .arg("output.json.enabled=false")
+        .arg("--config")
+        .arg("output.html.enabled=false")
+        .status()
+        .expect("spawn code-ranker");
+    assert!(status.success());
+
+    let dot_code_ranker = cwd.path().join(".code-ranker");
+    assert!(
+        !dot_code_ranker.exists()
+            || std::fs::read_dir(&dot_code_ranker)
+                .unwrap()
+                .next()
+                .is_none(),
+        "scorecard-only run must not also write json/html"
+    );
+}
+
+/// The rust sample's own config keeps test items in the graph (`ignore.tests =
+/// false`, for fixture reproducibility). Overriding it to `true` drops
+/// `#[cfg(test)]`-only facts: `derives.rs`'s inline test references itself
+/// (`crate::derives::OnlyDerived`) — that self-import, its `assert_eq!` macro
+/// fact, and the `test` attr all disappear once test items are skipped.
+#[test]
+fn rust_sample_ignore_tests_override_drops_test_only_facts() {
+    let sample = sample_dir("rust");
+    let out = tempfile::tempdir()
+        .unwrap()
+        .path()
+        .join("with-override.json");
+    let status = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
+        .current_dir(tempfile::tempdir().unwrap().path())
+        .env("CARGO_NET_OFFLINE", "true")
+        .arg("report")
+        .arg(&sample)
+        .arg("--config")
+        .arg(sample.join("code-ranker.toml"))
+        .arg("--config")
+        .arg("ignore.tests=true")
+        .arg(format!("--output.json.path={}", out.display()))
+        .status()
+        .expect("spawn code-ranker");
+    assert!(status.success());
+
+    let snap: Value = serde_json::from_str(&std::fs::read_to_string(&out).unwrap()).unwrap();
+    let nodes = snap["languages"]["rust"]["graphs"]["files"]["nodes"]
+        .as_array()
+        .unwrap();
+    let derives_rs = nodes
+        .iter()
+        .find(|n| n["id"].as_str().unwrap_or_default().ends_with("derives.rs"))
+        .expect("derives.rs node present");
+    let imports = derives_rs["imports"].as_str().unwrap_or_default();
+    assert!(
+        !imports.contains("crate::derives::OnlyDerived") && imports.contains("serde::Serialize"),
+        "the test-only self-import is gone, the real derive import stays: {imports:?}"
+    );
+    assert!(
+        derives_rs.get("attrs").is_none(),
+        "the `test` attr fact came only from the test module: {derives_rs:?}"
     );
 }
 
@@ -1339,6 +1657,92 @@ fn user_defined_metric_is_computed_and_emitted() {
         node["comment_ratio"],
         serde_json::json!(50),
         "comment_ratio = cloc(2) / sloc(4) * 100"
+    );
+}
+
+/// A user-defined `[metrics]` formula is applied only to internal nodes — an
+/// external dependency node (no `sloc`/`cloc` of its own) is skipped rather
+/// than fed through the formula.
+#[test]
+fn user_defined_metric_skips_external_nodes() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let p = dir.path();
+    std::fs::write(
+        p.join("m.py"),
+        "import numpy\n# a comment\ndef f(x):\n    return numpy.array(x)\n",
+    )
+    .unwrap();
+    std::fs::write(
+        p.join("code-ranker.toml"),
+        vcfg(
+            "[plugins.base.metrics.comment_ratio]\n\
+             formula_cel = \"sloc > 0.0 ? cloc / sloc * 100.0 : 0.0\"\n\
+             label = \"Comments %\"\n\
+             direction = \"higher_better\"\n\
+             group = \"loc\"\n",
+        ),
+    )
+    .unwrap();
+    let out = p.join("out.json");
+    let status = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
+        .current_dir(p)
+        .env("CARGO_NET_OFFLINE", "true")
+        .arg("report")
+        .arg(".")
+        .arg("--plugins")
+        .arg("python")
+        .arg("--config")
+        .arg(p.join("code-ranker.toml"))
+        .arg(format!("--output.json.path={}", out.display()))
+        .status()
+        .expect("spawn code-ranker");
+    assert!(
+        status.success(),
+        "report should succeed with an external node present"
+    );
+
+    let v: Value = serde_json::from_str(&std::fs::read_to_string(&out).unwrap()).unwrap();
+    let nodes = v["languages"]["python"]["graphs"]["files"]["nodes"]
+        .as_array()
+        .unwrap();
+    let ext = nodes
+        .iter()
+        .find(|n| n["kind"] == "external")
+        .expect("numpy import creates an external node");
+    assert!(
+        ext.get("comment_ratio").is_none(),
+        "the custom formula is not applied to external nodes: {ext:?}"
+    );
+}
+
+/// `--config templates.prompt=<path>` reads a caller-supplied prompt scaffold
+/// from disk (`prompt_template_from`'s file-reading call site in the pipeline,
+/// not just its parsing logic — already covered elsewhere).
+#[test]
+fn templates_prompt_override_reads_a_custom_scaffold_from_disk() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let scaffold = dir.path().join("custom-prompt.md");
+    std::fs::write(
+        &scaffold,
+        "## intro\nCustom scaffold intro for this fixture.\n",
+    )
+    .unwrap();
+
+    let (ok, stdout, stderr) = run_report_capture(
+        "rust",
+        &[
+            "--prompt",
+            "HK",
+            "--top",
+            "1",
+            "--config",
+            &format!("templates.prompt={}", scaffold.display()),
+        ],
+    );
+    assert!(ok, "prompt run failed: {stderr}");
+    assert!(
+        stdout.contains("Custom scaffold intro for this fixture."),
+        "the on-disk override replaces the built-in intro: {stdout}"
     );
 }
 

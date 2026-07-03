@@ -109,9 +109,9 @@ mod scorecard;
 mod util;
 
 pub(crate) use focus::{FocusPaths, in_focus};
-pub(crate) use util::{attr_short, clean_path, fmt_val};
 pub use prompt::compose_prompt;
 pub use scorecard::render_scorecard;
+pub(crate) use util::{attr_short, clean_path, fmt_val};
 
 /// What `--focus <NAME>` resolves to: a SOLID-style design **principle** (a principle
 /// id, e.g. `LSP`) or a **metric** (an attribute key, e.g. `hk`). The two live in
@@ -274,7 +274,6 @@ pub(super) fn in_cycle(node: &Node) -> bool {
 fn thresholds_for(level: &LevelGraph, metric: &str) -> Option<Thresholds> {
     level.node_attributes.get(metric).and_then(|s| s.thresholds)
 }
-
 
 /// Rank the file nodes for one metric, worst-first, and count tier breaches.
 /// `"cycle"` is special-cased (cycle members ranked by HK).

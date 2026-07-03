@@ -872,10 +872,7 @@ fn in_focus_matches_file_and_folder() {
         in_focus(&n, &focus(&["./crates/a/"], t)),
         "normalizes ./ and trailing /"
     );
-    assert!(
-        !in_focus(&n, &focus(&["crates/b"], t)),
-        "outside the path"
-    );
+    assert!(!in_focus(&n, &focus(&["crates/b"], t)), "outside the path");
 }
 
 /// The normalization fix: a `--focus-path` written as the analysis target itself
@@ -891,7 +888,10 @@ fn in_focus_accepts_the_input_path_and_absolute_forms() {
     let sibling = file_node("/repo/crates/b/src/lib.rs", &[]);
 
     // Naming the whole target (the same path passed as `[input]`) → all its nodes.
-    assert!(in_focus(&mine, &focus(&["/repo/crates/a"], t)), "input path");
+    assert!(
+        in_focus(&mine, &focus(&["/repo/crates/a"], t)),
+        "input path"
+    );
     assert!(
         !in_focus(&sibling, &focus(&["/repo/crates/a"], t)),
         "does not leak to a sibling crate"

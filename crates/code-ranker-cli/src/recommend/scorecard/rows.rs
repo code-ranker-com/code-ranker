@@ -167,7 +167,10 @@ fn cycle_mod_rows(out: &mut String, level: &LevelGraph, top: Option<usize>) -> V
             g.kind,
             members.len()
         )),
-        _ => out.push_str(&format!("  {} cycles — all members listed:\n", groups.len())),
+        _ => out.push_str(&format!(
+            "  {} cycles — all members listed:\n",
+            groups.len()
+        )),
     }
     let mut mod_rows: Vec<ModRow> = Vec::new();
     for (g, members) in &groups {
@@ -188,7 +191,12 @@ fn cycle_mod_rows(out: &mut String, level: &LevelGraph, top: Option<usize>) -> V
 
 /// Metric-narrowed worst-modules rows: the metric's ranked modules, capped,
 /// restricted to `--focus-path` (empty = no restriction).
-fn metric_mod_rows(level: &LevelGraph, m: &str, limit: usize, focus_paths: &FocusPaths) -> Vec<ModRow> {
+fn metric_mod_rows(
+    level: &LevelGraph,
+    m: &str,
+    limit: usize,
+    focus_paths: &FocusPaths,
+) -> Vec<ModRow> {
     let reco = reco_for(level, m);
     // The focused metric's own tiers: tag each ranked module by where its value
     // actually lands (warn > warning, info > info), `Below` otherwise — never a
@@ -306,5 +314,79 @@ pub(super) fn render_mod_rows(out: &mut String, mod_rows: &[ModRow]) {
         }
         out.push_str(&line);
         out.push('\n');
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use code_ranker_plugin_api::{
+        attrs::{AttrValue, ValueType},
+        level::{AttributeSpec, Thresholds},
+    };
+    use std::collections::BTreeMap;
+
+    fn file_node(id: &str, attrs: &[(&str, AttrValue)]) -> Node {
+        let mut a: BTreeMap<String, AttrValue> = BTreeMap::new();
+        for (k, v) in attrs {
+            a.insert((*k).to_string(), v.clone());
+        }
+        Node {
+            id: id.to_string(),
+            kind: "file".to_string(),
+            name: id.rsplit('/').next().unwrap_or(id).to_string(),
+            parent: None,
+            attrs: a,
+        }
+    }
+
+    fn spec(warning: f64, info: f64) -> AttributeSpec {
+        let mut s = AttributeSpec::new(ValueType::Float, "M");
+        s.thresholds = Some(Thresholds { info, warning });
+        s
+    }
+
+    /// A `0.0` threshold means "any positive value breaches" — the ratio would
+    /// divide by zero, so both the warning and info branches special-case it to
+    /// `INFINITY` (always the worst-ratio breach) instead of NaN/inf-by-division.
+    #[test]
+    fn node_breaches_uses_infinity_ratio_for_a_zero_threshold() {
+        let mut na: BTreeMap<String, AttributeSpec> = BTreeMap::new();
+        na.insert("warn_zero".into(), spec(0.0, 1000.0));
+        na.insert("info_zero".into(), spec(1000.0, 0.0));
+        let level = LevelGraph {
+            node_attributes: na,
+            ..Default::default()
+        };
+        let n = file_node(
+            "{target}/a.rs",
+            &[
+                ("warn_zero", AttrValue::Float(5.0)),
+                ("info_zero", AttrValue::Float(5.0)),
+            ],
+        );
+        let breaches = node_breaches(&level, &n, true, true);
+        let warn = breaches.iter().find(|b| b.metric == "warn_zero").unwrap();
+        assert_eq!(warn.ratio, f64::INFINITY, "zero warning threshold");
+        let info = breaches.iter().find(|b| b.metric == "info_zero").unwrap();
+        assert_eq!(info.ratio, f64::INFINITY, "zero info threshold");
+    }
+
+    /// The unfiltered (no `--focus-path`) breach-mod-rows list, not just the
+    /// metric-narrowed one, feeds the empty-list diagnostic: a genuinely clean
+    /// project under a `--focus-path` still reports a plain `(none)`, not the
+    /// "0 of N" filter-mismatch hint (there is no N).
+    #[test]
+    fn empty_modules_note_unnarrowed_and_genuinely_clean_says_none() {
+        let mut na: BTreeMap<String, AttributeSpec> = BTreeMap::new();
+        na.insert("hk".into(), spec(1000.0, 100.0));
+        let level = LevelGraph {
+            node_attributes: na,
+            nodes: vec![file_node("{target}/a.rs", &[("hk", AttrValue::Float(1.0))])],
+            ..Default::default()
+        };
+        let focus = FocusPaths::new(&["some/other/path".to_string()], "");
+        let note = empty_modules_note(&level, &focus, None, true, true);
+        assert_eq!(note, "  (none)\n");
     }
 }

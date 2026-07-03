@@ -140,6 +140,9 @@ fn abs_lexical(path: &str) -> String {
             .to_string_lossy()
             .trim_end_matches('/')
             .to_string(),
+        // COVERAGE: `current_dir()` fails only when the CWD has been deleted or is
+        // otherwise inaccessible — not reproducible in a unit test without mutating
+        // global process state shared by the whole test binary.
         Err(_) => path.trim_end_matches('/').to_string(),
     }
 }
@@ -148,4 +151,36 @@ fn abs_lexical(path: &str) -> String {
 /// restriction). See [`FocusPaths`] for how an entry is matched.
 pub(crate) fn in_focus(node: &Node, focus: &FocusPaths) -> bool {
     focus.is_empty() || focus.matches_id(&node.id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn file_node(id: &str) -> Node {
+        Node {
+            id: id.to_string(),
+            kind: "file".to_string(),
+            name: id.rsplit('/').next().unwrap_or(id).to_string(),
+            parent: None,
+            attrs: Default::default(),
+        }
+    }
+
+    /// A relative target (e.g. `sub`, not the common `.`) plus a `--focus-path`
+    /// written as its *absolute* form: `target_subpath`'s direct string check
+    /// (same relative spelling) can't match, so it falls through to the
+    /// CWD-resolved absolute comparison.
+    #[test]
+    fn target_subpath_resolves_absolute_form_of_a_relative_target() {
+        let cwd = std::env::current_dir().unwrap();
+        let target = "sub";
+        let entry_abs = format!("{}/{target}", cwd.display());
+        let n = file_node("{target}/file.rs");
+        let focus = FocusPaths::new(&[entry_abs], target);
+        assert!(
+            in_focus(&n, &focus),
+            "absolute spelling of a relative target resolves via the CWD"
+        );
+    }
 }

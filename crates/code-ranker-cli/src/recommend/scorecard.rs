@@ -220,4 +220,3 @@ fn render_principle_table(out: &mut String, rows: &[Row], want_warning: bool, wa
         out.push('\n');
     }
 }
-

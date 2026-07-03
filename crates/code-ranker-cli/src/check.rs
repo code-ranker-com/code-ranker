@@ -328,7 +328,6 @@ pub(crate) fn merged_specs_pub(
     (na, ck)
 }
 
-
 /// Whether a violation matches one of the `--focus` entries. An entry matches
 /// the full rule id (`threshold.file.hk`, `check.inline_tests_too_large`), the bare
 /// id after the last dot (`inline_tests_too_large`), or the concern group (`TST`,

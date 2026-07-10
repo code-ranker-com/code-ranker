@@ -6,7 +6,7 @@
     "branch": "docs/v5-multilang-format",
     "commit": "28fd0fd8fc77",
     "dirty_files": 8,
-    "origin": "git@github.com:ffedoroff/code-ranker.git"
+    "origin": "git@github.com:code-ranker-com/code-ranker.git"
   },
   "languages": {
     "md": {

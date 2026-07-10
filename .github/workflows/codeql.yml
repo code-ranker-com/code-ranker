@@ -22,7 +22,7 @@
 # ⚠ REQUIRED ONE-TIME STEP: default setup must be turned OFF or it conflicts with
 # this workflow (uploads get rejected). Disable it in Settings → Code security →
 # "CodeQL analysis" → switch to Advanced, or run:
-#   gh api -X PATCH repos/ffedoroff/code-ranker/code-scanning/default-setup -f state=not-configured
+#   gh api -X PATCH repos/code-ranker-com/code-ranker/code-scanning/default-setup -f state=not-configured
 
 name: CodeQL
 

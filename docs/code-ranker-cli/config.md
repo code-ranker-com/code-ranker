@@ -73,9 +73,9 @@ layers on top:
 
 | Layer | Applies to | Source (GitHub `main`) |
 |---|---|---|
-| **base** — common vocabulary & defaults | every language | [`crates/code-ranker-plugins/src/defaults.toml`](https://github.com/ffedoroff/code-ranker/blob/main/crates/code-ranker-plugins/src/defaults.toml) |
-| **family** (optional middle layer) | JS/TS → [`ecmascript/config.toml`](https://github.com/ffedoroff/code-ranker/blob/main/crates/code-ranker-plugins/src/languages/ecmascript/config.toml) · C/C++ → [`cfamily/config.toml`](https://github.com/ffedoroff/code-ranker/blob/main/crates/code-ranker-plugins/src/languages/cfamily/config.toml) | the shared engine vocab |
-| **`<lang>`** — only what differs | one plugin | [`languages/<lang>/config.toml`](https://github.com/ffedoroff/code-ranker/tree/main/crates/code-ranker-plugins/src/languages) — e.g. [`rust`](https://github.com/ffedoroff/code-ranker/blob/main/crates/code-ranker-plugins/src/languages/rust/config.toml), [`python`](https://github.com/ffedoroff/code-ranker/blob/main/crates/code-ranker-plugins/src/languages/python/config.toml), [`go`](https://github.com/ffedoroff/code-ranker/blob/main/crates/code-ranker-plugins/src/languages/go/config.toml) |
+| **base** — common vocabulary & defaults | every language | [`crates/code-ranker-plugins/src/defaults.toml`](https://github.com/code-ranker-com/code-ranker/blob/main/crates/code-ranker-plugins/src/defaults.toml) |
+| **family** (optional middle layer) | JS/TS → [`ecmascript/config.toml`](https://github.com/code-ranker-com/code-ranker/blob/main/crates/code-ranker-plugins/src/languages/ecmascript/config.toml) · C/C++ → [`cfamily/config.toml`](https://github.com/code-ranker-com/code-ranker/blob/main/crates/code-ranker-plugins/src/languages/cfamily/config.toml) | the shared engine vocab |
+| **`<lang>`** — only what differs | one plugin | [`languages/<lang>/config.toml`](https://github.com/code-ranker-com/code-ranker/tree/main/crates/code-ranker-plugins/src/languages) — e.g. [`rust`](https://github.com/code-ranker-com/code-ranker/blob/main/crates/code-ranker-plugins/src/languages/rust/config.toml), [`python`](https://github.com/code-ranker-com/code-ranker/blob/main/crates/code-ranker-plugins/src/languages/python/config.toml), [`go`](https://github.com/code-ranker-com/code-ranker/blob/main/crates/code-ranker-plugins/src/languages/go/config.toml) |
 | **`[plugins.base]`** (user) — shared overrides for every language | every language | your `code-ranker.toml` / `--config` |
 | **`[plugins.<lang>]`** (user) — overrides for one language | that plugin | your `code-ranker.toml` / `--config` |
 
@@ -87,7 +87,7 @@ See [`[plugins.<lang>]`](#pluginslang--per-language-plugin-overrides).
 
 The shared **metric catalog** (built-in derived metrics, aggregates, the default
 `[report]` columns/card/size/filter) is layered under the language `[report]`:
-[`crates/code-ranker-graph/metrics/builtin.toml`](https://github.com/ffedoroff/code-ranker/blob/main/crates/code-ranker-graph/metrics/builtin.toml).
+[`crates/code-ranker-graph/metrics/builtin.toml`](https://github.com/code-ranker-com/code-ranker/blob/main/crates/code-ranker-graph/metrics/builtin.toml).
 
 **2. Language stack (rules/metrics/etc)** — `rules`, `metrics`, `principles`, `ignore`,
 `levels`, `report`, and all plugin-config keys live under `[plugins.<lang>]` /
@@ -97,7 +97,7 @@ The shared **metric catalog** (built-in derived metrics, aggregates, the default
 
 | Order | Layer | Source |
 |---|---|---|
-| base | built-in project defaults | [`crates/code-ranker-cli/src/config/defaults.toml`](https://github.com/ffedoroff/code-ranker/blob/main/crates/code-ranker-cli/src/config/defaults.toml) |
+| base | built-in project defaults | [`crates/code-ranker-cli/src/config/defaults.toml`](https://github.com/code-ranker-com/code-ranker/blob/main/crates/code-ranker-cli/src/config/defaults.toml) |
 | ⊕ | auto-discovered `code-ranker.toml` *(skipped if any `--config` file is passed)* | your repo |
 | ⊕ | `--config file1` ⊕ `file2` ⊕ … | **in command-line order, last wins** |
 | ⊕ | `--config KEY=VALUE` inline | after all files |

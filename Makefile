@@ -141,14 +141,14 @@ release:
 	  git push origin v$$VERSION; \
 	  echo; \
 	  echo "  ✓ tag v$$VERSION pushed — Verify is running (nothing published yet)"; \
-	  echo "  → watch:   gh run list --repo ffedoroff/code-ranker --limit 6"; \
+	  echo "  → watch:   gh run list --repo code-ranker-com/code-ranker --limit 6"; \
 	  echo "  → release: make publish   (only after Verify is green)"
 
 publish:
 	@VERSION=$$(grep -E '^version = "' Cargo.toml | head -1 | sed -E 's/version = "(.*)"/\1/'); \
 	  echo "dispatching Release for v$$VERSION (crates=$${CRATES:-true} pypi=$${PYPI:-true} docker=$${DOCKER:-true} github_release=$${GITHUB_RELEASE:-true})"; \
-	  gh workflow run publish.yml --repo ffedoroff/code-ranker \
+	  gh workflow run publish.yml --repo code-ranker-com/code-ranker \
 	    -f version="$$VERSION" \
 	    -f crates="$${CRATES:-true}" -f pypi="$${PYPI:-true}" \
 	    -f docker="$${DOCKER:-true}" -f github_release="$${GITHUB_RELEASE:-true}"; \
-	  echo "  ✓ dispatched — watch: gh run list --repo ffedoroff/code-ranker --limit 6"
+	  echo "  ✓ dispatched — watch: gh run list --repo code-ranker-com/code-ranker --limit 6"

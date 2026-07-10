@@ -1,7 +1,7 @@
 # code-ranker
 
-[![CI](https://github.com/ffedoroff/code-ranker/actions/workflows/ci.yml/badge.svg)](https://github.com/ffedoroff/code-ranker/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/ffedoroff/code-ranker/branch/main/graph/badge.svg)](https://codecov.io/gh/ffedoroff/code-ranker)
+[![CI](https://github.com/code-ranker-com/code-ranker/actions/workflows/ci.yml/badge.svg)](https://github.com/code-ranker-com/code-ranker/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/code-ranker-com/code-ranker/branch/main/graph/badge.svg)](https://codecov.io/gh/code-ranker-com/code-ranker)
 [![code-ranker](https://img.shields.io/endpoint?url=https://api.code-ranker.com/badge/ffedoroff/cr-smoke-test.json)](https://reports.code-ranker.com/r/ffedoroff/cr-smoke-test/latest)
 [![Crates.io](https://img.shields.io/crates/v/code-ranker.svg)](https://crates.io/crates/code-ranker)
 [![npm](https://img.shields.io/npm/v/code-ranker.svg)](https://www.npmjs.com/package/code-ranker)
@@ -95,7 +95,7 @@ Pick any channel — all ship the same `code-ranker` binary (Linux, macOS, Windo
 - **Cargo** — `cargo install code-ranker` · [crates.io](https://crates.io/crates/code-ranker)
 - **npm** — `npm install -g code-ranker` · [npm](https://www.npmjs.com/package/code-ranker)
 - **pip / uv / pipx** — `pip install code-ranker` · [PyPI](https://pypi.org/project/code-ranker/)
-- **Docker** — [Docker Hub](https://hub.docker.com/r/fedoroff/code-ranker) · [GHCR](https://github.com/ffedoroff/code-ranker/pkgs/container/code-ranker)
+- **Docker** — [Docker Hub](https://hub.docker.com/r/fedoroff/code-ranker) · [GHCR](https://github.com/code-ranker-com/code-ranker/pkgs/container/code-ranker)
 
 ## Quick start
 

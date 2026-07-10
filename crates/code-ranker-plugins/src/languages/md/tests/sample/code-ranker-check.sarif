@@ -33,14 +33,14 @@
       ],
       "tool": {
         "driver": {
-          "informationUri": "https://github.com/ffedoroff/code-ranker",
+          "informationUri": "https://github.com/code-ranker-com/code-ranker",
           "name": "code-ranker",
           "rules": [
             {
               "fullDescription": {
                 "text": "Links to a local file (not a URL or `#anchor`) that does not exist on disk. A documentation-quality signal — gate it to zero in `check`."
               },
-              "helpUri": "https://github.com/ffedoroff/code-ranker/blob/main/docs/code-ranker-cli/ERRORS.md#group-cpx",
+              "helpUri": "https://github.com/code-ranker-com/code-ranker/blob/main/docs/code-ranker-cli/ERRORS.md#group-cpx",
               "id": "threshold.file.broken_links",
               "properties": {
                 "group": "CPX"

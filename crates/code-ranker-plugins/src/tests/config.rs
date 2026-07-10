@@ -336,7 +336,7 @@ fn resolved_principles_inherit_catalog_and_resolve_doc_urls() {
     assert_eq!(cpx.label, "CPX");
     assert_eq!(
         cpx.doc_url.as_deref(),
-        Some("https://github.com/ffedoroff/code-ranker/blob/main/plugins/rust/CPX.md")
+        Some("https://github.com/code-ranker-com/code-ranker/blob/main/plugins/rust/CPX.md")
     );
 
     // Languages with no own principles inherit the full 13-entry catalog, and JS
@@ -354,7 +354,7 @@ fn resolved_principles_inherit_catalog_and_resolve_doc_urls() {
     assert_eq!(go.len(), 13);
     assert_eq!(
         go[0].doc_url.as_deref(),
-        Some("https://github.com/ffedoroff/code-ranker/blob/main/plugins/base/CPX.md")
+        Some("https://github.com/code-ranker-com/code-ranker/blob/main/plugins/base/CPX.md")
     );
     assert!(
         go.iter()

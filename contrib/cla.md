@@ -43,7 +43,7 @@ In this repository, on a dedicated branch:
 - **Branch:** `cla-signatures` (created by the bot on the first signature;
   it does not exist until then).
 - **File:** `signatures/version1/cla.json` —
-  <https://github.com/ffedoroff/code-ranker/blob/cla-signatures/signatures/version1/cla.json>
+  <https://github.com/code-ranker-com/code-ranker/blob/cla-signatures/signatures/version1/cla.json>
 
 The file is a JSON array with one record per signer: GitHub login, user id,
 the PR number where they signed, and the signing timestamp. Commits are made

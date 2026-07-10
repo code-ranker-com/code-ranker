@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 /// Base URL for the published docs. Diagnostics pointers (`ref` lines, SARIF
 /// `helpUri`) use absolute URLs so they're clickable from a terminal, a CI log,
 /// or a report — not just from a repo checkout.
-pub(crate) const DOCS_URL: &str = "https://github.com/ffedoroff/code-ranker/blob/main/docs";
+pub(crate) const DOCS_URL: &str = "https://github.com/code-ranker-com/code-ranker/blob/main/docs";
 
 /// The repo-relative path inside a violation `location` (`{target}/rel` →
 /// `rel`), or `None` when it has no file path (e.g. a cycle whose breaking edge
@@ -107,7 +107,7 @@ pub(crate) fn sarif_document(
         "runs": [{
             "tool": { "driver": {
                 "name": "code-ranker",
-                "informationUri": "https://github.com/ffedoroff/code-ranker",
+                "informationUri": "https://github.com/code-ranker-com/code-ranker",
                 "version": env!("CARGO_PKG_VERSION"),
                 "rules": rules,
             }},

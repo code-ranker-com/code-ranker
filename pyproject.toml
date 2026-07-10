@@ -26,8 +26,8 @@ classifiers = [
 ]
 
 [project.urls]
-Repository = "https://github.com/ffedoroff/code-ranker"
-Issues = "https://github.com/ffedoroff/code-ranker/issues"
+Repository = "https://github.com/code-ranker-com/code-ranker"
+Issues = "https://github.com/code-ranker-com/code-ranker/issues"
 
 [tool.maturin]
 bindings = "bin"

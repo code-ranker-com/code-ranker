@@ -5,7 +5,7 @@
       "results": [],
       "tool": {
         "driver": {
-          "informationUri": "https://github.com/ffedoroff/code-ranker",
+          "informationUri": "https://github.com/code-ranker-com/code-ranker",
           "name": "code-ranker",
           "rules": [],
           "version": "4.0.0"

@@ -7,7 +7,7 @@ a fast, memory-safe, single static-ish executable with **no runtime dependencies
 **Supported platforms:** Linux (x86_64, aarch64), macOS (x86_64, aarch64),
 Windows (x86_64).
 
-**Package pages:** [crates.io](https://crates.io/crates/code-ranker) · [npm](https://www.npmjs.com/package/code-ranker) · [PyPI](https://pypi.org/project/code-ranker/) · [Docker Hub](https://hub.docker.com/r/fedoroff/code-ranker) · [GHCR](https://github.com/ffedoroff/code-ranker/pkgs/container/code-ranker)
+**Package pages:** [crates.io](https://crates.io/crates/code-ranker) · [npm](https://www.npmjs.com/package/code-ranker) · [PyPI](https://pypi.org/project/code-ranker/) · [Docker Hub](https://hub.docker.com/r/fedoroff/code-ranker) · [GHCR](https://github.com/code-ranker-com/code-ranker/pkgs/container/code-ranker)
 
 ## Which channel?
 
@@ -19,7 +19,7 @@ the user has on PATH instead of introducing a new one:
 | Rust (a `Cargo.toml`) | Cargo | `cargo install code-ranker` |
 | Web / JavaScript / TypeScript (a `package.json`) | npm | `npm install -g code-ranker` |
 | Python (a `pyproject.toml` / `requirements.txt`) | pip / uv / pipx | `pip install code-ranker` |
-| CI / containers | Docker | `docker pull ghcr.io/ffedoroff/code-ranker` |
+| CI / containers | Docker | `docker pull ghcr.io/code-ranker-com/code-ranker` |
 | None of the above / no package manager | Shell installer | the universal one-liner below |
 
 It is the **same binary** regardless of channel, so the choice is purely about
@@ -29,10 +29,10 @@ convenience — pick whatever is already installed.
 
 ```sh
 # universal — shell installer that drops the prebuilt binary on PATH
-curl -fsSL https://github.com/ffedoroff/code-ranker/releases/latest/download/code-ranker-installer.sh | sh
+curl -fsSL https://github.com/code-ranker-com/code-ranker/releases/latest/download/code-ranker-installer.sh | sh
 
 # Windows
-powershell -ExecutionPolicy ByPass -c "irm https://github.com/ffedoroff/code-ranker/releases/latest/download/code-ranker-installer.ps1 | iex"
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/code-ranker-com/code-ranker/releases/latest/download/code-ranker-installer.ps1 | iex"
 
 # Rust (Cargo)
 cargo install code-ranker
@@ -47,7 +47,7 @@ pip install code-ranker
 docker pull fedoroff/code-ranker:latest
 
 # Docker (GHCR — no anonymous rate limits)
-docker pull ghcr.io/ffedoroff/code-ranker:latest
+docker pull ghcr.io/code-ranker-com/code-ranker:latest
 ```
 
 ## Verify

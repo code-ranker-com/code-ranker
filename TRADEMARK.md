@@ -35,4 +35,4 @@ objection under this policy.
 
 If you are unsure whether a use is allowed, or want permission for a use
 not covered above, contact the Owner via the project repository:
-https://github.com/ffedoroff/code-ranker
+https://github.com/code-ranker-com/code-ranker

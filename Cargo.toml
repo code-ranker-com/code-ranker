@@ -7,7 +7,7 @@ version = "5.0.3"
 edition = "2024"
 rust-version = "1.88"
 license = "Apache-2.0"
-repository = "https://github.com/ffedoroff/code-ranker"
+repository = "https://github.com/code-ranker-com/code-ranker"
 keywords = ["dependency-graph", "coupling", "refactoring", "code-quality", "static-analysis"]
 categories = ["development-tools", "command-line-utilities"]
 

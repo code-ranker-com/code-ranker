@@ -903,7 +903,7 @@
       },
       "principles": [
         {
-          "doc_url": "https://github.com/ffedoroff/code-ranker/blob/main/plugins/python/CPX.md",
+          "doc_url": "https://github.com/code-ranker-com/code-ranker/blob/main/plugins/python/CPX.md",
           "id": "CPX",
           "label": "CPX",
           "prompt": "These modules are too complex and I want to reduce their complexity.\nReduce it by splitting large units into smaller single-responsibility ones,\nextracting repeated patterns into shared helpers, flattening deeply nested\ncontrol flow, and breaking large functions into focused helpers.",
@@ -914,7 +914,7 @@
           "connections": [
             "common"
           ],
-          "doc_url": "https://github.com/ffedoroff/code-ranker/blob/main/plugins/python/ADP.md",
+          "doc_url": "https://github.com/code-ranker-com/code-ranker/blob/main/plugins/python/ADP.md",
           "id": "ADP",
           "label": "ADP",
           "prompt": "The dependency graph between modules must form a DAG. When module A depends\non module B, no chain of dependencies should bring B back to A.\n\nIdentify any cycles in the modules below. For each cycle, propose a concrete\nrefactoring (extract a shared abstraction, invert a dependency, split a module)\nthat makes the graph acyclic without breaking existing functionality.\n\nWhen splitting a module to break a cycle, the new structure should:\n- Preserve existing API contracts\n- Minimise coupling in the new structure\n- Follow the Single Responsibility Principle\n- Not introduce new dependency cycles",
@@ -926,7 +926,7 @@
             "in",
             "out"
           ],
-          "doc_url": "https://github.com/ffedoroff/code-ranker/blob/main/plugins/python/SRP.md",
+          "doc_url": "https://github.com/code-ranker-com/code-ranker/blob/main/plugins/python/SRP.md",
           "id": "SRP",
           "label": "SRP",
           "prompt": "A module should have one reason to change — it should serve one actor\nand encapsulate one coherent set of decisions.\n\nFor each module below, identify whether it has more than one responsibility.\nPropose how to split responsibilities so each module changes for only one reason,\nand specify the new module boundaries.",
@@ -934,7 +934,7 @@
           "title": "SRP — Single Responsibility Principle"
         },
         {
-          "doc_url": "https://github.com/ffedoroff/code-ranker/blob/main/plugins/python/OCP.md",
+          "doc_url": "https://github.com/code-ranker-com/code-ranker/blob/main/plugins/python/OCP.md",
           "id": "OCP",
           "label": "OCP",
           "prompt": "A module should be open for extension but closed for modification: new behaviour\nshould be addable without editing existing, working code.\n\nFor each module below, identify extension points that currently require editing\nexisting code (e.g. growing match/switch/if-else chains). Propose an extension\nmechanism (polymorphism, strategy, plug-in registration) so new cases can be added\nwithout modifying these modules.",
@@ -942,7 +942,7 @@
           "title": "OCP — Open/Closed Principle"
         },
         {
-          "doc_url": "https://github.com/ffedoroff/code-ranker/blob/main/plugins/python/LSP.md",
+          "doc_url": "https://github.com/code-ranker-com/code-ranker/blob/main/plugins/python/LSP.md",
           "id": "LSP",
           "label": "LSP",
           "prompt": "Every implementation of an interface must honour its full contract — return-value\ninvariants, error/exception behaviour, side effects, and resource ownership — not\njust the method signatures. A subtype must be substitutable for its base without\nsurprising callers.\n\nIdentify the interface implementations in the modules below. For each, check it can\nreplace any other implementation of the same interface without breaking callers.\nFlag violations and propose fixes.",
@@ -953,7 +953,7 @@
           "connections": [
             "in"
           ],
-          "doc_url": "https://github.com/ffedoroff/code-ranker/blob/main/plugins/python/ISP.md",
+          "doc_url": "https://github.com/code-ranker-com/code-ranker/blob/main/plugins/python/ISP.md",
           "id": "ISP",
           "label": "ISP",
           "prompt": "Clients should not be forced to depend on methods they do not use. Prefer several\nsmall, focused interfaces over one wide interface.\n\nIdentify interfaces in the modules below that are wider than their consumers need.\nPropose how to split them into narrower interfaces so each consumer depends only on\nwhat it actually uses.",
@@ -965,7 +965,7 @@
             "common",
             "out"
           ],
-          "doc_url": "https://github.com/ffedoroff/code-ranker/blob/main/plugins/python/DIP.md",
+          "doc_url": "https://github.com/code-ranker-com/code-ranker/blob/main/plugins/python/DIP.md",
           "id": "DIP",
           "label": "DIP",
           "prompt": "High-level modules should not depend on low-level modules; both should depend on\nabstractions, and abstractions should not depend on details.\n\nFind places in the modules below where a high-level module depends directly on a\nconcrete low-level type. Propose an abstraction (interface) to invert each such\ndependency, and specify where the concrete implementation should be wired in.",
@@ -973,7 +973,7 @@
           "title": "DIP — Dependency Inversion Principle"
         },
         {
-          "doc_url": "https://github.com/ffedoroff/code-ranker/blob/main/plugins/python/DRY.md",
+          "doc_url": "https://github.com/code-ranker-com/code-ranker/blob/main/plugins/python/DRY.md",
           "id": "DRY",
           "label": "DRY",
           "prompt": "Every piece of knowledge must have a single authoritative representation.\nDRY is about knowledge duplication, not just code duplication.\n\nIdentify concepts, rules, or policies that are duplicated across the modules\nbelow. For each duplication, propose a canonical location and the refactoring\nneeded to consolidate it.",
@@ -981,7 +981,7 @@
           "title": "DRY — Don't Repeat Yourself"
         },
         {
-          "doc_url": "https://github.com/ffedoroff/code-ranker/blob/main/plugins/python/KISS.md",
+          "doc_url": "https://github.com/code-ranker-com/code-ranker/blob/main/plugins/python/KISS.md",
           "id": "KISS",
           "label": "KISS",
           "prompt": "When two designs solve the same problem, prefer the simpler one — fewer\nabstractions, fewer indirection layers, fewer moving parts.\n\nIdentify over-engineered or needlessly complex constructs in the modules below.\nFor each, describe the simpler alternative and estimate the risk of simplifying.",
@@ -993,7 +993,7 @@
             "common",
             "out"
           ],
-          "doc_url": "https://github.com/ffedoroff/code-ranker/blob/main/plugins/python/LoD.md",
+          "doc_url": "https://github.com/code-ranker-com/code-ranker/blob/main/plugins/python/LoD.md",
           "id": "LoD",
           "label": "LoD",
           "prompt": "A method should only call methods on: itself, its direct fields,\nits parameters, and objects it constructs locally.\nAvoid `x.foo().bar().baz()` chains that traverse object graphs.\n\nIdentify method chains or deep field traversals in the modules below that\nviolate LoD. For each, propose a narrow accessor or a facade that exposes only\nwhat the caller needs, reducing coupling.",
@@ -1001,7 +1001,7 @@
           "title": "Law of Demeter — Principle of Least Knowledge"
         },
         {
-          "doc_url": "https://github.com/ffedoroff/code-ranker/blob/main/plugins/python/MISU.md",
+          "doc_url": "https://github.com/code-ranker-com/code-ranker/blob/main/plugins/python/MISU.md",
           "id": "MISU",
           "label": "MISU",
           "prompt": "Move correctness from runtime checks into the type system, so invalid states\ncannot be constructed and fail at compile time rather than at runtime.\n\nIdentify data structures or function signatures in the modules below where invalid\nstates are representable at runtime. For each, propose a type-level encoding\n(sum type / enum, newtype, typestate) that makes the invalid state unrepresentable\nby construction.",
@@ -1012,7 +1012,7 @@
           "connections": [
             "common"
           ],
-          "doc_url": "https://github.com/ffedoroff/code-ranker/blob/main/plugins/python/CoI.md",
+          "doc_url": "https://github.com/code-ranker-com/code-ranker/blob/main/plugins/python/CoI.md",
           "id": "CoI",
           "label": "CoI",
           "prompt": "Build behaviour by composing small, focused pieces rather than through deep\ninheritance hierarchies.\n\nIdentify large types that accumulate behaviour in the modules below. Propose how to\ndecompose them into smaller composable parts, and show how consumers would assemble\nthe behaviour they need.",
@@ -1023,7 +1023,7 @@
           "connections": [
             "out"
           ],
-          "doc_url": "https://github.com/ffedoroff/code-ranker/blob/main/plugins/python/YAGNI.md",
+          "doc_url": "https://github.com/code-ranker-com/code-ranker/blob/main/plugins/python/YAGNI.md",
           "id": "YAGNI",
           "label": "YAGNI",
           "prompt": "Build for the problem you have now, not one you imagine you might have later.\nDon't add an abstraction, a generic parameter, or a public API for a hypothetical\nfuture use.\n\nIdentify abstractions, generics, or public APIs in the modules below that were\nadded speculatively. For each, assess whether multiple real callers use it today,\nand propose simplification if not.",

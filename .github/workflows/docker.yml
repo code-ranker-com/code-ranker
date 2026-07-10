@@ -37,7 +37,7 @@ jobs:
       - name: Check the release binaries exist
         run: |
           v="${{ inputs.version }}"
-          base="https://github.com/ffedoroff/code-ranker/releases/download/v${v}"
+          base="https://github.com/code-ranker-com/code-ranker/releases/download/v${v}"
           # Ordering is handled upstream: publish.yml waits for the Release
           # workflow to finish before it dispatches Docker, so the binaries the
           # Dockerfile downloads are already uploaded. This is a fast one-shot

@@ -26,12 +26,12 @@ RUN case "$TARGETARCH" in \
       arm64) RUST_ARCH=aarch64-unknown-linux-gnu ;; \
       *) echo "unsupported TARGETARCH=$TARGETARCH" && exit 1 ;; \
     esac && \
-    curl -fsSL "https://github.com/ffedoroff/code-ranker/releases/download/v${VERSION}/code-ranker-${RUST_ARCH}.tar.xz" | tar -xJC /tmp && \
+    curl -fsSL "https://github.com/code-ranker-com/code-ranker/releases/download/v${VERSION}/code-ranker-${RUST_ARCH}.tar.xz" | tar -xJC /tmp && \
     install -m 0755 "/tmp/code-ranker-${RUST_ARCH}/code-ranker" /usr/local/bin/code-ranker
 
 FROM gcr.io/distroless/cc-debian12
 
-LABEL org.opencontainers.image.source="https://github.com/ffedoroff/code-ranker"
+LABEL org.opencontainers.image.source="https://github.com/code-ranker-com/code-ranker"
 LABEL org.opencontainers.image.description="Polyglot structural-analysis platform"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 

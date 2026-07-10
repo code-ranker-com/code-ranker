@@ -6,7 +6,7 @@ on:
   push:
 jobs:
   code-ranker:
-    uses: ffedoroff/code-ranker-ci/.github/workflows/report.yml@main
+    uses: code-ranker-com/actions/.github/workflows/report.yml@main
     with:
       install_from_source: true   # build code-ranker from this checkout
       do_check: true              # gate on regressions vs the default-branch baseline

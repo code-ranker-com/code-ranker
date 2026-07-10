@@ -60,14 +60,14 @@
       ],
       "tool": {
         "driver": {
-          "informationUri": "https://github.com/ffedoroff/code-ranker",
+          "informationUri": "https://github.com/code-ranker-com/code-ranker",
           "name": "code-ranker",
           "rules": [
             {
               "fullDescription": {
                 "text": "Three or more units form a strongly-connected component (A → B → C → A); the whole component must be loaded and changed together, defeating modular boundaries."
               },
-              "helpUri": "https://github.com/ffedoroff/code-ranker/blob/main/docs/code-ranker-cli/ERRORS.md#group-cyc",
+              "helpUri": "https://github.com/code-ranker-com/code-ranker/blob/main/docs/code-ranker-cli/ERRORS.md#group-cyc",
               "id": "cycle.chain",
               "properties": {
                 "group": "CYC"
@@ -80,7 +80,7 @@
               "fullDescription": {
                 "text": "Two units import each other (A ↔ B), so neither can be built, tested, or understood in isolation — the tightest possible coupling."
               },
-              "helpUri": "https://github.com/ffedoroff/code-ranker/blob/main/docs/code-ranker-cli/ERRORS.md#group-cyc",
+              "helpUri": "https://github.com/code-ranker-com/code-ranker/blob/main/docs/code-ranker-cli/ERRORS.md#group-cyc",
               "id": "cycle.mutual",
               "properties": {
                 "group": "CYC"

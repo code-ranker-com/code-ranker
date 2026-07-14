@@ -51,14 +51,12 @@ pub(super) fn file_to_module_path(workspace: &Path, path: &Path) -> Option<Strin
     let last = parts.last_mut()?;
     if *last == MODULE.package_init_file {
         parts.pop();
-    } else if let Some(stem) = MODULE
-        .dot_exts
-        .iter()
-        .find_map(|e| last.strip_suffix(e.as_str()))
-    {
-        *last = stem.to_string();
     } else {
-        return None;
+        let stem = MODULE
+            .dot_exts
+            .iter()
+            .find_map(|e| last.strip_suffix(e.as_str()))?;
+        *last = stem.to_string();
     }
 
     if parts.is_empty() {

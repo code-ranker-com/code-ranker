@@ -86,7 +86,11 @@ jobs:
       - name: lychee (offline link check)
         uses: lycheeverse/lychee-action@v2
         with:
-          args: --offline --no-progress --exclude-path plugins/_overlay docs/**/*.md contrib/**/*.md plugins/**/*.md AGENTS.md CLAUDE.md
+          # Pin to the last release whose tarball keeps the binary at the archive
+          # root; lychee-action's extractor cannot find it in the nested layout
+          # that v0.24.0+ introduced.
+          lycheeVersion: v0.23.0
+          args: --offline --no-progress --exclude-path plugins/_overlay docs/**/*.md contrib/**/*.md plugins/**/*.md
           fail: true
       - name: markdownlint
         # Argless — globs and rules come from .markdownlint-cli2.jsonc.

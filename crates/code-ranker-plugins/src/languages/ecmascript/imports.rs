@@ -212,10 +212,9 @@ pub(super) fn resolve_import(
 ) -> Option<PathBuf> {
     let base_path: PathBuf = if specifier.starts_with("./") || specifier.starts_with("../") {
         from_file.parent()?.join(specifier)
-    } else if let Some(rest) = specifier.strip_prefix(MODULE.alias_prefix.as_str()) {
-        alias_root.join(rest)
     } else {
-        return None;
+        let rest = specifier.strip_prefix(MODULE.alias_prefix.as_str())?;
+        alias_root.join(rest)
     };
 
     let normalized = normalize_path(&base_path);

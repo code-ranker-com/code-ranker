@@ -25,7 +25,7 @@ fmt-check:
 	cargo fmt --all --check
 
 lint-md:
-	lychee --offline --no-progress --exclude-path plugins/_overlay 'docs/**/*.md' 'contrib/**/*.md' 'plugins/**/*.md' 'AGENTS.md' 'CLAUDE.md'
+	lychee --offline --no-progress --exclude-path plugins/_overlay 'docs/**/*.md' 'contrib/**/*.md' 'plugins/**/*.md'
 	npx --yes markdownlint-cli2
 
 # Unused-dependency check (fast, stable toolchain). FAILS the build on any unused

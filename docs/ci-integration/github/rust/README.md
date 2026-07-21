@@ -21,9 +21,15 @@ and adjust the `runs-on` / install step.
 
 > **Prefer zero config?** Install the
 > **[code-ranker GitHub App](https://github.com/apps/code-ranker-app/installations/new)**
-> instead — it runs the analysis and publishes the per-PR HTML report for you,
-> with no workflow YAML to maintain. The two modes below are for self-hosted CI
-> control. More at [code-ranker.com](https://code-ranker.com).
+> instead. Its onboarding PR adds a thin workflow pinned to the reusable
+> workflow in [`code-ranker-com/actions`](https://github.com/code-ranker-com/actions),
+> which needs only `id-token: write`, `contents: read`, and
+> `security-events: write` — **no** `pull-requests: write`. The code-ranker
+> GitHub App itself posts and keeps updated a single HTML-report comment per
+> pull request, for same-repo **and fork** PRs alike (a fork's report is
+> published as a build artifact and picked up backend-side via a webhook — no
+> extra client workflow, and never `pull_request_target`). The two modes below
+> are for self-hosted CI control instead. More at [code-ranker.com](https://code-ranker.com).
 
 ---
 

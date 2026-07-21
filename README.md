@@ -66,7 +66,7 @@ The linter is the `check` command — exits non-zero on any cycle or threshold v
 
 **Add it to your pipeline today** — one `code-ranker check` step stops new cycles and bloat from ever landing.
 
-Prefer zero config? **[Install the GitHub App](https://github.com/apps/code-ranker-app/installations/new)** — it publishes a per-PR HTML structural report on every pull request, no workflow YAML to write. More at **[code-ranker.com](https://code-ranker.com)**.
+Prefer zero config? **[Install the GitHub App](https://github.com/apps/code-ranker-app/installations/new)** — its onboarding PR drops in a thin, pinned workflow, then the App itself posts (and keeps updated) one HTML structural report comment per pull request — same-repo **and fork** PRs alike, no `pull-requests: write` permission or secrets on your side. More at **[code-ranker.com](https://code-ranker.com)**.
 
 ## Full CLI
 

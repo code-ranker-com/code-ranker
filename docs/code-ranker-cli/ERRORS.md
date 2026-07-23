@@ -48,11 +48,17 @@ severity); it never changes the exit code.
 These are operational errors (exit `1`), reported as a plain message — not a rule
 id. `code-ranker` analyzes every relevant language in one run, so a project with
 several languages is **normal** and never an error; resolution fails only in these
-cases:
+cases.
+
+**Not** one of these cases, since 5.0.4: auto-detect matching **no** language at
+all, with nothing pinned via `--plugins`/config. That is a graceful no-op —
+`report`/`check` exit `0` (an empty snapshot / zero violations) with an
+informational stderr notice — not a resolution failure. See [CLI.md § Plugin
+resolution](CLI.md#plugin-resolution).
 
 | Error | When | Fix |
 |-------|------|-----|
-| **could not determine any language** | Auto-detect matches no plugin in the workspace (no `Cargo.toml` / `pyproject.toml` / `package.json` / … marker, or all overridden markers miss). | Name the language(s) explicitly: `[plugins] enabled = ["<name>"]` in `code-ranker.toml`, or `--plugins <name>`. |
+| **all detected languages produced empty graphs** | A language was named explicitly (`--plugins` / `[plugins].enabled`) or auto-detected via a project marker, but every one of them matched zero files (after `[ignore]`/`.gitignore` filtering). | Pin the correct language, adjust `extensions`/`detect_markers`, or check that `[ignore]` isn't excluding every file. |
 | **legacy `plugin` key** | The old scalar `plugin = "..."` key appears in `code-ranker.toml` / `Cargo.toml` metadata. | Replace it with `[plugins] enabled = ["<name>", …]`. |
 | **extension claimed by two plugins** | Two active plugins claim the same file extension (e.g. `.h` by both `c` and `cpp`). Raised at startup, before analysis — one file maps to exactly one language. | Drop one language from `[plugins].enabled`, or override `extensions` in `[plugins.<lang>]` so the file sets are disjoint. |
 | **invalid `--plugins`** | A name in `--plugins` (or the config `[plugins].enabled` list) is not a known language or alias. | Use a built-in language name (`rust`, `python`, `js`, …) or an alias (`rs`, `py`, `javascript`, …); `code-ranker docs` lists all with their aliases. |

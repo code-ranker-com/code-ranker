@@ -729,11 +729,24 @@ is dropped with a `produced no nodes` warning.
 **Invariant: one file ↔ exactly one language.** The active plugins' file sets are
 disjoint.
 
+Since 5.0.4, **auto-detect finding no language is not an error**: when no plugin's
+`detect()` matches and no language was pinned via `--plugins`/config, `report`/`check`
+treat the directory as nothing to analyze rather than failing. Both exit `0`; `report`
+writes an empty snapshot (`languages: {}`, `plugins: []`); `check` reports zero
+violations; and an informational notice goes to stderr, e.g. *"notice: no supported
+language detected in `<workspace>`; nothing to analyze → or pin the language in
+config: ..."*. This makes the tool safe to run unconditionally in CI, even against a
+docs-only, empty, or license-only repo. A language pinned **explicitly** that still
+matches no files is unaffected — see the first error below.
+
 Errors:
 
-- **No language detected** — auto-detect matches nothing: *"could not determine any
-  language in `<workspace>`; specify `[plugins] enabled = ["<name>"]` in code-ranker.toml or
-  `--plugins <name>`"*.
+- **All active languages produced empty graphs** — a language was pinned explicitly
+  (`--plugins`/config) or auto-detected via a project marker, but every one matched
+  zero files (after `[ignore]`/`.gitignore` filtering): *"all detected languages
+  produced empty graphs in `<target>` — no source files were analysed"*. Unlike the
+  auto-detect no-op above, this stays a hard error — a mismatch here is very likely a
+  config mistake, not an empty repo.
 - **Legacy `plugin` key** — the scalar `plugin = "..."` config key is not recognized;
   the error points to `[plugins] enabled = [...]`.
 - **Extension conflict** — two active plugins claim the same file extension; a startup
@@ -817,8 +830,8 @@ code-ranker report --config output.html.path=dist/report.html
 
 | Code | Meaning |
 |---|---|
-| 0 | `check` passed (no violations, or `--exit-zero`); `report` completed successfully. |
-| 1 | Any failure — a `check` violation (cycle, threshold, or regression, without `--exit-zero`) **or** a runtime error (IO / plugin failure, no language detected, an extension claimed by two plugins, a cross-language `--prompt`/`--focus` needing `--language`, malformed config, analysis flags passed with a snapshot input). |
+| 0 | `check` passed (no violations, or `--exit-zero`); `report` completed successfully — including the no-op case where auto-detect finds no supported language and none was pinned (empty snapshot, `languages: {}`; a stderr notice explains why — see [Plugin resolution](#plugin-resolution)). |
+| 1 | Any failure — a `check` violation (cycle, threshold, or regression, without `--exit-zero`) **or** a runtime error (IO / plugin failure, all active languages produced empty graphs, an extension claimed by two plugins, a cross-language `--prompt`/`--focus` needing `--language`, malformed config, analysis flags passed with a snapshot input). |
 | 2 | Argument-parsing error (unknown flag, missing required option, bad value) — emitted by the CLI parser before any work runs. |
 
 `check` does **not** use a distinct exit code for "violation found" vs "tool

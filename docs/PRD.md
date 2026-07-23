@@ -289,9 +289,12 @@ the lower (no merge), highest wins:
 3. **`--plugins <a,b,...>`** on the command line (highest) → that list verbatim.
 
 A language whose graph comes out empty is dropped. If **zero** languages are
-detected and none is configured, the analyzing command MUST exit non-zero with a
-human-readable error naming the valid plugins and asking for `[plugins].enabled` /
-`--plugins`. Two active plugins claiming the same file extension is a startup
+auto-detected and none is configured, the analyzing command is a **no-op success**
+(since 5.0.4): it exits 0 and writes an empty snapshot (`languages: {}`), logging a
+notice to stderr — a repository with no supported language is "nothing to analyze",
+not an error. If a language **is** pinned (`[plugins].enabled` / `--plugins`) but
+every active plugin produces an empty graph, that remains a hard error naming the
+valid plugins. Two active plugins claiming the same file extension is a startup
 error before analysis (one file maps to exactly one language). The scalar
 `plugin` config key is not recognized — it errors pointing to `[plugins].enabled`.
 

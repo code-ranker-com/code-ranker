@@ -972,10 +972,20 @@ Two active plugins that claim the same extension is a startup error (before
 analysis), e.g. "extension `.h` is claimed by both `c` and `cpp` — adjust
 `extensions`/`plugins`".
 
+**Since 5.0.4, zero languages auto-detected is not an error.** When auto-detect
+matches no plugin and none was pinned via `--plugins`/config, `resolve_plugins`
+returns an empty list instead of erroring (logging an explanatory stderr notice),
+and `analyze_directory` turns that into a successful no-op: `report` writes an
+empty snapshot (`languages: {}`, `plugins: []`), `check` reports zero violations,
+both exit `0`. A language pinned **explicitly** that still matches no files is
+unaffected — see the first error below.
+
 **Errors:**
 
-- Zero languages detected → "could not determine any language in `<workspace>`;
-  specify `[plugins] enabled = ["<name>"]` in code-ranker.toml or `--plugins <name>`".
+- All active languages produced empty graphs (a language was pinned explicitly or
+  auto-detected via a project marker, but every one matched zero files) → "all
+  detected languages produced empty graphs in `<target>` — no source files were
+  analysed".
 - The scalar `plugin` config key is not recognized → error pointing to
   `[plugins].enabled`.
 

@@ -2017,28 +2017,90 @@ fn output_mode_verbose_emits_the_startup_line() {
     );
 }
 
-/// `report` on a directory with no plugin marker (and no `--plugin`) fails at
-/// plugin resolution inside the pipeline — the `?` on `resolve_plugin`. The error
-/// guides the user to pin a language (the same diagnostic `check` gives).
+/// `report` on a directory with no plugin marker (and no `--plugins`) is a
+/// graceful no-op for this advisory tool: "nothing supported here" means
+/// "nothing to analyze", not a failure. It exits 0, writes a valid empty
+/// snapshot (`languages: {}`, `plugins: []`), and explains why on stderr —
+/// e.g. a repo shipping only `LICENSE`/`NOTICE` with no supported source.
 #[test]
-fn report_fails_when_no_plugin_resolves() {
+fn report_no_op_when_no_plugin_resolves() {
     let dir = tempfile::tempdir().expect("temp dir");
-    // An empty directory: config loads (defaults), but no project marker matches,
-    // so plugin auto-detection fails before any analysis runs.
+    std::fs::write(dir.path().join("LICENSE"), "MIT License text").unwrap();
+    std::fs::write(dir.path().join("NOTICE"), "Copyright notice").unwrap();
+    let out = dir.path().join("out.json");
     let res = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
         .current_dir(dir.path())
         .arg("report")
         .arg(".")
+        .arg(format!("--output.json.path={}", out.display()))
+        .output()
+        .expect("spawn report");
+    let stderr = String::from_utf8_lossy(&res.stderr);
+    assert!(
+        res.status.success(),
+        "report must succeed (exit 0) as a no-op when no supported language is found: {stderr}"
+    );
+    assert!(
+        stderr.contains("no supported language") || stderr.contains("nothing to analyze"),
+        "stderr should explain why the snapshot is empty: {stderr}"
+    );
+    let v: Value = serde_json::from_str(&std::fs::read_to_string(&out).unwrap())
+        .expect("snap.json must be valid JSON");
+    assert_eq!(
+        v["languages"],
+        serde_json::json!({}),
+        "no supported language → empty languages map: {v}"
+    );
+    assert_eq!(
+        v["plugins"].as_array().unwrap().len(),
+        0,
+        "no supported language → empty plugins list: {v}"
+    );
+}
+
+/// `check` on the same no-language directory: nothing to violate, so it exits 0
+/// with zero findings rather than erroring.
+#[test]
+fn check_no_op_when_no_plugin_resolves() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    std::fs::write(dir.path().join("LICENSE"), "MIT License text").unwrap();
+    std::fs::write(dir.path().join("NOTICE"), "Copyright notice").unwrap();
+    let res = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
+        .current_dir(dir.path())
+        .arg("check")
+        .arg(".")
+        .output()
+        .expect("spawn check");
+    let stderr = String::from_utf8_lossy(&res.stderr);
+    assert!(
+        res.status.success(),
+        "check must succeed (exit 0) as a no-op when no supported language is found: {stderr}"
+    );
+}
+
+/// An explicitly-pinned language (`--plugins`) that finds no matching files is a
+/// SEPARATE case from the auto-detect no-op above: it stays a hard, actionable
+/// error (very likely a config mistake), not a silently empty snapshot.
+#[test]
+fn report_still_errors_when_explicit_plugin_finds_nothing() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    std::fs::write(dir.path().join("LICENSE"), "MIT License text").unwrap();
+    let res = Command::new(env!("CARGO_BIN_EXE_code-ranker"))
+        .current_dir(dir.path())
+        .arg("report")
+        .arg(".")
+        .arg("--plugins")
+        .arg("md")
         .output()
         .expect("spawn report");
     assert!(
         !res.status.success(),
-        "report must fail when no plugin resolves"
+        "an explicitly-pinned language that matches nothing must still fail"
     );
     let stderr = String::from_utf8_lossy(&res.stderr);
     assert!(
-        stderr.contains("auto-detect") || stderr.contains("--plugin"),
-        "error points at pinning a language: {stderr}"
+        stderr.contains("produced empty graphs"),
+        "error names the cause: {stderr}"
     );
 }
 

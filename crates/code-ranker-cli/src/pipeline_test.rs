@@ -247,3 +247,44 @@ fn analyze_directory_errors_when_all_plugins_are_empty() {
         "all-empty bail names the cause: {err}"
     );
 }
+
+/// A directory with no supported language and NO explicit `--plugins`/config —
+/// e.g. a repo shipping only `LICENSE`/`NOTICE` — is a graceful no-op for this
+/// advisory tool: `analyze_directory` succeeds with an empty snapshot
+/// (`languages: {}`, `plugins: []`, 0 violations) rather than erroring. Contrast
+/// with `analyze_directory_errors_when_all_plugins_are_empty` above, where the
+/// language WAS pinned explicitly and the empty result stays a hard error.
+#[test]
+fn analyze_directory_no_op_when_auto_detect_finds_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("LICENSE"), "MIT License text").unwrap();
+    fs::write(dir.path().join("NOTICE"), "Copyright notice").unwrap();
+    let args = AnalyzeArgs {
+        input: dir.path().to_path_buf(),
+        plugins: vec![],
+        config: vec![],
+        ignore_paths: vec![],
+        git_branch: None,
+        git_commit: None,
+        git_dirty_files: None,
+        git_origin: None,
+    };
+    let analyzed = analyze_directory(&args, &[], &[]).expect("no-op should succeed, not error");
+    assert!(
+        analyzed.snapshot.languages.is_empty(),
+        "no supported language detected → empty languages map"
+    );
+    assert!(
+        analyzed.snapshot.plugins.is_empty(),
+        "no supported language detected → empty plugins list"
+    );
+    assert!(
+        analyzed.violations.is_empty(),
+        "nothing analyzed → zero violations"
+    );
+    assert_eq!(
+        analyzed.snapshot.schema_version,
+        code_ranker_graph::snapshot::SCHEMA_VERSION,
+        "the no-op snapshot still carries the current schema version"
+    );
+}

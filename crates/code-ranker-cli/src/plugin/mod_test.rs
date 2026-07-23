@@ -146,8 +146,7 @@ fn resolve_plugins_precedence() {
         d.path(),
         &input,
         None,
-    )
-    .unwrap();
+    );
     assert_eq!(result, vec!["rust"], "console --plugins wins");
 
     // Config plugins win over auto-detect.
@@ -158,12 +157,11 @@ fn resolve_plugins_precedence() {
         d.path(),
         &input,
         None,
-    )
-    .unwrap();
+    );
     assert_eq!(result, vec!["rust"], "config plugins win over auto-detect");
 
     // Auto-detect runs when neither console nor config provides a list.
-    let result = resolve_plugins(&[], &[], &eff_cfgs, d.path(), &input, None).unwrap();
+    let result = resolve_plugins(&[], &[], &eff_cfgs, d.path(), &input, None);
     assert!(
         result.contains(&"python".to_string()),
         "auto-detect picks up pyproject.toml"
@@ -191,14 +189,16 @@ fn aliases_resolve_to_canonical() {
         d.path(),
         &PluginInput::default(),
         None,
-    )
-    .unwrap();
+    );
     assert_eq!(result, vec!["js", "python"]);
 }
 
-/// `resolve_plugins` errors on zero detection (with a config hint).
+/// `resolve_plugins` returns an empty list (NOT an error) on zero detection when
+/// no language was pinned via `--plugins`/config — the auto-detect-empty case is
+/// a graceful no-op for this advisory tool (see `pipeline::analyze_directory`,
+/// which turns this into an empty snapshot / zero violations, exit 0).
 #[test]
-fn resolve_plugins_errors_on_zero_detection() {
+fn resolve_plugins_returns_empty_on_zero_detection() {
     let d = tempfile::tempdir().unwrap();
     let eff_cfgs: BTreeMap<String, toml::Table> = registry()
         .iter()
@@ -217,23 +217,16 @@ fn resolve_plugins_errors_on_zero_detection() {
         d.path(),
         &PluginInput::default(),
         Some("/proj/code-ranker.toml"),
-    )
-    .unwrap_err();
-    let msg = format!("{with_cfg:#}");
-    assert!(
-        msg.contains("plugins = ["),
-        "zero-detect error should mention plugins = [...]: {msg}"
     );
     assert!(
-        msg.contains("/proj/code-ranker.toml"),
-        "error should reference the config file: {msg}"
+        with_cfg.is_empty(),
+        "zero detection resolves to an empty plugin list, not an error"
     );
 
-    let no_cfg =
-        resolve_plugins(&[], &[], &eff_cfgs, d.path(), &PluginInput::default(), None).unwrap_err();
+    let no_cfg = resolve_plugins(&[], &[], &eff_cfgs, d.path(), &PluginInput::default(), None);
     assert!(
-        format!("{no_cfg:#}").contains("code-ranker.toml"),
-        "no-config case suggests creating a config: {no_cfg:#}"
+        no_cfg.is_empty(),
+        "zero detection resolves to an empty plugin list, not an error, even without a config file"
     );
 }
 

@@ -342,7 +342,9 @@ pub(crate) fn analyze_directory(
         })
         .collect();
 
-    // Resolve the active plugin list (console > config > auto-detect).
+    // Resolve the active plugin list (console > config > auto-detect). An empty
+    // result here means "no supported language, and none was pinned explicitly"
+    // — a graceful no-op (see below), not an error.
     let active_plugins = plugin::resolve_plugins(
         &args.plugins,
         &cfg.plugins.enabled,
@@ -350,7 +352,7 @@ pub(crate) fn analyze_directory(
         &target,
         &input,
         loaded.source_file.as_deref(),
-    )?;
+    );
 
     // Guard: no two active plugins may claim the same file extension.
     let active_eff_cfgs: BTreeMap<String, toml::Table> = active_plugins
@@ -414,7 +416,18 @@ pub(crate) fn analyze_directory(
         );
     }
 
-    if languages.is_empty() {
+    // Two distinct causes land in an empty `languages` map, and only one is a
+    // no-op:
+    //   - `active_plugins` was already empty (auto-detect found nothing, and no
+    //     language was pinned via `--plugins`/config) — nothing to analyze is
+    //     the expected outcome for an advisory tool, not a failure.
+    //     `resolve_plugins` already logged why; fall through and build an empty
+    //     snapshot (`languages: {}`, 0 violations) below.
+    //   - `active_plugins` was non-empty (a language WAS pinned or detected via
+    //     project markers) but every one of them produced zero nodes — that is
+    //     very likely a misconfiguration (e.g. `--plugins rust` on a tree with
+    //     no `.rs` files) and stays a hard error.
+    if languages.is_empty() && !active_plugins.is_empty() {
         anyhow::bail!(
             "all detected languages produced empty graphs in {} — \
              no source files were analysed",

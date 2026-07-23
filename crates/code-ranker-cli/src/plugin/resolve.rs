@@ -5,7 +5,7 @@
 //! dispatch in [`super`] so neither concern carries the other's dependencies.
 
 use super::registry;
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, bail};
 use code_ranker_graph::version::CONFIG_VERSION;
 use code_ranker_plugin_api::{plugin::PluginInput, toml_merge::deep_merge};
 use std::collections::BTreeMap;
@@ -145,7 +145,14 @@ static EMPTY_TABLE: std::sync::LazyLock<toml::Table> = std::sync::LazyLock::new(
 ///   2. config `plugins` — replaces auto-detect.
 ///   3. console `--plugins` (`arg`) — replaces config.
 ///
-/// An empty `detect_all` result (no markers found) → `Err` with a zero-detect message.
+/// An empty `detect_all` result (no project markers found, and no language pinned
+/// via `--plugins`/config) is NOT an error for this advisory tool — "nothing
+/// supported here" simply means "nothing to analyze". Returns an empty `Vec` and
+/// logs an informational notice to stderr; the caller (`analyze_directory`) turns
+/// that into a successful no-op (an empty snapshot / zero violations) instead of
+/// failing the run. Contrast with a language pinned EXPLICITLY (`--plugins` or
+/// config) that fails to resolve or match any file: that remains a hard error,
+/// handled downstream (a likely config mistake should not be swallowed).
 pub fn resolve_plugins(
     arg: &[String],
     cfg_plugins: &[String],
@@ -153,27 +160,27 @@ pub fn resolve_plugins(
     workspace: &Path,
     input: &PluginInput,
     config_file: Option<&str>,
-) -> Result<Vec<String>> {
+) -> Vec<String> {
     // Console wins outright. Resolve aliases (`js` → `javascript`) so the active
     // set — and therefore the snapshot keys — are always canonical.
     if !arg.is_empty() {
-        return Ok(arg.iter().map(|t| to_canonical(t)).collect());
+        return arg.iter().map(|t| to_canonical(t)).collect();
     }
     // Config wins over auto-detect.
     if !cfg_plugins.is_empty() {
-        return Ok(cfg_plugins.iter().map(|t| to_canonical(t)).collect());
+        return cfg_plugins.iter().map(|t| to_canonical(t)).collect();
     }
-    // Auto-detect: error on empty result.
+    // Auto-detect: an empty result is a graceful no-op (see doc comment above),
+    // not an error — just tell the user why nothing came out of it.
     let detected = detect_all(eff_cfgs, workspace, input);
     if detected.is_empty() {
-        let e = anyhow!(
-            "could not auto-detect any language in {}: no project markers found \
-             (for C/C++ projects, no source files with the expected extensions were found)",
-            workspace.display()
-        );
-        return Err(with_config_hint(e, config_file));
+        crate::logger::summary(&format!(
+            "notice: no supported language detected in {}; nothing to analyze{}",
+            workspace.display(),
+            pin_hint(config_file)
+        ));
     }
-    Ok(detected)
+    detected
 }
 
 /// Startup guard: for the ACTIVE plugins, build a map `extension → [plugin names]`
@@ -213,8 +220,11 @@ pub fn validate_extension_uniqueness(
     Ok(())
 }
 
-/// Augment a failed-detection error with how to pin the languages in config.
-fn with_config_hint(e: anyhow::Error, config_file: Option<&str>) -> anyhow::Error {
+/// How to pin a language explicitly, appended to the zero-detect notice — for a
+/// project whose supported language DID fail to auto-detect (an unusual layout,
+/// markers outside the scanned root, …), this is the way to force it rather than
+/// silently getting the no-op empty snapshot.
+fn pin_hint(config_file: Option<&str>) -> String {
     let how = match config_file {
         Some(path) => format!(
             "add `plugins = [\"<name>\"]` to {path} \
@@ -226,5 +236,5 @@ fn with_config_hint(e: anyhow::Error, config_file: Option<&str>) -> anyhow::Erro
              \tplugins = [\"<name>\"]"
         ),
     };
-    anyhow!("{e}\n  → or pin the language in config: {how}")
+    format!("\n  → or pin the language in config: {how}")
 }
